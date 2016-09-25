@@ -1,5 +1,6 @@
 # bcnn
 
+[![Build Status](https://travis-ci.org/jnbraun/bcnn.svg?branch=master)](https://travis-ci.org/jnbraun/bcnn/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 bcnn is a pure C implementation of Convolutional Neural Networks (widely used in Deep Learning applications such as object detection and recognition in images).

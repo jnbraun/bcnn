@@ -1,0 +1,6 @@
+[submodule "bh"]
+	path = bh
+	url = https://github.com/jnbraun/bh
+[submodule "bip"]
+	path = bip
+	url = https://github.com/jnbraun/bip

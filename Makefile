@@ -42,6 +42,7 @@ LDFLAGS += -L$(BIP_PATH)
 # bh headers
 BH_PATH=bh
 CFLAGS += -I$(BH_PATH)/inc
+LDFLAGS += -lrt
 
 SRC = $(wildcard src/*.c)
 OBJ = $(patsubst src/%.c, build/%.o, $(SRC))

@@ -1,5 +1,5 @@
 # config
-CUDA=1
+CUDA=0
 CUDNN=0
 DEBUG=0
 USE_SSE2=1

@@ -48,7 +48,7 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
 		layer.input_shape[2] = net->layers[net->nb_layers - 1].output_shape[0]
 			 * net->layers[net->nb_layers - 1].output_shape[1] * net->layers[net->nb_layers - 1].output_shape[2];
 	}
-	input_size = net->w * net->h * net->c;
+	input_size = layer.input_shape[0] * layer.input_shape[1] * layer.input_shape[2];
 	layer.output_shape[0] = 1;
 	layer.output_shape[1] = 1;
 	layer.output_shape[2] = output_size;

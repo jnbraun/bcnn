@@ -232,6 +232,7 @@ int bcnncl_train(bcnn_net *net, bcnn_param *param, float *error)
 				fflush(stderr);
 				bh_timer_start(&t);
 				sum_error = 0;
+				bcnn_compile_net(net, "train");
 			}
 		}
 		else {
@@ -259,7 +260,7 @@ int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred
 	float *out = NULL;
 	float err = 0.0f, error_batch = 0.0f;
 	FILE *f = NULL;
-	int save_batch = net->batch_size;
+	int batch_size = net->batch_size;
 	unsigned char *img_pred = NULL;
 	char out_pred_name[128] = { 0 };
 	bcnn_iterator iter_data = { 0 };
@@ -284,7 +285,7 @@ int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred
 
 	bcnn_compile_net(net, "predict");
 
-	n = param->nb_pred / save_batch;
+	n = param->nb_pred / batch_size;
 	for (i = 0; i < n; ++i) {
 		bcnn_predict_on_batch(net, &iter_data, &out, &error_batch);
 		err += error_batch;
@@ -314,8 +315,6 @@ int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred
 	// Process last instances
 	n = param->nb_pred % net->batch_size;
 	if (n > 0) {
-		net->batch_size = 1;
-		bcnn_compile_net(net, "predict");
 		for (i = 0; i < n; ++i) {
 			bcnn_predict_on_batch(net, &iter_data, &out, &error_batch);
 			err += error_batch;
@@ -323,25 +322,20 @@ int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred
 			if (dump_pred) {
 				if (param->prediction_type == HEATMAP_REGRESSION ||
 					param->prediction_type == SEGMENTATION) {
-					for (j = 0; j < net->batch_size; ++j) {
-						for (k = 0; k < net->layers[net->nb_layers - 2].output_shape[2]; ++k) {
-							sprintf(out_pred_name, "%d_%d.png", i * net->batch_size + j, k);
-							bip_write_float_image(out_pred_name,
-								out + j * net->output_size + k * out_w * out_h,
-								out_w, out_h, 1, out_w * sizeof(float));
-						}
+					for (k = 0; k < net->layers[net->nb_layers - 2].output_shape[2]; ++k) {
+						sprintf(out_pred_name, "%d_%d.png", i, k);
+						bip_write_float_image(out_pred_name,
+							out + k * out_w * out_h,
+							out_w, out_h, 1, out_w * sizeof(float));
 					}
 				}
 				else {
-					for (j = 0; j < net->batch_size; ++j) {
-						for (k = 0; k < net->output_size; ++k)
-							fprintf(f, "%f ", out[j * net->output_size + k]);
-						fprintf(f, "\n");
-					}
+					for (k = 0; k < net->output_size; ++k)
+						fprintf(f, "%f ", out[k]);
+					fprintf(f, "\n");
 				}
 			}
 		}
-		net->batch_size = save_batch;
 	}
 	*error = err / param->nb_pred;
 

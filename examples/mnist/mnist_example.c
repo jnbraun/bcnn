@@ -28,11 +28,15 @@
 
 #include "bcnn/bcnn.h"
 
+#ifdef _DEBUG
+#include <vld.h>
+#endif
+
 int create_network(bcnn_net *net)
 {
 	net->w = 28; net->h = 28; net->c = 1;
-	net->batch_size = 16;
 	net->output_size = 10;
+	net->batch_size = 16;
 	net->learner.learning_rate = 0.003f;
 	net->learner.gamma = 0.00002f;
 	net->learner.decay = 0.0005f;
@@ -70,7 +74,7 @@ int create_network(bcnn_net *net)
 }
 
 
-int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error, int dump_pred,
+int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
 	int nb_pred, char *pred_out)
 {
 	int i = 0, j = 0, n = 0, k = 0;
@@ -82,28 +86,40 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
 
 	bcnn_init_mnist_iterator(&data_mnist, test_img, test_label);
 
-	if (dump_pred) {
-		f = fopen(pred_out, "wt");
-		if (f == NULL) {
-			fprintf(stderr, "[ERROR] Could not open file %s", pred_out);
-			return -1;
-		}
+
+	f = fopen(pred_out, "wt");
+	if (f == NULL) {
+		fprintf(stderr, "[ERROR] Could not open file %s", pred_out);
+		return -1;
 	}
 
-	net->batch_size = 10;
+
 	bcnn_compile_net(net, "predict");
 
 	n = nb_pred / net->batch_size;
 	for (i = 0; i < n; ++i) {
 		bcnn_predict_on_batch(net, &data_mnist, &out, &error_batch);
 		err += error_batch;
-		// Dump predictions
-		if (dump_pred) {
-			for (j = 0; j < net->batch_size; ++j) {
-				for (k = 0; k < net->output_size; ++k)
-					fprintf(f, "%f ", out[j * net->output_size + k]);
-				fprintf(f, "\n");
-			}
+		// Save predictions
+		for (j = 0; j < net->batch_size; ++j) {
+			for (k = 0; k < net->output_size; ++k)
+				fprintf(f, "%f ", out[j * net->output_size + k]);
+			fprintf(f, "\n");
+		}
+
+	}
+	// Last predictions (Have to do this because batch_size is set to 16 yet the
+	// number of samples of mnist test data is not a multiple of 16)
+	n = nb_pred % net->batch_size;
+	if (n > 0) {
+		for (i = 0; i < n; ++i) {
+			bcnn_predict_on_batch(net, &data_mnist, &out, &error_batch);
+			err += error_batch;
+			// Save predictions
+			for (k = 0; k < net->output_size; ++k)
+				fprintf(f, "%f ", out[k]);
+			fprintf(f, "\n");
+
 		}
 	}
 	*error = err / nb_pred;
@@ -135,12 +151,14 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
 
 		if (i % eval_period == 0 && i > 0) {
 			bh_timer_stop(&t);
-			predict_mnist(net, test_img, test_label, &error_valid, 1, 10000, "pred_mnist.txt");
+			predict_mnist(net, test_img, test_label, &error_valid, 10000, "pred_mnist.txt");
 			fprintf(stderr, "iter= %d train-error= %f test-error= %f training-time= %lf sec\n", i,
 				sum_error / (eval_period * net->batch_size), error_valid, bh_timer_get_msec(&t) / 1000);
 			fflush(stderr);
 			bh_timer_start(&t);
 			sum_error = 0;
+			// Reschedule net for training
+			bcnn_compile_net(net, "train");
 		}
 		
 	}
@@ -166,7 +184,7 @@ int run(char *train_img, char *train_label, char *test_img, char *test_label)
 		bh_error("Can not perform training", -1);
 	
 	bh_info("Start prediction...");
-	predict_mnist(net, test_img, test_label, &error_test, 1, 10000, "pred_mnist.txt");
+	predict_mnist(net, test_img, test_label, &error_test, 10000, "pred_mnist.txt");
 	bh_info("Prediction ended successfully");
 
 	bcnn_end_net(&net);

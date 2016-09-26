@@ -162,6 +162,7 @@ int bcnn_compile_net(bcnn_net *net, char *phase)
 {
 	int n = net->nb_layers;
 	int k = (net->layers[n - 1].type == COST ? (n - 2) : (n - 1));
+	
 	net->output_size = net->layers[k].output_shape[0] * net->layers[k].output_shape[1] *
 			net->layers[k].output_shape[2];
 

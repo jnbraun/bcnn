@@ -225,6 +225,9 @@ int bcnn_forward_conv_layer_gpu(const bcnn_layer *layer, bcnn_workload *wrk)
 	bcnn_forward_bias_gpu(layer->output_gpu, layer->bias_gpu, wrk->batch_size, layer->num, out_spatial_dim);
 #endif
 
+	sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] * wrk->batch_size;
+	bcnn_forward_activation_gpu(layer->output_gpu, sz, layer->activation);
+
 	return BCNN_SUCCESS;
 }
 
@@ -237,6 +240,10 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
 #ifdef BCNN_USE_CUDNN
 	float one = 1.0f, zero = 0.0f;
 #endif
+
+	bcnn_backward_activation_gpu(layer->output_gpu, layer->diff_gpu,
+		layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] * wrk->batch_size,
+		layer->activation);
 
 #ifdef BCNN_USE_CUDNN
 	bcnn_cudnn_check(cudnnConvolutionBackwardBias(bcnn_cudnn_handle(),
@@ -316,6 +323,9 @@ int bcnn_forward_deconv_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
 	}
 
 	bcnn_forward_bias_gpu(layer->output_gpu, layer->bias_gpu, wrk->batch_size, layer->num, layer->output_shape[0] * layer->output_shape[1]);
+	
+	sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] * wrk->batch_size;
+	bcnn_forward_activation_gpu(layer->output_gpu, sz, layer->activation);
 
 	return BCNN_SUCCESS;
 }
@@ -329,8 +339,13 @@ int bcnn_backward_deconv_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
 	float *a = NULL, *b = NULL, *c = NULL, *src = NULL;
 	float alpha = 1.0f / wrk->batch_size;
 
+	bcnn_backward_activation_gpu(layer->output_gpu, layer->diff_gpu,
+		layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] * wrk->batch_size,
+		layer->activation);
+
 	bcnn_backward_bias_gpu(layer->bias_diff_gpu, layer->diff_gpu, wrk->batch_size, layer->num,
 		layer->output_shape[1] * layer->output_shape[0]);
+	
 	for (i = 0; i < wrk->batch_size; ++i) {
 		a = wrk->input_gpu + i * layer->input_shape[2] * layer->size * layer->size * layer->num;
 		b = layer->conv_workspace_gpu;

@@ -34,9 +34,7 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
 	int input_size = 0;
 
 	layer.type = FULL_CONNECTED;
-	/*layer.input_shape[0] = 1;
-	layer.input_shape[1] = 1;
-	layer.input_shape[2] = input_size;*/
+
 	if (net->nb_layers == 0) {
 		layer.input_shape[0] = 1;
 		layer.input_shape[1] = 1;
@@ -102,12 +100,15 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
 int bcnn_forward_fullc_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
 {
 	int i, input_size = layer->input_shape[2], output_size = layer->output_shape[2];
+	int sz = output_size * wrk->batch_size;
 
 	for (i = 0; i < wrk->batch_size; ++i)
 		bcnn_copy_f32(output_size, layer->bias, layer->output + i * output_size);
 
 	bcnn_gemm(0, 1, wrk->batch_size, output_size, input_size, 1,
 		wrk->input, input_size, layer->weight, input_size, 1, layer->output, output_size);
+
+	bcnn_forward_activation_cpu(layer->output, sz, layer->activation);
 
 	return BCNN_SUCCESS;
 }
@@ -116,6 +117,9 @@ int bcnn_forward_fullc_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
 int bcnn_backward_fullc_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
 {
 	int i, input_size = layer->input_shape[2], output_size = layer->output_shape[2];
+	int sz = output_size * wrk->batch_size;
+
+	bcnn_backward_activation_cpu(layer->output, layer->diff, sz, layer->activation);
 
 	for (i = 0; i < wrk->batch_size; ++i)
 		bcnn_axpy(output_size, 1, layer->diff + i * output_size, layer->bias_diff);

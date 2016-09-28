@@ -471,7 +471,9 @@ int bcnn_backward_fullc_layer(bcnn_layer *layer, bcnn_workload *wrk_data);
 
 /* Activation layer */
 int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type);
+int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a);
 int bcnn_forward_activation_layer(bcnn_layer *layer, bcnn_workload *wrk_data);
+int bcnn_backward_activation_cpu(float *x, float *dx, int sz, bcnn_activation a);
 int bcnn_backward_activation_layer(bcnn_layer *layer, bcnn_workload *wrk_data);
 
 /* Concat layer */
@@ -607,7 +609,9 @@ void bcnn_col2im_gpu(float *data_col,
 int bcnn_forward_bias_gpu(float *output, float *biases, int batch_size, int n, int size);
 int bcnn_backward_bias_gpu(float *bias_diff, float *diff, int batch_size, int n, int size);
 
+int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a);
 int bcnn_forward_activation_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk_data);
+int bcnn_backward_activation_gpu(float *x, float *dx, int sz, bcnn_activation a);
 int bcnn_backward_activation_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk_data);
 int bcnn_forward_conv_layer_gpu(const bcnn_layer *layer, bcnn_workload *wrk_data);
 int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk_data);

@@ -27,10 +27,10 @@
 
 #include "bcnn/bcnn.h"
 
-__global__ void _bcnn_forward_activation_layer_kernel(float *x, int n, bcnn_activation a)
+__global__ void _bcnn_forward_activation_layer_kernel(float *x, int sz, bcnn_activation a)
 {
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
-    if (i < n) {
+    if (i < sz) {
 		switch (a) {
 		case TANH:
 			x[i] = (exp(2 * x[i]) - 1) / (exp(2 * x[i]) + 1);
@@ -49,23 +49,30 @@ __global__ void _bcnn_forward_activation_layer_kernel(float *x, int n, bcnn_acti
 	return;
 }
 
+int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a)
+{
+	_bcnn_forward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(x,
+		sz, layer->activation);
+	return BCNN_SUCCESS;
+}
 
 int bcnn_forward_activation_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
 {
 	int sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] *
 		wrk->batch_size;
+
 	layer->output_gpu = wrk->input_gpu;
-	_bcnn_forward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(layer->output_gpu,
-		sz, layer->activation);
-    bcnn_cuda_check(cudaPeekAtLastError());
+	bcnn_forward_activation_gpu(layer->output_gpu, sz, layer->activation);
+	bcnn_cuda_check(cudaPeekAtLastError());
+
 	return BCNN_SUCCESS;
 }
 
 
-__global__ void _bcnn_backward_activation_layer_kernel(float *x, int n, bcnn_activation a, float *diff)
+__global__ void _bcnn_backward_activation_layer_kernel(float *x, float *diff, int sz, bcnn_activation a)
 {
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
-    if (i < n) {
+    if (i < sz) {
 		switch (a) {
 		case TANH:
 			diff[i] *= (1 - x[i] * x[i]);
@@ -83,14 +90,22 @@ __global__ void _bcnn_backward_activation_layer_kernel(float *x, int n, bcnn_act
 	}
 }
 
+int bcnn_backward_activation_gpu(float *x, float *dx, int sz, bcnn_activation a)
+{
+	_bcnn_backward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(x, dx
+		sz, layer->activation);
+	return BCNN_SUCCESS;
+}
+
 int bcnn_backward_activation_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
 {
 	int sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] *
 		wrk->batch_size;
-	_bcnn_backward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(layer->output_gpu,
-		sz, layer->activation, layer->diff_gpu);
-    bcnn_cuda_check(cudaPeekAtLastError());
+	
+    bcnn_backward_activation_gpu(layer->output, layer->diff, sz, layer->activation)
+	bcnn_cuda_check(cudaPeekAtLastError());
 	wrk->diff = layer->diff_gpu;
+
 	return BCNN_SUCCESS;
 }
 

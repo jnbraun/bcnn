@@ -28,6 +28,7 @@
 int bcnn_forward_fullc_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
 {
 	int i, input_size = layer->input_shape[2], output_size = layer->output_shape[2];
+	int sz = output_size * wrk->batch_size;
 
 	bcnn_cuda_fill_f32(output_size * wrk->batch_size, 0.0f, layer->output_gpu, 1);
 	
@@ -37,6 +38,9 @@ int bcnn_forward_fullc_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
 
 	for(i = 0; i < wrk->batch_size; ++i)
         bcnn_cuda_axpy(output_size, 1.0f, layer->bias_gpu, 1, layer->output_gpu + i * output_size, 1);
+
+	bcnn_forward_activation_gpu(layer->output_gpu, sz, layer->activation);
+
 	return BCNN_SUCCESS;
 }
 
@@ -44,6 +48,9 @@ int bcnn_forward_fullc_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
 int bcnn_backward_fullc_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
 {
 	int i, input_size = layer->input_shape[2], output_size = layer->output_shape[2];
+	int sz = output_size * wrk->batch_size;
+
+	bcnn_backward_activation_gpu(layer->output_gpu, layer->diff_gpu, sz, layer->activation);
 
 	for (i = 0; i < wrk->batch_size; ++i)
 		bcnn_cuda_axpy(output_size, 1, layer->diff_gpu + i * output_size, 1, layer->bias_diff_gpu, 1);

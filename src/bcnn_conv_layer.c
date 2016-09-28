@@ -275,7 +275,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 	layer.conv_workspace_gpu = bcnn_cuda_memcpy_f32(layer.conv_workspace, sz);
 #endif
 #endif
-	//layer.activation = activation;
+	layer.activation = activation;
 
 	bcnn_realloc(net, nb_layers);
 
@@ -318,6 +318,9 @@ int bcnn_forward_conv_layer_cpu(const bcnn_layer *layer, bcnn_workload *wrk)
 
 	_bcnn_add_bias(layer->output, layer->bias, wrk->batch_size, layer->num, layer->output_shape[0] * layer->output_shape[1]);
 
+	sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] * wrk->batch_size;
+	bcnn_forward_activation_cpu(layer->output, sz, layer->activation);
+
 	return BCNN_SUCCESS;
 }
 
@@ -331,6 +334,10 @@ int bcnn_backward_conv_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
 	int n = layer->size * layer->size * layer->input_shape[2];
 	int k = layer->output_shape[0] * layer->output_shape[1];
 	float *a = NULL, *b = NULL, *c = NULL, *src = NULL;
+
+	bcnn_backward_activation_cpu(layer->output, layer->diff,
+		layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] * wrk->batch_size,
+		layer->activation);
 
 	_bcnn_backward_bias(layer->bias_diff, layer->diff, wrk->batch_size, layer->num, k);
 
@@ -482,6 +489,9 @@ int bcnn_forward_deconv_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
 
 	_bcnn_add_bias(layer->output, layer->bias, wrk->batch_size, layer->num, layer->output_shape[0] * layer->output_shape[1]);
 
+	sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] * wrk->batch_size;
+	bcnn_forward_activation_cpu(layer->output, sz, layer->activation);
+
 	return BCNN_SUCCESS;
 }
 
@@ -494,6 +504,10 @@ int bcnn_backward_deconv_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
 	int k = layer->input_shape[0] * layer->input_shape[1];
 	float *src = NULL;
 	float alpha = 1.0f / wrk->batch_size;
+
+	bcnn_backward_activation_cpu(layer->output, layer->diff,
+		layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] * wrk->batch_size,
+		layer->activation);
 
 	_bcnn_backward_bias(layer->bias_diff, layer->diff, wrk->batch_size, layer->num,
 		layer->output_shape[0] * layer->output_shape[1]);

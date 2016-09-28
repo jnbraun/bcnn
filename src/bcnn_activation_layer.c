@@ -71,87 +71,102 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type)
 }
 
 
-int bcnn_forward_activation_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a)
 {
 	int i;
-	int sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] *
-		wrk->batch_size;
 
-	layer->output = wrk->input;
-
-	switch (layer->activation) {
+	switch (a) {
 	case TANH:
 		for (i = 0; i < sz; ++i)
-			layer->output[i] = (float)(exp(2 * layer->output[i]) - 1) /
-			((float)exp(2 * layer->output[i]) + 1);
+			x[i] = (float)(exp(2 * x[i]) - 1) /
+			((float)exp(2 * x[i]) + 1);
 		break;
 	case RELU:
 		for (i = 0; i < sz; ++i)
-			layer->output[i] = layer->output[i] * (layer->output[i] > 0);
+			x[i] = x[i] * (x[i] > 0);
 		break;
 	case LRELU:
 		for (i = 0; i < sz; ++i)
-			layer->output[i] = (layer->output[i] > 0 ? 
-				layer->output[i] : 0.01f * layer->output[i]);
+			x[i] = (x[i] > 0 ? 
+				x[i] : 0.01f * x[i]);
 		break;
 	case RAMP:
 		for (i = 0; i < sz; ++i)
-			layer->output[i] = layer->output[i] * (layer->output[i] > 0) + 0.1f * layer->output[i];
+			x[i] = x[i] * (x[i] > 0) + 0.1f * x[i];
 		break;
 	case SOFTPLUS:
 		for (i = 0; i < sz; ++i)
-			layer->output[i] = (float)log(1.0f + (float)exp(layer->output[i]));
+			x[i] = (float)log(1.0f + (float)exp(x[i]));
 		break;
 	case ABS:
 		for (i = 0; i < sz; ++i)
-			layer->output[i] = (float)fabs(layer->output[i]);
+			x[i] = (float)fabs(x[i]);
 		break;
 	case CLAMP:
 		for (i = 0; i < sz; ++i)
-			layer->output[i] = bh_clamp(layer->output[i], 0, 1);
+			x[i] = bh_clamp(x[i], 0, 1);
 		break;
 	}
 	return BCNN_SUCCESS;
 }
 
-
-int bcnn_backward_activation_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_forward_activation_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
 {
-	int i;
 	int sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] *
 		wrk->batch_size;
-	
-	switch (layer->activation) {
+
+	layer->output = wrk->input;
+	bcnn_forward_activation_cpu(layer->output, sz, layer->activation);
+
+	return BCNN_SUCCESS;
+}
+
+
+int bcnn_backward_activation_cpu(float *x, float *dx, int sz, bcnn_activation a)
+{
+	int i;
+
+	switch (a) {
 	case TANH:
 		for (i = 0; i < sz; ++i)
-			layer->diff[i] *= (1 - layer->output[i] * layer->output[i]);
+			dx[i] *= (1 - x[i] * x[i]);
 		break;
 	case RELU:
 		for (i = 0; i < sz; ++i)
-			layer->diff[i] *= ((float)(layer->output[i] > 0));
+			dx[i] *= ((float)(x[i] > 0));
 		break;
 	case LRELU:
 		for (i = 0; i < sz; ++i)
-			layer->diff[i] *= (layer->output[i] > 0 ? 1.0f : 0.01f);
+			dx[i] *= (x[i] > 0 ? 1.0f : 0.01f);
 		break;
 	case RAMP:
 		for (i = 0; i < sz; ++i)
-			layer->diff[i] *= ((float)(layer->output[i] > 0) + 0.1f);
+			dx[i] *= ((float)(x[i] > 0) + 0.1f);
 		break;
 	case SOFTPLUS:
 		for (i = 0; i < sz; ++i)
-			layer->diff[i] *= 1.0f / (1.0f + (float)exp(-layer->output[i]));
+			dx[i] *= 1.0f / (1.0f + (float)exp(-x[i]));
 		break;
 	case ABS:
 		for (i = 0; i < sz; ++i)
-			layer->diff[i] *= (layer->output[i] >= 0 ? 1.0f : -1.0f);
+			dx[i] *= (x[i] >= 0 ? 1.0f : -1.0f);
 		break;
 	case CLAMP:
 		for (i = 0; i < sz; ++i)
-			layer->diff[i] *= ((float)(layer->output[i] > 0.0f && layer->output[i] < 1.0f));
+			dx[i] *= ((float)(x[i] > 0.0f && x[i] < 1.0f));
 		break;
 	}
+	return 0;
+}
+
+int bcnn_backward_activation_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
+{
+	int sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] *
+		wrk->batch_size;
+	
+	bcnn_backward_activation_cpu(layer->output, layer->diff, sz, layer->activation);
 	wrk->diff = layer->diff;
+
 	return BCNN_SUCCESS;
 }
 

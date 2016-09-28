@@ -7,7 +7,7 @@ bcnn is a pure C implementation of Convolutional Neural Networks (widely used in
 It is aimed to be lightweight, concise and easy to install.
 It supports both CPU and GPU (CUDA) computation.
 
-## Dependencies
+## Dependencies:
 ### Minimal build (CPU with or without SSE2 acceleration):
 No external dependency (only requires bip (image processing library) and bh (helpers library) already included).
 

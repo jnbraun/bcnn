@@ -28,9 +28,6 @@
 
 #include "bcnn/bcnn.h"
 
-#ifdef _DEBUG
-#include <vld.h>
-#endif
 
 int create_network(bcnn_net *net)
 {
@@ -46,18 +43,14 @@ int create_network(bcnn_net *net)
 	net->max_batches = 50000;
 
 	bcnn_add_convolutional_layer(net, 12, 3, 1, 1, 0, XAVIER, RELU);
-	bcnn_add_activation_layer(net, RELU);
 	bcnn_add_maxpool_layer(net, 2, 2);
 
 	bcnn_add_convolutional_layer(net, 12, 3, 1, 1, 0, XAVIER, RELU);
-	bcnn_add_activation_layer(net, RELU);
 	bcnn_add_maxpool_layer(net, 2, 2);
 
 	bcnn_add_fullc_layer(net, 256, XAVIER, RELU);
-	bcnn_add_activation_layer(net, RELU);
 
 	bcnn_add_fullc_layer(net, 10, XAVIER, RELU);
-	bcnn_add_activation_layer(net, RELU);
 
 	bcnn_add_softmax_layer(net);
 	bcnn_add_cost_layer(net, COST_ERROR, 1.0f);
@@ -86,13 +79,11 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
 
 	bcnn_init_mnist_iterator(&data_mnist, test_img, test_label);
 
-
 	f = fopen(pred_out, "wt");
 	if (f == NULL) {
 		fprintf(stderr, "[ERROR] Could not open file %s", pred_out);
 		return -1;
 	}
-
 
 	bcnn_compile_net(net, "predict");
 

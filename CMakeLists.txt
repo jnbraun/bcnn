@@ -3,6 +3,7 @@ project (bcnn)
 
 set(USE_SSE2 1)
 set(USE_CUDA 1)
+set(BUILD_EXAMPLES 1)
 
 if (USE_CUDA)
 find_package(CUDA QUIET REQUIRED)
@@ -54,8 +55,8 @@ file(GLOB SRC_LIB src/*.c)
 endif()
 list(REMOVE_ITEM SRC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/src/bcnn_cl.c)
 file(GLOB SRC_CLI src/bcnn_cl.c)
-#MESSAGE(STATUS "${SRC_LIB}")
-#MESSAGE(STATUS "${CMAKE_CURRENT_SOURCE_DIR}")
+MESSAGE(STATUS "${SRC_LIB}")
+MESSAGE(STATUS "${CMAKE_CURRENT_SOURCE_DIR}")
 
 if (USE_CUDA)
 cuda_add_library(libbcnn ${SRC_LIB} STATIC)
@@ -67,3 +68,5 @@ endif()
 
 add_executable(bcnn-cl ${SRC_CLI})
 target_link_libraries(bcnn-cl libbcnn bip)
+
+add_subdirectory(examples/mnist) 

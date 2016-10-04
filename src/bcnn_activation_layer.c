@@ -28,30 +28,35 @@
 
 int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type)
 {
-	int nb_layers = net->nb_layers + 1;
-	int sz = 0;
-	bcnn_layer layer = { 0 };
-	char type_name[256] = { 0 };
+	int nb_connections = net->nb_connections + 1;
+	int sz;
+	bcnn_connection conn = { 0 };
+	char type_name[256];
 
-	bh_assert(nb_layers >= 2,
+	bh_assert(nb_connections >= 2,
 		"Activation layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);
 
-	layer.type = ACTIVATION;
-	//memcpy(layer.input_shape, input_shape, 3 * sizeof(int));
-	memcpy(layer.input_shape, net->layers[net->nb_layers - 1].output_shape, 3 * sizeof(int));
-	memcpy(layer.output_shape, layer.input_shape, 3 * sizeof(int));
-	layer.activation = type;
-	sz = layer.input_shape[0] * layer.input_shape[1] * layer.input_shape[2] * net->batch_size;
+	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
+	conn.layer->type = ACTIVATION;
+	if (nb_connections > 1)
+		conn.src_node = net->connections[nb_connections - 2].dst_node;
+	else
+		conn.src_node = net->input_node;
+	conn.dst_node.w = conn.src_node.w;
+	conn.dst_node.h = conn.src_node.h;
+	conn.dst_node.c = conn.src_node.c;
+	conn.dst_node.b = conn.src_node.b;
+	conn.layer->activation = type;
+	sz = bcnn_node_size(&conn.src_node);
 
-	layer.output = net->layers[nb_layers - 2].output;
-	layer.diff = net->layers[nb_layers - 2].diff;
+	conn.dst_node.data = conn.src_node.data;
+	conn.dst_node.grad_data = conn.src_node.grad_data;
 #ifdef BCNN_USE_CUDA
-	layer.output_gpu = net->layers[nb_layers - 2].output_gpu;
-	layer.diff_gpu = net->layers[nb_layers - 2].diff_gpu;
+	conn.dst_node.data_gpu = conn.src_node.data_gpu;
+	conn.dst_node.grad_data_gpu = conn.src_node.grad_data_gpu;
 #endif
-
-	bcnn_realloc(net, nb_layers);
-	net->layers[nb_layers - 1] = layer;
+	net->nb_connections = nb_connections;
+	bcnn_net_add_connection(net, conn);
 
 	switch (type) {
 	case TANH:		sprintf(type_name, "Tanh");			break;
@@ -64,8 +69,8 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type)
 	}
 
 	fprintf(stderr, "[Activation] input_shape= %dx%dx%d type= %s output_shape= %dx%dx%d\n",
-		layer.input_shape[0], layer.input_shape[1], layer.input_shape[2], type_name,
-		layer.output_shape[0], layer.output_shape[1], layer.output_shape[2]);
+		conn.src_node.w, conn.src_node.h, conn.src_node.c, type_name,
+		conn.dst_node.w, conn.dst_node.h, conn.dst_node.c);
 
 	return BCNN_SUCCESS;
 }
@@ -110,13 +115,15 @@ int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a)
 	return BCNN_SUCCESS;
 }
 
-int bcnn_forward_activation_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_forward_activation_layer_cpu(bcnn_connection *conn)
 {
-	int sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] *
-		wrk->batch_size;
+	bcnn_layer *layer = conn->layer;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
+	int sz = bcnn_node_size(&dst);
 
-	layer->output = wrk->input;
-	bcnn_forward_activation_cpu(layer->output, sz, layer->activation);
+	dst.data = src.data;
+	bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
 
 	return BCNN_SUCCESS;
 }
@@ -159,32 +166,34 @@ int bcnn_backward_activation_cpu(float *x, float *dx, int sz, bcnn_activation a)
 	return 0;
 }
 
-int bcnn_backward_activation_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_backward_activation_layer_cpu(bcnn_connection *conn)
 {
-	int sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] *
-		wrk->batch_size;
+	bcnn_layer *layer = conn->layer;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
+	int sz = bcnn_node_size(&dst);
 	
-	bcnn_backward_activation_cpu(layer->output, layer->diff, sz, layer->activation);
-	wrk->diff = layer->diff;
+	bcnn_backward_activation_cpu(dst.data, dst.grad_data, sz, layer->activation);
+	src.grad_data = dst.grad_data;
 
 	return BCNN_SUCCESS;
 }
 
 
-int bcnn_forward_activation_layer(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_forward_activation_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_forward_activation_layer_gpu(layer, wrk);
+	return bcnn_forward_activation_layer_gpu(conn);
 #else
-	return bcnn_forward_activation_layer_cpu(layer, wrk);
+	return bcnn_forward_activation_layer_cpu(conn);
 #endif
 }
 
-int bcnn_backward_activation_layer(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_backward_activation_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_backward_activation_layer_gpu(layer, wrk);
+	return bcnn_backward_activation_layer_gpu(conn);
 #else
-	return bcnn_backward_activation_layer_cpu(layer, wrk);
+	return bcnn_backward_activation_layer_cpu(conn);
 #endif
 }

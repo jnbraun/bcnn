@@ -27,38 +27,34 @@
 
 int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation)
 {
-	int nb_layers = net->nb_layers + 1;
+	int nb_connections = net->nb_connections + 1;
 	int i;
 	float std_init = 0.0f;
-	bcnn_layer layer = { 0 };
+	bcnn_connection conn = { 0 };
 	int input_size = 0;
 
-	layer.type = FULL_CONNECTED;
+	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
+	conn.layer->type = FULL_CONNECTED;
+	if (nb_connections > 1)
+		conn.src_node = net->connections[nb_connections - 2].dst_node;
+	else
+		conn.src_node = net->input_node;
 
-	if (net->nb_layers == 0) {
-		layer.input_shape[0] = 1;
-		layer.input_shape[1] = 1;
-		layer.input_shape[2] = net->w * net->h * net->c;
-	}
-	else {
-		layer.input_shape[0] = 1;
-		layer.input_shape[1] = 1;
-		layer.input_shape[2] = net->layers[net->nb_layers - 1].output_shape[0]
-			 * net->layers[net->nb_layers - 1].output_shape[1] * net->layers[net->nb_layers - 1].output_shape[2];
-	}
-	input_size = layer.input_shape[0] * layer.input_shape[1] * layer.input_shape[2];
-	layer.output_shape[0] = 1;
-	layer.output_shape[1] = 1;
-	layer.output_shape[2] = output_size;
-	layer.bias_size = output_size;
-	layer.weights_size = input_size * output_size;
+	conn.dst_node.w = 1;
+	conn.dst_node.h = 1;
+	conn.dst_node.c = output_size;
+	conn.dst_node.b = conn.src_node.b;
+
+	conn.layer->bias_size = output_size;
+	input_size = conn.src_node.w * conn.src_node.h * conn.src_node.c;
+	conn.layer->weights_size = input_size * output_size;
 	
-	layer.output = (float *)calloc(net->batch_size * output_size, sizeof(float));
-	layer.diff = (float *)calloc(net->batch_size * output_size, sizeof(float));
-	layer.weight_diff = (float *)calloc(input_size * output_size, sizeof(float));
-	layer.bias_diff = (float *)calloc(output_size, sizeof(float));
-	layer.weight = (float *)calloc(output_size * input_size, sizeof(float));
-	layer.bias = (float *)calloc(output_size, sizeof(float));
+	conn.dst_node.data = (float *)calloc(conn.dst_node.b * output_size, sizeof(float));
+	conn.dst_node.grad_data = (float *)calloc(conn.dst_node.b * output_size, sizeof(float));
+	conn.layer->weight_diff = (float *)calloc(input_size * output_size, sizeof(float));
+	conn.layer->bias_diff = (float *)calloc(output_size, sizeof(float));
+	conn.layer->weight = (float *)calloc(output_size * input_size, sizeof(float));
+	conn.layer->bias = (float *)calloc(output_size, sizeof(float));
 
 	switch (init) {
 	case XAVIER:
@@ -70,84 +66,91 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
 	}
 	
 	for (i = 0; i < output_size * input_size; ++i)
-		layer.weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);
+		conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);
 	for (i = 0; i < output_size; ++i)
-		layer.bias[i] = std_init;
+		conn.layer->bias[i] = std_init;
 
 #ifdef BCNN_USE_CUDA
-	layer.weight_gpu = bcnn_cuda_memcpy_f32(layer.weight, output_size * input_size);
-	layer.bias_gpu = bcnn_cuda_memcpy_f32(layer.bias, output_size);
+	conn.layer->weight_gpu = bcnn_cuda_memcpy_f32(conn.layer->weight, output_size * input_size);
+	conn.layer->bias_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias, output_size);
 
-	layer.weight_diff_gpu = bcnn_cuda_memcpy_f32(layer.weight_diff, output_size * input_size);
-	layer.bias_diff_gpu = bcnn_cuda_memcpy_f32(layer.bias_diff, output_size);
+	conn.layer->weight_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->weight_diff, output_size * input_size);
+	conn.layer->bias_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias_diff, output_size);
 
-	layer.output_gpu = bcnn_cuda_memcpy_f32(layer.output, output_size * net->batch_size);
-	layer.diff_gpu = bcnn_cuda_memcpy_f32(layer.diff, output_size * net->batch_size);
+	conn.dst_node.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.data, output_size * conn.dst_node.b);
+	conn.dst_node.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.grad_data, output_size * conn.dst_node.b);
 #endif
-	layer.activation = activation;
-
-	bcnn_realloc(net, nb_layers);
-
-	net->layers[nb_layers - 1] = layer;
-
+	conn.layer->activation = activation;
+	net->nb_connections = nb_connections;
+	bcnn_net_add_connection(net, conn);
+	
 	fprintf(stderr, "[Connected] input_shape= %dx%dx%d output_shape= %dx%dx%d\n",
-		layer.input_shape[0], layer.input_shape[1], layer.input_shape[2],
-		layer.output_shape[0], layer.output_shape[1], layer.output_shape[2]);
+		conn.src_node.w, conn.src_node.h, conn.src_node.c,
+		conn.dst_node.w, conn.dst_node.h, conn.dst_node.c);
 
 	return 0;
 }
 
-int bcnn_forward_fullc_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_forward_fullc_layer_cpu(bcnn_connection *conn)
 {
-	int i, input_size = layer->input_shape[2], output_size = layer->output_shape[2];
-	int sz = output_size * wrk->batch_size;
+	int i, batch_size = conn->dst_node.b;
+	int src_size = conn->src_node.w * conn->src_node.h * conn->src_node.c;
+	int dst_size = conn->dst_node.w * conn->dst_node.h * conn->dst_node.c;
+	int sz = dst_size * conn->dst_node.b;
+	bcnn_layer *layer = conn->layer;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
 
-	for (i = 0; i < wrk->batch_size; ++i)
-		bcnn_copy_f32(output_size, layer->bias, layer->output + i * output_size);
+	for (i = 0; i < batch_size; ++i)
+		bcnn_copy_f32(dst_size, layer->bias, dst.data + i * dst_size);
 
-	bcnn_gemm(0, 1, wrk->batch_size, output_size, input_size, 1,
-		wrk->input, input_size, layer->weight, input_size, 1, layer->output, output_size);
+	bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1,
+		src.data, src_size, layer->weight, src_size, 1, dst.data, dst_size);
 
-	bcnn_forward_activation_cpu(layer->output, sz, layer->activation);
+	bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
 
 	return BCNN_SUCCESS;
 }
 
-
-int bcnn_backward_fullc_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_backward_fullc_layer_cpu(bcnn_connection *conn)
 {
-	int i, input_size = layer->input_shape[2], output_size = layer->output_shape[2];
-	int sz = output_size * wrk->batch_size;
+	int i, batch_size = conn->dst_node.b;
+	int src_size = conn->src_node.w * conn->src_node.h * conn->src_node.c;
+	int dst_size = conn->dst_node.w * conn->dst_node.h * conn->dst_node.c;
+	int sz = dst_size * conn->dst_node.b;
+	bcnn_layer *layer = conn->layer;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
 
-	bcnn_backward_activation_cpu(layer->output, layer->diff, sz, layer->activation);
+	bcnn_backward_activation_cpu(dst.data, dst.grad_data, sz, layer->activation);
 
-	for (i = 0; i < wrk->batch_size; ++i)
-		bcnn_axpy(output_size, 1, layer->diff + i * output_size, layer->bias_diff);
+	for (i = 0; i < batch_size; ++i)
+		bcnn_axpy(dst_size, 1, dst.grad_data + i * dst_size, layer->bias_diff);
 
-	bcnn_gemm(1, 0, output_size, input_size, wrk->batch_size, 1,
-		layer->diff, output_size, wrk->input, input_size, 1, layer->weight_diff, input_size);
+	bcnn_gemm(1, 0, dst_size, src_size, batch_size, 1,
+		dst.grad_data, dst_size, src.data, src_size, 1, layer->weight_diff, src_size);
 
-	if (wrk->diff)
-		bcnn_gemm(0, 0, wrk->batch_size, input_size, output_size, 1,
-			layer->diff, output_size, layer->weight, input_size, 1, wrk->diff, input_size);
+	if (src.grad_data)
+		bcnn_gemm(0, 0, batch_size, src_size, dst_size, 1,
+			dst.grad_data, dst_size, layer->weight, src_size, 1, src.grad_data, src_size);
 
 	return BCNN_SUCCESS;
 }
 
-int bcnn_forward_fullc_layer(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_forward_fullc_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_forward_fullc_layer_gpu(layer, wrk);
+	return bcnn_forward_fullc_layer_gpu(conn);
 #else
-	return bcnn_forward_fullc_layer_cpu(layer, wrk);
+	return bcnn_forward_fullc_layer_cpu(conn);
 #endif
 }
 
-int bcnn_backward_fullc_layer(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_backward_fullc_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_backward_fullc_layer_gpu(layer, wrk);
+	return bcnn_backward_fullc_layer_gpu(conn);
 #else
-	return bcnn_backward_fullc_layer_cpu(layer, wrk);
+	return bcnn_backward_fullc_layer_cpu(conn);
 #endif
 }

@@ -25,6 +25,12 @@
 
 #include "bcnn/bcnn.h"
 
+int bcnn_node_size(bcnn_node *node)
+{
+	return node->w * node->h * node->c * node->b;
+}
+
+
 #ifdef BCNN_USE_CUDA
 #ifdef BCNN_USE_CUDNN
 cudnnHandle_t bcnn_cudnn_handle()

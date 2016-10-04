@@ -211,7 +211,7 @@ int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter)
 		n_labels = _read_int(tmp + 4);
 		bh_assert(n_img == n_labels, "MNIST data: number of images and labels must be the same", 
 			BCNN_INVALID_DATA);
-		bh_assert(net->h == iter->input_height && net->w == iter->input_width,
+		bh_assert(net->input_node.h == iter->input_height && net->input_node.w == iter->input_width,
 			"MNIST data: incoherent image width and height",
 			BCNN_INVALID_DATA);
 		iter->n_samples = n_img;

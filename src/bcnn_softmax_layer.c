@@ -25,92 +25,104 @@
 
 #include "bcnn/bcnn.h"
 
+
 int bcnn_add_softmax_layer(bcnn_net *net)
 {
-	int nb_layers = net->nb_layers + 1;
-	bcnn_layer layer = { 0 };
-	int sz = 0;
+	int nb_connections = net->nb_connections + 1;
+	int sz;
+	float std_init = 0.0f;
+	bcnn_connection conn = { 0 };
 
-	layer.type = SOFTMAX;
-	/*layer.input_shape[0] = input_shape[0];
-	layer.input_shape[1] = input_shape[1];
-	layer.input_shape[2] = input_shape[2];*/
-	if (net->nb_layers == 0) {
-		layer.input_shape[0] = net->w;
-		layer.input_shape[1] = net->h;
-		layer.input_shape[2] = net->c;
-	}
+	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
+	conn.layer->type = SOFTMAX;
+	if (nb_connections > 1)
+		conn.src_node = net->connections[nb_connections - 2].dst_node;
 	else
-		memcpy(layer.input_shape, net->layers[net->nb_layers - 1].output_shape, 3 * sizeof(int));
-	memcpy(layer.output_shape, layer.input_shape, 3 * sizeof(int));
-	sz = layer.input_shape[0] * layer.input_shape[1] * layer.input_shape[2] * net->batch_size;
-	layer.output = (float *)calloc(sz, sizeof(float));
-	layer.diff = (float *)calloc(sz, sizeof(float));
-#ifdef BCNN_USE_CUDA
-	layer.output_gpu = bcnn_cuda_memcpy_f32(layer.output, sz);
-	layer.diff_gpu = bcnn_cuda_memcpy_f32(layer.diff, sz);
-#endif
+		conn.src_node = net->input_node;
 
-	bcnn_realloc(net, nb_layers);
-	net->layers[nb_layers - 1] = layer;
+	conn.dst_node.w = conn.src_node.w;
+	conn.dst_node.h = conn.src_node.h;
+	conn.dst_node.c = conn.src_node.c;
+	conn.dst_node.b = conn.src_node.b;
+	sz = bcnn_node_size(&conn.dst_node);
+	conn.dst_node.data = (float *)calloc(sz, sizeof(float));
+	conn.dst_node.grad_data = (float *)calloc(sz, sizeof(float));
+
+#ifdef BCNN_USE_CUDA
+	conn.dst_node.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.data, sz);
+	conn.dst_node.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.grad_data, sz);
+#endif
+	net->nb_connections = nb_connections;
+	bcnn_net_add_connection(net, conn);
 
 	fprintf(stderr, "[Softmax] input_shape= %dx%dx%d output_shape= %dx%dx%d\n",
-		layer.input_shape[0], layer.input_shape[1], layer.input_shape[2],
-		layer.output_shape[0], layer.output_shape[1], layer.output_shape[2]);
-	return 0;
+		conn.src_node.w, conn.src_node.h, conn.src_node.c,
+		conn.dst_node.w, conn.dst_node.h, conn.dst_node.c);
+
+	return BCNN_SUCCESS;
 }
 
-int bcnn_forward_softmax_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_forward_softmax_layer_cpu(bcnn_connection *conn)
 {
-	int b, i;
-	int input_size = layer->input_shape[0] * layer->input_shape[1] * layer->input_shape[2];
-	float largest = -FLT_MAX;
-	float sum = 0;
+	int b, i, batch_size = conn->dst_node.b;
+	int src_size = conn->src_node.w * conn->src_node.h * conn->src_node.c;
+	float vmax = -FLT_MAX;
+	float sum = 0.0f;
+	bcnn_layer *layer = conn->layer;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
 
-	for (b = 0; b < wrk->batch_size; ++b) {
-		largest = -FLT_MAX;
-		sum = 0;
-		for (i = 0; i < input_size; ++i) {
-			if (wrk->input[b * input_size + i] > largest)
-				largest = wrk->input[b * input_size + i];
+	for (b = 0; b < batch_size; ++b) {
+		vmax = -FLT_MAX;
+		sum = 0.0f;
+		for (i = 0; i < src_size; ++i) {
+			if (src.data[b * src_size + i] > vmax)
+				vmax = src.data[b * src_size + i];
 		}
-		for (i = 0; i < input_size; ++i){
-			sum += (float)exp(wrk->input[b * input_size + i] - largest);
+		for (i = 0; i < src_size; ++i){
+			sum += (float)exp(src.data[b * src_size + i] - vmax);
 		}
 		if (sum)
-			sum = largest + (float)log(sum);
+			sum = vmax + (float)log(sum);
 		else
-			sum = largest - 100.0f;
-		for (i = 0; i < input_size; ++i){
-			layer->output[b * input_size + i] = (float)exp(wrk->input[b * input_size + i] - sum);
+			sum = vmax - 100.0f;
+		for (i = 0; i < src_size; ++i){
+			dst.data[b * src_size + i] = (float)exp(src.data[b * src_size + i] - sum);
 		}
 	}
 	return BCNN_SUCCESS;
 }
 
-int bcnn_forward_softmax_layer(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_backward_softmax_layer_cpu(bcnn_connection *conn)
+{
+	int i;
+	int sz = conn->src_node.w * conn->src_node.h * conn->src_node.c * 
+		conn->src_node.b;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
+
+	for (i = 0; i < sz; ++i)
+		src.grad_data[i] += dst.grad_data[i];
+
+	return BCNN_SUCCESS;
+}
+
+
+int bcnn_forward_softmax_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_forward_softmax_layer_gpu(layer, wrk);
+	return bcnn_forward_softmax_layer_gpu(conn);
 #else
-	return bcnn_forward_softmax_layer_cpu(layer, wrk);
+	return bcnn_forward_softmax_layer_cpu(conn);
 #endif
 }
 
 
-int bcnn_backward_softmax_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
-{
-	int i, sz = layer->input_shape[0] * layer->input_shape[1] * layer->input_shape[2];
-	for (i = 0; i < sz * wrk->batch_size; ++i)
-		wrk->diff[i] += layer->diff[i];
-	return BCNN_SUCCESS;
-}
-
-int bcnn_backward_softmax_layer(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_backward_softmax_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_backward_softmax_layer_gpu(layer, wrk);
+	return bcnn_backward_softmax_layer_gpu(conn);
 #else
-	return bcnn_backward_softmax_layer_cpu(layer, wrk);
+	return bcnn_backward_softmax_layer_cpu(conn);
 #endif
 }

@@ -25,43 +25,49 @@
 
 #include "bcnn/bcnn.h"
 
-int bcnn_forward_fullc_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_forward_fullc_layer_gpu(bcnn_connection *conn)
 {
-	int i, input_size = layer->input_shape[2], output_size = layer->output_shape[2];
-	int sz = output_size * wrk->batch_size;
+	int batch_size = conn->dst_node.b;
+	int src_size = conn->src_node.w * conn->src_node.h * conn->src_node.c;
+	int dst_size = conn->dst_node.w * conn->dst_node.h * conn->dst_node.c;
+	int sz = dst_size * conn->dst_node.b;
+	bcnn_layer *layer = conn->layer;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
 
-	bcnn_cuda_fill_f32(output_size * wrk->batch_size, 0.0f, layer->output_gpu, 1);
-	
-	bcnn_cuda_gemm(0, 1, wrk->batch_size, output_size, input_size, 1,
-		wrk->input_gpu, input_size, layer->weight_gpu, input_size, 1,
-		 layer->output_gpu, output_size);
+	bcnn_cuda_fill_f32(dst_size * batch_size, 0.0f, dst.data_gpu, 1);
 
-	for(i = 0; i < wrk->batch_size; ++i)
-        bcnn_cuda_axpy(output_size, 1.0f, layer->bias_gpu, 1, layer->output_gpu + i * output_size, 1);
+	bcnn_cuda_gemm(0, 1, batch_size, dst_size, src_size, 1,
+		src.data_gpu, src_size, layer->weight_gpu, src_size, 1, dst.data_gpu, dst_size);
 
-	bcnn_forward_activation_gpu(layer->output_gpu, sz, layer->activation);
+	bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
 
 	return BCNN_SUCCESS;
 }
 
 
-int bcnn_backward_fullc_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_backward_fullc_layer_gpu(bcnn_connection *conn)
 {
-	int i, input_size = layer->input_shape[2], output_size = layer->output_shape[2];
-	int sz = output_size * wrk->batch_size;
+	int i, batch_size = conn->dst_node.b;
+	int src_size = conn->src_node.w * conn->src_node.h * conn->src_node.c;
+	int dst_size = conn->dst_node.w * conn->dst_node.h * conn->dst_node.c;
+	int sz = dst_size * conn->dst_node.b;
+	bcnn_layer *layer = conn->layer;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
 
-	bcnn_backward_activation_gpu(layer->output_gpu, layer->diff_gpu, sz, layer->activation);
+	bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu, sz, layer->activation);
 
-	for (i = 0; i < wrk->batch_size; ++i)
-		bcnn_cuda_axpy(output_size, 1, layer->diff_gpu + i * output_size, 1, layer->bias_diff_gpu, 1);
+	for (i = 0; i < batch_size; ++i)
+		bcnn_cuda_axpy(dst_size, 1, dst.grad_data_gpu + i * dst_size, 1, layer->bias_diff_gpu, 1);
 
-	bcnn_cuda_gemm(1, 0, output_size, input_size, wrk->batch_size, 1,
-		layer->diff_gpu, output_size, wrk->input_gpu, input_size, 1,
-		layer->weight_diff_gpu, input_size);
+	bcnn_cuda_gemm(1, 0, dst_size, src_size, batch_size, 1,
+		dst.grad_data_gpu, dst_size, src.data_gpu, src_size, 1,
+		layer->weight_diff_gpu, src_size);
 
-	if (wrk->diff)
-		bcnn_cuda_gemm(0, 0, wrk->batch_size, input_size, output_size, 1,
-			layer->diff_gpu, output_size, layer->weight_gpu, input_size, 1, wrk->diff, input_size);
+	if (src.grad_data_gpu)
+		bcnn_cuda_gemm(0, 0, batch_size, src_size, dst_size, 1,
+			dst.grad_data_gpu, dst_size, layer->weight_gpu, src_size, 1, src.grad_data_gpu, src_size);
 
 	return BCNN_SUCCESS;
 }

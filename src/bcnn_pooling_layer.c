@@ -26,80 +26,79 @@
 
 int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride)
 {
-	int nb_layers = net->nb_layers + 1;
-	int output_size, sz;
-	bcnn_layer layer = { 0 };
+	int nb_connections = net->nb_connections + 1;
+	int sz;
+	bcnn_connection conn = { 0 };
 
-	layer.type = MAXPOOL;
-	//memcpy(layer.input_shape, input_shape, 3 * sizeof(int));
-	if (net->nb_layers == 0) {
-		layer.input_shape[0] = net->w;
-		layer.input_shape[1] = net->h;
-		layer.input_shape[2] = net->c;
-	}
+	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
+	conn.layer->type = MAXPOOL;
+	if (nb_connections > 1)
+		conn.src_node = net->connections[nb_connections - 2].dst_node;
 	else
-		memcpy(layer.input_shape, net->layers[net->nb_layers - 1].output_shape, 3 * sizeof(int));
-	layer.output_shape[0] = (layer.input_shape[0] - 1) / stride + 1;
-	layer.output_shape[1] = (layer.input_shape[1] - 1) / stride + 1;
-	layer.output_shape[2] = layer.input_shape[2];
-	output_size = layer.output_shape[0] * layer.output_shape[1] * layer.output_shape[2];
-	layer.size = size;
-	layer.stride = stride;
+		conn.src_node = net->input_node;
 
-	sz = output_size * net->batch_size;
-	layer.indexes = (int *)calloc(sz, sizeof(int));
-	layer.output = (float *)calloc(sz, sizeof(float));
-	layer.diff = (float *)calloc(sz, sizeof(float));
+	conn.dst_node.w = (conn.src_node.w - 1) / stride + 1;
+	conn.dst_node.h = (conn.src_node.h - 1) / stride + 1;
+	conn.dst_node.c = conn.src_node.c;
+	conn.dst_node.b = conn.src_node.b;
+	
+	conn.layer->size = size;
+	conn.layer->stride = stride;
 
+	sz = bcnn_node_size(&conn.dst_node);
+	conn.layer->indexes = (int *)calloc(sz, sizeof(int));
+	conn.dst_node.data = (float *)calloc(sz, sizeof(float));
+	conn.dst_node.grad_data = (float *)calloc(sz, sizeof(float));
 #ifdef BCNN_USE_CUDA
-	layer.indexes_gpu = bcnn_cuda_malloc_i32(sz);
-	layer.output_gpu = bcnn_cuda_memcpy_f32(layer.output, sz);
-	layer.diff_gpu = bcnn_cuda_memcpy_f32(layer.diff, sz);
+	conn.layer->indexes_gpu = bcnn_cuda_malloc_i32(sz);
+	conn.dst_node.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.data, sz);
+	conn.dst_node.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.grad_data, sz);
 #ifdef BCNN_USE_CUDNN
-	bcnn_cudnn_check(cudnnCreateTensorDescriptor(&layer.src_tensor_desc));
-    bcnn_cudnn_check(cudnnCreateTensorDescriptor(&layer.dst_tensor_desc));
-	bcnn_cudnn_check(cudnnCreatePoolingDescriptor(&layer.pooling_desc));
-	bcnn_cudnn_check(cudnnSetPooling2dDescriptor(layer.pooling_desc,
+	bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->src_tensor_desc));
+	bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->dst_tensor_desc));
+	bcnn_cudnn_check(cudnnCreatePoolingDescriptor(&conn.layer->pooling_desc));
+	bcnn_cudnn_check(cudnnSetPooling2dDescriptor(conn.layer->pooling_desc,
                                             CUDNN_POOLING_MAX,
-                                            layer.size,
-                                            layer.size,
+											conn.layer->size,
+											conn.layer->size,
                                             0,
                                             0,
-                                            layer.stride,
-                                            layer.stride));
-	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(layer.src_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		net->batch_size, layer.input_shape[2], layer.input_shape[1], layer.input_shape[0])); 
-    bcnn_cudnn_check(cudnnSetTensor4dDescriptor(layer.dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		net->batch_size, layer.output_shape[2], layer.output_shape[1], layer.output_shape[0])); 
+											conn.layer->stride,
+											conn.layer->stride));
+	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->src_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+		conn.src_node.b, conn.src_node.c, conn.src_node.h, conn.src_node.w)); 
+	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+		conn.dst_node.b, conn.dst_node.c, conn.dst_node.h, conn.dst_node.w)); 
 #endif
 #endif
-
-	bcnn_realloc(net, nb_layers);
-	net->layers[nb_layers - 1] = layer;
+	net->nb_connections = nb_connections;
+	bcnn_net_add_connection(net, conn);
 
 	fprintf(stderr, "[Maxpool] input_shape= %dx%dx%d size= %d stride= %d ouput_shape= %dx%dx%d\n",
-		layer.input_shape[0], layer.input_shape[1], layer.input_shape[2], size, stride,
-		layer.output_shape[0], layer.output_shape[1], layer.output_shape[2]);
+		conn.src_node.w, conn.src_node.h, conn.src_node.c, size, stride,
+		conn.dst_node.w, conn.dst_node.h, conn.dst_node.c);
 	return 0;
 }
 
 
-int bcnn_forward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_forward_maxpool_layer_cpu(bcnn_connection *conn)
 {
 	int b, i, j, k, m, n, dst_index, valid, src_index, cur_w, cur_h, max_i;
 	float max_f = -FLT_MAX, val;
+	bcnn_layer *layer = conn->layer;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
+	int batch_size = dst.b;
 	int offset_pool = (-layer->size - 1) / 2 + 1;
 	int offset0, offset1, offset2;
-	int src_w = layer->input_shape[0], src_h = layer->input_shape[1], src_c = layer->input_shape[2];
-	int dst_w = layer->output_shape[0], dst_h = layer->output_shape[1], dst_c = layer->output_shape[2];
 
-	for (b = 0; b < wrk->batch_size; ++b) { // batch_size
-		offset0 = dst_c * b;
-		for (k = 0; k < dst_c; ++k) {	// depth
-			offset1 = dst_h * (k + offset0);
-			for (i = 0; i < dst_h; ++i) {	// height
-				offset2 = dst_w * (offset1 + i);
-				for (j = 0; j < dst_w; ++j) {	// width
+	for (b = 0; b < batch_size; ++b) { // batch_size
+		offset0 = dst.c * b;
+		for (k = 0; k < dst.c; ++k) {	// depth
+			offset1 = dst.h * (k + offset0);
+			for (i = 0; i < dst.h; ++i) {	// height
+				offset2 = dst.w * (offset1 + i);
+				for (j = 0; j < dst.w; ++j) {	// width
 					dst_index = j + offset2;
 					max_f = -FLT_MAX;
 					max_i = -1;
@@ -107,17 +106,17 @@ int bcnn_forward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
 						for (m = 0; m < layer->size; ++m) {
 							cur_h = offset_pool + i * layer->stride + n;
 							cur_w = offset_pool + j * layer->stride + m;
-							src_index = cur_w + src_w * (cur_h + src_h * (k + b * src_c));
-							valid = (cur_h >= 0 && cur_h < src_h &&
-								cur_w >= 0 && cur_w < src_w);
-							val = (valid != 0) ? wrk->input[src_index] : -FLT_MAX;
+							src_index = cur_w + src.w * (cur_h + src.h * (k + b * src.c));
+							valid = (cur_h >= 0 && cur_h < src.h &&
+								cur_w >= 0 && cur_w < src.w);
+							val = (valid != 0) ? src.data[src_index] : -FLT_MAX;
 							if (val > max_f) {
 								max_f = val;
 								max_i = src_index;
 							}
 						}
 					}
-					layer->output[dst_index] = max_f;
+					dst.data[dst_index] = max_f;
 					layer->indexes[dst_index] = max_i;
 				}
 			}
@@ -127,32 +126,37 @@ int bcnn_forward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
 }
 
 
-int bcnn_forward_maxpool_layer(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_forward_maxpool_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_forward_maxpool_layer_gpu(layer, wrk);
+	return bcnn_forward_maxpool_layer_gpu(conn);
 #else
-	return bcnn_forward_maxpool_layer_cpu(layer, wrk);
+	return bcnn_forward_maxpool_layer_cpu(conn);
 #endif
 }
 
-int bcnn_backward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_backward_maxpool_layer_cpu(bcnn_connection *conn)
 {
 	int i, index;
-	int sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] * wrk->batch_size;
+	bcnn_layer *layer = conn->layer;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
+	int sz = bcnn_node_size(&dst);
+
 	for (i = 0; i < sz; ++i) {
 		index = layer->indexes[i];
-		wrk->diff[index] += layer->diff[i];
+		src.grad_data[index] += dst.grad_data[i];
 	}
+
 	return BCNN_SUCCESS;
 }
 
-int bcnn_backward_maxpool_layer(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_backward_maxpool_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_backward_maxpool_layer_gpu(layer, wrk);
+	return bcnn_backward_maxpool_layer_gpu(conn);
 #else
-	return bcnn_backward_maxpool_layer_cpu(layer, wrk);
+	return bcnn_backward_maxpool_layer_cpu(conn);
 #endif
 	return 0;
 }

@@ -52,17 +52,19 @@ __global__ void _bcnn_forward_activation_layer_kernel(float *x, int sz, bcnn_act
 int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a)
 {
 	_bcnn_forward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(x,
-		sz, layer->activation);
+		sz, a);
 	return BCNN_SUCCESS;
 }
 
-int bcnn_forward_activation_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_forward_activation_layer_gpu(bcnn_connection *conn)
 {
-	int sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] *
-		wrk->batch_size;
+	bcnn_layer *layer = conn->layer;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
+	int sz = bcnn_node_size(&dst);
 
-	layer->output_gpu = wrk->input_gpu;
-	bcnn_forward_activation_gpu(layer->output_gpu, sz, layer->activation);
+	dst.data_gpu = src.data_gpu;
+	bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
 	bcnn_cuda_check(cudaPeekAtLastError());
 
 	return BCNN_SUCCESS;
@@ -92,19 +94,21 @@ __global__ void _bcnn_backward_activation_layer_kernel(float *x, float *diff, in
 
 int bcnn_backward_activation_gpu(float *x, float *dx, int sz, bcnn_activation a)
 {
-	_bcnn_backward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(x, dx
-		sz, layer->activation);
+	_bcnn_backward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(x, dx, 
+		sz, a);
 	return BCNN_SUCCESS;
 }
 
-int bcnn_backward_activation_layer_gpu(bcnn_layer *layer, bcnn_workload *wrk)
+int bcnn_backward_activation_layer_gpu(bcnn_connection *conn)
 {
-	int sz = layer->output_shape[0] * layer->output_shape[1] * layer->output_shape[2] *
-		wrk->batch_size;
+	bcnn_layer *layer = conn->layer;
+	bcnn_node src = conn->src_node;
+	bcnn_node dst = conn->dst_node;
+	int sz = bcnn_node_size(&dst);
 	
-    bcnn_backward_activation_gpu(layer->output, layer->diff, sz, layer->activation)
+	bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu, sz, layer->activation);
 	bcnn_cuda_check(cudaPeekAtLastError());
-	wrk->diff = layer->diff_gpu;
+	src.grad_data_gpu = dst.grad_data_gpu;
 
 	return BCNN_SUCCESS;
 }

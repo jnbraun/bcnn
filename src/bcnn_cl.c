@@ -31,7 +31,11 @@
 #include "bcnn/bcnn.h"
 #include "bcnn/bcnn_cl.h"
 
-
+/*
+#ifdef _DEBUG
+#include <vld.h>
+#endif
+*/
 int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnn_param *param)
 {
 	FILE *file = NULL;
@@ -46,6 +50,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnn_param *param)
 	int input_shape[3] = { 0 };
 	int n_tok;
 	int concat_index = 0;
+	int nb_connections;
 	
 
 	file = fopen(config_file, "rt");
@@ -62,8 +67,10 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnn_param *param)
 		case '{':
 			if (nb_layers > 0) {
 				if (nb_layers == 1) {
-					bh_assert(net->w > 0 && net->h > 0 && net->c > 0, "Input's width, height and channels must be > 0", BCNN_INVALID_PARAMETER);
-					bh_assert(net->batch_size > 0, "Batch size must be > 0", BCNN_INVALID_PARAMETER);
+					bh_assert(net->input_node.w > 0 &&
+						net->input_node.h > 0 && net->input_node.c > 0,
+						"Input's width, height and channels must be > 0", BCNN_INVALID_PARAMETER);
+					bh_assert(net->input_node.b > 0, "Batch size must be > 0", BCNN_INVALID_PARAMETER);
 				}
 				if (strcmp(curr_layer, "{conv}") == 0 ||
 					strcmp(curr_layer, "{convolutional}") == 0) {
@@ -96,9 +103,6 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnn_param *param)
 				}
 				else if (strcmp(curr_layer, "{dropout}") == 0) {
 					bcnn_add_dropout_layer(net, rate);
-				}
-				else if (strcmp(curr_layer, "{concat}") == 0) {
-					bcnn_add_concat_layer(net, concat_index);
 				}
 				else {
 					fprintf(stderr, "[ERROR] Unknown Layer %s\n", curr_layer);
@@ -195,8 +199,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnn_param *param)
 		bh_error("Error in config file: last layer must be a cost layer", BCNN_INVALID_PARAMETER);
 	bh_free(curr_layer);
 	fclose(file);
-	net->output_size = net->layers[nb_layers - 2].output_shape[0] * net->layers[nb_layers - 2].output_shape[1] *
-		net->layers[nb_layers - 2].output_shape[2];
+	nb_connections = net->nb_connections;
 
 	param->eval_period = (param->eval_period > 0 ? param->eval_period : 100);
 
@@ -209,7 +212,7 @@ int bcnncl_train(bcnn_net *net, bcnn_param *param, float *error)
 {
 	float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
 	int i = 0, nb_iter = net->max_batches;
-	int batch_size = net->batch_size;
+	int batch_size = net->input_node.b;
 	bh_timer t = { 0 };
 	bcnn_iterator iter_data = { 0 };
 
@@ -260,12 +263,14 @@ int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred
 	float *out = NULL;
 	float err = 0.0f, error_batch = 0.0f;
 	FILE *f = NULL;
-	int batch_size = net->batch_size;
+	int batch_size = net->input_node.b;
 	unsigned char *img_pred = NULL;
 	char out_pred_name[128] = { 0 };
 	bcnn_iterator iter_data = { 0 };
-	int out_w = net->layers[net->nb_layers - 2].output_shape[0];
-	int out_h = net->layers[net->nb_layers - 2].output_shape[1];
+	int out_w = net->connections[net->nb_connections - 2].dst_node.w;
+	int out_h = net->connections[net->nb_connections - 2].dst_node.h;
+	int out_c = net->connections[net->nb_connections - 2].dst_node.c;
+	int output_size = out_w * out_h * out_c;
 
 	bcnn_init_iterator(&iter_data, param->test_input, NULL, "list");
 
@@ -294,9 +299,9 @@ int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred
 		if (dump_pred) {
 			if (param->prediction_type == HEATMAP_REGRESSION ||
 				param->prediction_type == SEGMENTATION) {
-				for (j = 0; j < net->batch_size; ++j) {
-					for (k = 0; k < net->layers[net->nb_layers - 2].output_shape[2]; ++k) {
-						sprintf(out_pred_name, "%d_%d.png", i * net->batch_size + j, k);
+				for (j = 0; j < net->input_node.b; ++j) {
+					for (k = 0; k < out_c; ++k) {
+						sprintf(out_pred_name, "%d_%d.png", i * net->input_node.b + j, k);
 						bip_write_float_image(out_pred_name,
 							out + j * out_w * out_h + k * out_w * out_h,
 							out_w, out_h, 1, out_w * sizeof(float));
@@ -304,16 +309,16 @@ int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred
 				}
 			}
 			else {
-				for (j = 0; j < net->batch_size; ++j) {
-					for (k = 0; k < net->output_size; ++k)
-						fprintf(f, "%f ", out[j * net->output_size + k]);
+				for (j = 0; j < net->input_node.b; ++j) {
+					for (k = 0; k < output_size; ++k)
+						fprintf(f, "%f ", out[j * output_size + k]);
 					fprintf(f, "\n");
 				}
 			}
 		}
 	}
 	// Process last instances
-	n = param->nb_pred % net->batch_size;
+	n = param->nb_pred % net->input_node.b;
 	if (n > 0) {
 		for (i = 0; i < n; ++i) {
 			bcnn_predict_on_batch(net, &iter_data, &out, &error_batch);
@@ -322,7 +327,7 @@ int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred
 			if (dump_pred) {
 				if (param->prediction_type == HEATMAP_REGRESSION ||
 					param->prediction_type == SEGMENTATION) {
-					for (k = 0; k < net->layers[net->nb_layers - 2].output_shape[2]; ++k) {
+					for (k = 0; k < out_c; ++k) {
 						sprintf(out_pred_name, "%d_%d.png", i, k);
 						bip_write_float_image(out_pred_name,
 							out + k * out_w * out_h,
@@ -330,7 +335,7 @@ int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred
 					}
 				}
 				else {
-					for (k = 0; k < net->output_size; ++k)
+					for (k = 0; k < output_size; ++k)
 						fprintf(f, "%f ", out[k]);
 					fprintf(f, "\n");
 				}

@@ -43,7 +43,6 @@ Only tested with msvc2010 and 2013.
 	- Max-pooling
 	- Dropout
 	- Batch normalization
-	- Layers concatenation
 * Learning by SGD.
 * Online data augmentation (crop, rotation, distortion)
 

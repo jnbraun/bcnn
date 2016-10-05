@@ -36,6 +36,7 @@
 #include <vld.h>
 #endif
 */
+
 int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnn_param *param)
 {
 	FILE *file = NULL;

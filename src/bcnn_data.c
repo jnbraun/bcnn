@@ -91,6 +91,7 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
 			}
 			n++;
 			bh_free(line);
+			for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
 			bh_free(tok);
 			bh_free(buf);
 			bh_free(img);
@@ -115,6 +116,7 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
 			}
 			n++;
 			bh_free(line);
+			for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
 			bh_free(tok);
 		}
 		break;
@@ -139,6 +141,7 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
 			bh_free(img);
 			n++;
 			bh_free(line);
+			for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
 			bh_free(tok);		
 		}
 		break;
@@ -381,6 +384,7 @@ int bcnn_free_mnist_iterator(bcnn_iterator *iter)
 
 int bcnn_init_list_iterator(bcnn_iterator *iter, char *path_input)
 {
+	int i;
 	FILE *f_list = NULL;
 	char *line = NULL;
 	char **tok = NULL;
@@ -406,7 +410,9 @@ int bcnn_init_list_iterator(bcnn_iterator *iter, char *path_input)
 	rewind(f_list);
 	iter->f_input = f_list;
 	bh_free(line);
-
+	bh_free(img);
+	for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
+	bh_free(tok);
 	return BCNN_SUCCESS;
 }
 

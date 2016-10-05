@@ -63,8 +63,10 @@ int bcnn_free_node(bcnn_node *node)
 
 int bcnn_free_connection(bcnn_connection *conn)
 {
-	bcnn_free_node(&conn->src_node);
-	bcnn_free_node(&conn->dst_node);
+	if (conn->layer->type != ACTIVATION && 
+		conn->layer->type != DROPOUT) {
+		bcnn_free_node(&conn->dst_node);
+	}
 	bcnn_free_layer(&conn->layer);
 	return BCNN_SUCCESS;
 }
@@ -72,6 +74,7 @@ int bcnn_free_connection(bcnn_connection *conn)
 int bcnn_free_net(bcnn_net *net)
 {
 	int i;
+	bcnn_free_workload(net);
     for (i = 0; i < net->nb_connections; ++i) {
 		bcnn_free_connection(&net->connections[i]);
     }

@@ -73,7 +73,6 @@ int bcnn_forward_dropout_layer_cpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
 	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
 	int i, sz = bcnn_node_size(&src);
 	float r;
 
@@ -105,7 +104,6 @@ int bcnn_backward_dropout_layer_cpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
 	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
 	int i, sz = bcnn_node_size(&src);
 	float r;
 

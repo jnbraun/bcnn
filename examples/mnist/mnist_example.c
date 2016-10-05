@@ -29,10 +29,6 @@
 #include "bcnn/bcnn.h"
 
 
-#ifdef USE_VLD
-#include <vld.h>
-#endif
-
 int create_network(bcnn_net *net)
 {
 	net->input_node.w = 28; net->input_node.h = 28; net->input_node.c = 1;

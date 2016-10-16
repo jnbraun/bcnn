@@ -175,6 +175,43 @@ int bcnn_load_image_from_csv(char *str, int w, int h, int c, unsigned char **img
 	return BCNN_SUCCESS;
 }
 
+
+int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **img, int state)
+{
+	int w_img, h_img, c_img, x_ul, y_ul;
+	unsigned char *buf = NULL, *pimg = NULL;
+
+	bip_load_image(path, &buf, &w_img, &h_img, &c_img);
+	bh_assert(w_img > 0 && h_img > 0 && buf,
+		"Invalid image",
+		BCNN_INVALID_DATA);
+	if (c != c_img) {
+		fprintf(stderr, "Unexpected number of channels of image %s\n", path);
+		bh_free(buf);
+		return BCNN_INVALID_DATA;
+	}
+	
+	if (w_img != w || h_img != h) {
+		if (state == 0) { // state predict, always center crop
+			x_ul = (w_img - w) / 2;
+			y_ul = (h_img - h) / 2;
+		}
+		else { // state train, random crop
+			x_ul = (int)((float)rand() / RAND_MAX * (w_img - w));
+			y_ul = (int)((float)rand() / RAND_MAX * (h_img - h));
+		}
+		pimg = (unsigned char*)calloc(w * h * c, sizeof(unsigned char));
+		bip_crop_image(buf, w_img, h_img, w_img * c_img, x_ul, y_ul,
+			pimg, w, h, w * c, c);
+		*img = pimg;
+		bh_free(buf);
+	}
+	else
+		*img = buf;
+	
+	return BCNN_SUCCESS;
+}
+
 /* Mnist iter */
 unsigned int _read_int(char *v)
 {

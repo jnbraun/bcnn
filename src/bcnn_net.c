@@ -392,6 +392,7 @@ int bcnn_update(bcnn_net *net)
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 {
 	int i, j, sz = net->input_node.w * net->input_node.h * net->input_node.c, n, offset;
+	int ret;
 	int nb = net->nb_connections;
 	int end_node = (net->connections[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
 	int w, h, c, out_w, out_h, out_c;
@@ -448,10 +449,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 					"Wrong data format for classification", BCNN_INVALID_DATA);
 			}
 			if (iter->type == ITER_LIST) {
-				bip_load_image(tok[0], &img, &w, &h, &c);
-				bh_assert(w == net->input_node.w && h == net->input_node.h && c == net->input_node.c,
-					"Network input size and data size are different",
-					BCNN_INVALID_DATA);
+				bh_assert(ret = bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state)
+					== BCNN_SUCCESS, "Problem while loading image", ret);
 			}
 			else
 				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);
@@ -486,11 +485,9 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 				bh_assert(n_tok == output_size + 1,
 					"Wrong data format for regression", BCNN_INVALID_DATA);
 			}
-			if (iter->type == IMG) {
-				bip_load_image(tok[0], &img, &w, &h, &c);
-				bh_assert(w == net->input_node.w && h == net->input_node.h && c == net->input_node.c,
-					"Network input size and data size are different",
-					BCNN_INVALID_DATA);
+			if (iter->type == ITER_LIST) {
+				bh_assert(ret = bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state)
+					== BCNN_SUCCESS, "Problem while loading image", ret);
 			}
 			else
 				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);
@@ -528,18 +525,17 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 				bh_assert(n_tok > 0 && (n_tok % 2) != 0,
 					"Wrong data format for heatmap regression", BCNN_INVALID_DATA);
 			}
-			if (iter->type == IMG) {
-				bip_load_image(tok[0], &img, &w, &h, &c);
-				bh_assert(w == net->input_node.w && h == net->input_node.h && c == net->input_node.c,
-					"Network input size and data size are different",
-					BCNN_INVALID_DATA);
+			if (iter->type == ITER_LIST) {
+				bh_assert(ret = bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state)
+					== BCNN_SUCCESS, "Problem while loading image", ret);
 			}
 			else
 				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);
 			// Online data augmentation
 			if (net->task == TRAIN && net->state)
-				bcnn_data_augmentation(img, w, h, c, param, img_tmp);
-			bip_convert_u8_to_f32(img, w, h, c, w * c, x);
+				bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
+			bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c,
+				net->input_node.w * net->input_node.c, x);
 			bh_free(img);
 			x += sz;
 			if (net->task != PREDICT) {
@@ -590,11 +586,9 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 					"Wrong data format for segmentation", BCNN_INVALID_DATA);
 			}
 			// First load the image
-			if (iter->type == IMG) {
-				bip_load_image(tok[0], &img, &w, &h, &c);
-				bh_assert(w == net->input_node.w && h == net->input_node.h && c == net->input_node.c,
-					"Network input size and data size are different",
-					BCNN_INVALID_DATA);
+			if (iter->type == ITER_LIST) {
+				bh_assert(ret = bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state)
+					== BCNN_SUCCESS, "Problem while loading image", ret);
 			}
 			else
 				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);

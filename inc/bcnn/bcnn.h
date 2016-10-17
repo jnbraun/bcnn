@@ -526,6 +526,7 @@ int bcnn_free_net(bcnn_net *cnn);
 
 /* Helpers */
 int bcnn_load_image_from_csv(char *str, int w, int h, int c, unsigned char **img);
+int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **img, int state);
 int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth, bcnn_data_augment *param,
 	unsigned char *buffer);
 int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *data_stream);

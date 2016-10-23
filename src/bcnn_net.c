@@ -434,6 +434,33 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 			}
 		}
 	}
+	else if (iter->type == ITER_BIN) {
+		for (i = 0; i < net->input_node.b; ++i) {
+			bcnn_bin_iter(net, iter);
+			// Data augmentation
+			if (net->task == TRAIN && net->state)
+				bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
+			bip_convert_u8_to_f32(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
+			x += sz;
+			if (net->task != PREDICT) {
+				// Load truth
+				switch (net->prediction_type) {
+				case CLASSIFICATION:
+					y[(int)iter->label_float[0]] = 1;
+					y += output_size;
+					break;
+				case REGRESSION:
+					for (j = 0; j < iter->label_width; ++j) {
+						y[j] = iter->label_float[j];
+					}
+					y += output_size;
+					break;
+				default:
+					bh_error("Target type not implemented for this data format. Please use list format instead.", BCNN_INVALID_PARAMETER);
+				}
+			}
+		}
+	}
 	else if (net->prediction_type == CLASSIFICATION) { //  Classification
 		for (i = 0; i < net->input_node.b; ++i) {
 			//nb_lines_skipped = (int)((float)rand() / RAND_MAX * net->input_node.b);
@@ -449,16 +476,17 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 					"Wrong data format for classification", BCNN_INVALID_DATA);
 			}
 			if (iter->type == ITER_LIST) {
-				bh_assert(ret = bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state)
-					== BCNN_SUCCESS, "Problem while loading image", ret);
+				bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state);
 			}
 			else
 				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);
-			// Online data augmentation
-			if (net->task == TRAIN && net->state)
-				bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-			bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
-			bh_free(img);
+			if (img) {
+				// Online data augmentation
+				if (net->task == TRAIN && net->state)
+					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
+				bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
+				bh_free(img);
+			}
 			x += sz;
 			if (net->task != PREDICT) {
 				// Load truth
@@ -486,16 +514,17 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 					"Wrong data format for regression", BCNN_INVALID_DATA);
 			}
 			if (iter->type == ITER_LIST) {
-				bh_assert(ret = bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state)
-					== BCNN_SUCCESS, "Problem while loading image", ret);
+				bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state);
 			}
 			else
 				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);
-			// Online data augmentation
-			if (net->task == TRAIN && net->state)
-				bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-			bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
-			bh_free(img);
+			if (img) {
+				// Online data augmentation
+				if (net->task == TRAIN && net->state)
+					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
+				bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
+				bh_free(img);
+			}
 			x += sz;
 			if (net->task != PREDICT) {
 				// Load truth
@@ -526,17 +555,18 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 					"Wrong data format for heatmap regression", BCNN_INVALID_DATA);
 			}
 			if (iter->type == ITER_LIST) {
-				bh_assert(ret = bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state)
-					== BCNN_SUCCESS, "Problem while loading image", ret);
+				bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state);
 			}
 			else
 				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);
-			// Online data augmentation
-			if (net->task == TRAIN && net->state)
-				bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-			bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c,
-				net->input_node.w * net->input_node.c, x);
-			bh_free(img);
+			if (img) {
+				// Online data augmentation
+				if (net->task == TRAIN && net->state)
+					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
+				bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c,
+					net->input_node.w * net->input_node.c, x);
+				bh_free(img);
+			}
 			x += sz;
 			if (net->task != PREDICT) {
 				// Load truth
@@ -592,17 +622,19 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 			}
 			else
 				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);
-			// Online data augmentation
-			if (net->task == TRAIN && net->state) {
-				net->data_aug.use_precomputed = 0;
-				bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
+			if (img) {
+				// Online data augmentation
+				if (net->task == TRAIN && net->state) {
+					net->data_aug.use_precomputed = 0;
+					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
+				}
+				bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
+				bh_free(img);
 			}
-			bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
-			bh_free(img);
 			x += sz;
 			if (net->task != PREDICT) {
 				// Load truth i.e the segmentation mask
-				if (iter->type == IMG) {
+				if (iter->type == ITER_LIST) {
 					bip_load_image(tok[1], &img, &w, &h, &c);
 					bh_assert(w == out_w &&
 					h == out_h &&
@@ -785,13 +817,6 @@ int bcnn_visualize_network(bcnn_net *net)
 int bcnn_free_layer(bcnn_layer **layer)
 {
 	bcnn_layer *p_layer = (*layer);
-	if (p_layer->type == DROPOUT) {
-        bh_free(p_layer->rand);
-#ifdef BCNN_USE_CUDA
-		if (p_layer->rand_gpu)             bcnn_cuda_free(p_layer->rand_gpu);
-#endif
-        return BCNN_SUCCESS;
-    }
     bh_free(p_layer->indexes);
     bh_free(p_layer->weight);
 	bh_free(p_layer->weight_diff);
@@ -813,7 +838,7 @@ int bcnn_free_layer(bcnn_layer **layer)
 	bh_free(p_layer->bn_shift_diff);
 	bh_free(p_layer->spatial_sum_multiplier);
 	bh_free(p_layer->batch_sum_multiplier);
-
+	bh_free(p_layer->rand);
 #ifdef BCNN_USE_CUDA
 	if (p_layer->indexes_gpu)          bcnn_cuda_free(p_layer->indexes_gpu);
 	if (p_layer->weight_gpu)          bcnn_cuda_free(p_layer->weight_gpu);
@@ -836,6 +861,7 @@ int bcnn_free_layer(bcnn_layer **layer)
 	if (p_layer->spatial_stats_gpu)	bcnn_cuda_free(p_layer->spatial_stats_gpu);
 	if (p_layer->bn_shift_gpu)	bcnn_cuda_free(p_layer->bn_shift_gpu);
 	if (p_layer->bn_shift_diff_gpu)	bcnn_cuda_free(p_layer->bn_shift_diff_gpu);
+	if (p_layer->rand_gpu)             bcnn_cuda_free(p_layer->rand_gpu);
 #ifdef BCNN_USE_CUDNN
 	cudnnDestroyTensorDescriptor(p_layer->src_tensor_desc);
 	cudnnDestroyTensorDescriptor(p_layer->dst_tensor_desc);

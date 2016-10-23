@@ -82,15 +82,6 @@ typedef enum {
 	SEGMENTATION
 } bcnn_target;
 
-/**
- * \brief Enum of data format.
- */
-typedef enum {
-	IMG,
-	CSV,
-	MNIST
-} bcnn_data_format;
-
 
 typedef struct {
 	FILE *f_img;
@@ -122,6 +113,7 @@ typedef struct {
 	int input_height;
 	int input_depth;
 	unsigned char *input_uchar;
+	int label_width;
 	int *label_int;
 	float *label_float;
 	unsigned char *label_uchar;
@@ -422,7 +414,7 @@ int bcnn_compile_net(bcnn_net *net, char *phase);
 int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *path_label);
 int bcnn_free_mnist_iterator(bcnn_iterator *iter);
 
-int bcnn_init_iterator(bcnn_iterator *iter, char *path_input, char *path_label, char *type);
+int bcnn_init_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input, char *path_label, char *type);
 int bcnn_free_iterator(bcnn_iterator *iter);
 
 /* Load / Write model */
@@ -525,11 +517,13 @@ int bcnn_free_layer(bcnn_layer **layer);
 int bcnn_free_net(bcnn_net *cnn);
 
 /* Helpers */
+int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_pack);
 int bcnn_load_image_from_csv(char *str, int w, int h, int c, unsigned char **img);
 int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **img, int state);
 int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth, bcnn_data_augment *param,
 	unsigned char *buffer);
 int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *data_stream);
+int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter);
 unsigned int _read_int(char *v);
 
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter);

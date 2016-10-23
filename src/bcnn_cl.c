@@ -37,7 +37,7 @@
 #endif
 */
 
-int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnn_param *param)
+int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *param)
 {
 	FILE *file = NULL;
 	char *line = NULL, *curr_layer = NULL;
@@ -125,13 +125,9 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnn_param *param)
 			if (strcmp(tok[0], "task") == 0) {
 				if (strcmp(tok[1], "train") == 0) param->task = TRAIN;
 				else if (strcmp(tok[1], "predict") == 0)  param->task = PREDICT;
-				else bh_error("Invalid option for task, available options: TRAIN, PREDICT", BCNN_INVALID_PARAMETER);
+				else bh_error("Invalid parameter for task, available parameters: TRAIN, PREDICT", BCNN_INVALID_PARAMETER);
 			}
-			else if (strcmp(tok[0], "data_format") == 0) {
-				if (strcmp(tok[1], "img") == 0) param->data_format = IMG;
-				else if (strcmp(tok[1], "csv") == 0) param->data_format = CSV;
-				else if (strcmp(tok[1], "mnist") == 0) param->data_format = MNIST;
-			}
+			else if (strcmp(tok[0], "data_format") == 0) bh_fill_option(&param->data_format, tok[1]);
 			else if (strcmp(tok[0], "input_model") == 0) bh_fill_option(&param->input_model, tok[1]);
 			else if (strcmp(tok[0], "output_model") == 0) bh_fill_option(&param->output_model, tok[1]);
 			else if(strcmp(tok[0], "out_pred") == 0) bh_fill_option(&param->pred_out, tok[1]);
@@ -209,7 +205,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnn_param *param)
 }
 
 
-int bcnncl_train(bcnn_net *net, bcnn_param *param, float *error)
+int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error)
 {
 	float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
 	int i = 0, nb_iter = net->max_batches;
@@ -217,7 +213,7 @@ int bcnncl_train(bcnn_net *net, bcnn_param *param, float *error)
 	bh_timer t = { 0 };
 	bcnn_iterator iter_data = { 0 };
 
-	if (bcnn_init_iterator(&iter_data, param->train_input, NULL, "list") != 0)
+	if (bcnn_init_iterator(net, &iter_data, param->train_input, NULL, param->data_format) != 0)
 		return -1;
 
 	bcnn_compile_net(net, "train");
@@ -258,7 +254,7 @@ int bcnncl_train(bcnn_net *net, bcnn_param *param, float *error)
 }
 
 
-int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred)
+int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error, int dump_pred)
 {
 	int i = 0, j = 0, n = 0, k = 0;
 	float *out = NULL;
@@ -273,7 +269,7 @@ int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred
 	int out_c = net->connections[net->nb_connections - 2].dst_node.c;
 	int output_size = out_w * out_h * out_c;
 
-	bcnn_init_iterator(&iter_data, param->test_input, NULL, "list");
+	bcnn_init_iterator(net, &iter_data, param->test_input, NULL, param->data_format);
 
 	if (dump_pred) {
 		if (param->prediction_type == HEATMAP_REGRESSION ||
@@ -351,20 +347,21 @@ int bcnncl_predict(bcnn_net *net, bcnn_param *param, float *error, int dump_pred
 	return 0;
 }
 
-int bcnncl_free_param(bcnn_param *param)
+int bcnncl_free_param(bcnncl_param *param)
 {
 	bh_free(param->input_model);
 	bh_free(param->output_model);
 	bh_free(param->pred_out);
 	bh_free(param->train_input);
 	bh_free(param->test_input);
+	bh_free(param->data_format);
 	return 0;
 }
 
 int run(char *config_file)
 {
 	bcnn_net *net = NULL;
-	bcnn_param param = { 0 };
+	bcnncl_param param = { 0 };
 	float error_train = 0.0f, error_valid = 0.0f, error_test = 0.0f;
 	
 	bcnn_init_net(&net);

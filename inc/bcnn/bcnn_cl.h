@@ -21,21 +21,21 @@ typedef struct {
 	char						*pred_out;			/**< Path to output prediction file. */
 	bcnn_task					task;				/**< Task to process. */
 	bcnn_target					prediction_type;	/**< Type of prediction to make. */
-	bcnn_data_format			data_format;		/**< Data format. */
+	char						*data_format;		/**< Data format. */
 	int							save_model;			/**< Periodicity of model saving. */
 	int							nb_pred;			/**< Number of samples to be predicted in test file. */
 	int							eval_period;		/**< Periodicity of evaluating the train/test error. */
 	int							eval_test;			/**< Set to 1 if evaluation of test database is asked. */
-} bcnn_param;
+} bcnncl_param;
 
 
-int bcnncl_init_from_config(bcnn_net *handle_net, char *config_file, bcnn_param *param);
+int bcnncl_init_from_config(bcnn_net *handle_net, char *config_file, bcnncl_param *param);
 
-int bcnncl_train(bcnn_net *handle_net, bcnn_param *param, float *error);
+int bcnncl_train(bcnn_net *handle_net, bcnncl_param *param, float *error);
 
-int bcnncl_predict(bcnn_net *handle_net, bcnn_param *param, float *error, int dump_pred);
+int bcnncl_predict(bcnn_net *handle_net, bcnncl_param *param, float *error, int dump_pred);
 
-int bcnncl_free_param(bcnn_param *param);
+int bcnncl_free_param(bcnncl_param *param);
 
 #ifdef __cplusplus
 }

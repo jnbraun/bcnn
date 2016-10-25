@@ -4,7 +4,9 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 bcnn is a pure C implementation of Convolutional Neural Networks (widely used in Deep Learning applications such as object detection and recognition in images).
+
 It is aimed to be lightweight, concise with a very limited number of dependencies.
+
 At the current state, it can run on CPU and Nvidia GPU. CuDNN support is a work in progress.
 
 ## Dependencies:

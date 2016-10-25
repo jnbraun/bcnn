@@ -7,7 +7,7 @@ bcnn is a pure C implementation of Convolutional Neural Networks (widely used in
 
 It is aimed to be lightweight, concise with a very limited number of dependencies.
 
-At the current state, it can run on CPU and Nvidia GPU. CuDNN support is a work in progress.
+At the current state, it can run on CPU and Nvidia's GPU. CuDNN support is a work in progress.
 
 ## Dependencies:
 ### Minimal build (CPU with or without SSE2 acceleration):

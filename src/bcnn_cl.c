@@ -31,11 +31,11 @@
 #include "bcnn/bcnn.h"
 #include "bcnn/bcnn_cl.h"
 
-/*
+
 #ifdef _DEBUG
 #include <vld.h>
 #endif
-*/
+
 
 int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *param)
 {
@@ -44,7 +44,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 	char **tok = NULL;
 	int nb_lines = 0, nb_layers = 0;
 	int w = 0, h = 0, c = 0, stride = 1, pad = 0, n_filts = 1, batch_norm = 0, input_size = 0, size = 3, outputs = 0;
-	bcnn_activation a = RELU;
+	bcnn_activation a = NONE;
 	bcnn_weights_init init = XAVIER;
 	bcnn_loss_metric cost = COST_SSE;
 	float scale = 1.0f, rate = 1.0f;
@@ -52,7 +52,8 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 	int n_tok;
 	int concat_index = 0;
 	int nb_connections;
-	
+	char *layer_id = NULL;
+	char *finetune_id = NULL;
 
 	file = fopen(config_file, "rt");
 	if (file == 0) {
@@ -75,41 +76,43 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 				}
 				if (strcmp(curr_layer, "{conv}") == 0 ||
 					strcmp(curr_layer, "{convolutional}") == 0) {
-					bcnn_add_convolutional_layer(net, n_filts, size, stride, pad, 0, init, a);
+					bcnn_add_convolutional_layer(net, n_filts, size, stride, pad, 0, init, a, layer_id);
 				}
 				else if (strcmp(curr_layer, "{deconv}") == 0 ||
 					strcmp(curr_layer, "{deconvolutional}") == 0) {
-					bcnn_add_deconvolutional_layer(net, n_filts, size, stride, pad, init, a);
+					bcnn_add_deconvolutional_layer(net, n_filts, size, stride, pad, init, a, layer_id);
 				}
 				else if (strcmp(curr_layer, "{activation}") == 0 ||
 					strcmp(curr_layer, "{nl}") == 0) {
-					bcnn_add_activation_layer(net, a);
+					bcnn_add_activation_layer(net, a, layer_id);
 				}
 				else if (strcmp(curr_layer, "{batchnorm}") == 0 ||
 					strcmp(curr_layer, "{bn}") == 0) {
-					bcnn_add_batchnorm_layer(net);
+					bcnn_add_batchnorm_layer(net, layer_id);
 				}
 				else if (strcmp(curr_layer, "{connected}") == 0 ||
 					strcmp(curr_layer, "{fullconnected}") == 0 ||
 					strcmp(curr_layer, "{fc}") == 0 ||
 					strcmp(curr_layer, "{ip}") == 0) {
-					bcnn_add_fullc_layer(net, outputs, init, a);
+					bcnn_add_fullc_layer(net, outputs, init, a, layer_id);
 				}
 				else if (strcmp(curr_layer, "{softmax}") == 0) {
-					bcnn_add_softmax_layer(net);
+					bcnn_add_softmax_layer(net, layer_id);
 				}
 				else if (strcmp(curr_layer, "{max}") == 0 ||
 					strcmp(curr_layer, "{maxpool}") == 0) {
-					bcnn_add_maxpool_layer(net, size, stride);
+					bcnn_add_maxpool_layer(net, size, stride, layer_id);
 				}
 				else if (strcmp(curr_layer, "{dropout}") == 0) {
-					bcnn_add_dropout_layer(net, rate);
+					bcnn_add_dropout_layer(net, rate, layer_id);
 				}
 				else {
 					fprintf(stderr, "[ERROR] Unknown Layer %s\n", curr_layer);
 					return BCNN_INVALID_PARAMETER;
 				}
 				bh_free(curr_layer);
+				bh_free(layer_id);
+				a = NONE;
 			}
 			curr_layer = line;
 			nb_layers++;
@@ -144,6 +147,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 			else if (strcmp(tok[0], "size") == 0) size = atoi(tok[1]);
 			else if (strcmp(tok[0], "stride") == 0) stride = atoi(tok[1]);
 			else if (strcmp(tok[0], "pad") == 0) pad = atoi(tok[1]);
+			else if (strcmp(tok[0], "id") == 0) bh_fill_option(&layer_id, tok[1]);
 			else if (strcmp(tok[0], "output") == 0) outputs = atoi(tok[1]);
 			else if (strcmp(tok[0], "function") == 0) {
 				if (strcmp(tok[1], "relu") == 0) a = RELU;
@@ -153,6 +157,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 				else if (strcmp(tok[1], "softplus") == 0) a = SOFTPLUS;
 				else if (strcmp(tok[1], "leaky_relu") == 0 || strcmp(tok[1], "lrelu") == 0) a = LRELU;
 				else if (strcmp(tok[1], "abs") == 0) a = ABS;
+				else if (strcmp(tok[1], "none") == 0) a = NONE;
 				else {
 					fprintf(stderr, "[WARNING] Unknown activation type %s, going with ReLU\n", tok[1]);
 					a = RELU;
@@ -162,7 +167,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 				if (strcmp(tok[1], "xavier") == 0) init = XAVIER;
 				else if (strcmp(tok[1], "msra") == 0) init = MSRA;
 				else {
-					fprintf(stderr, "[WARNING] Unknown activation type %s, going with xavier init\n", tok[1]);
+					fprintf(stderr, "[WARNING] Unknown init type %s, going with xavier init\n", tok[1]);
 					init = XAVIER;
 				}
 			}
@@ -393,7 +398,6 @@ int run(char *config_file)
 			bh_error("Can not perform prediction", -1);
 		bh_info("Prediction ended successfully");
 	}
-
 	bcnn_end_net(&net);
 	bcnncl_free_param(&param);
 	return 0;

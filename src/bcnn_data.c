@@ -185,7 +185,7 @@ int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, i
 		"Invalid image",
 		BCNN_INVALID_DATA);
 	if (c != c_img) {
-		fprintf(stderr, "Unexpected number of channels\n");
+		//fprintf(stderr, "Unexpected number of channels\n");
 		bh_free(tmp);
 		return BCNN_INVALID_DATA;
 	}

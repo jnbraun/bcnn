@@ -27,7 +27,7 @@
 
 int bcnn_forward_fullc_layer_gpu(bcnn_connection *conn)
 {
-	int batch_size = conn->dst_node.b;
+	int i, batch_size = conn->dst_node.b;
 	int src_size = conn->src_node.w * conn->src_node.h * conn->src_node.c;
 	int dst_size = conn->dst_node.w * conn->dst_node.h * conn->dst_node.c;
 	int sz = dst_size * conn->dst_node.b;
@@ -40,6 +40,10 @@ int bcnn_forward_fullc_layer_gpu(bcnn_connection *conn)
 	bcnn_cuda_gemm(0, 1, batch_size, dst_size, src_size, 1,
 		src.data_gpu, src_size, layer->weight_gpu, src_size, 1, dst.data_gpu, dst_size);
 
+	for (i = 0; i < batch_size; ++i){
+        bcnn_cuda_axpy(dst_size, 1, layer->bias_gpu, 1, dst.data_gpu + i * dst_size, 1);
+    }
+	
 	bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
 
 	return BCNN_SUCCESS;

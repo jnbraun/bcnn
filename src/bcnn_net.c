@@ -55,8 +55,8 @@ int bcnn_free_node(bcnn_node *node)
 	bh_free(node->data);
 	bh_free(node->grad_data);
 #ifdef BCNN_USE_CUDA
-	bh_free(node->data_gpu);
-	bh_free(node->grad_data_gpu);
+	bcnn_cuda_free(node->data_gpu);
+	bcnn_cuda_free(node->grad_data_gpu);
 #endif
 	return BCNN_SUCCESS;
 }
@@ -67,6 +67,7 @@ int bcnn_free_connection(bcnn_connection *conn)
 		conn->layer->type != DROPOUT) {
 		bcnn_free_node(&conn->dst_node);
 	}
+	bh_free(conn->id);
 	bcnn_free_layer(&conn->layer);
 	return BCNN_SUCCESS;
 }
@@ -79,6 +80,10 @@ int bcnn_free_net(bcnn_net *net)
 		bcnn_free_connection(&net->connections[i]);
     }
 	bh_free(net->connections);
+	for (i = 0; i < net->nb_finetune; ++i) {
+		bh_free(net->finetune_id[i]);
+	}
+	bh_free(net->finetune_id);
 	return BCNN_SUCCESS;
 }
 
@@ -125,11 +130,23 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val)
 	else if (strcmp(name, "min_brightness") == 0) net->data_aug.min_brightness = atoi(val);
 	else if (strcmp(name, "max_brightness") == 0) net->data_aug.max_brightness = atoi(val);
 	else if (strcmp(name, "max_distortion") == 0) net->data_aug.max_distortion = (float)atof(val);
+	else if (strcmp(name, "mean_r") == 0) net->data_aug.mean_r = (float)atof(val) / 255.0f;
+	else if (strcmp(name, "mean_g") == 0) net->data_aug.mean_g = (float)atof(val) / 255.0f;
+	else if (strcmp(name, "mean_b") == 0) net->data_aug.mean_b = (float)atof(val) / 255.0f;
+	else if (strcmp(name, "swap_to_bgr") == 0) net->data_aug.swap_to_bgr = atoi(val);
 	else if (strcmp(name, "prediction_type") == 0) {
 		if (strcmp(val, "classif") == 0 || strcmp(val, "classification") == 0) net->prediction_type = CLASSIFICATION;
 		else if (strcmp(val, "reg") == 0 || strcmp(val, "regression") == 0) net->prediction_type = REGRESSION;
 		else if (strcmp(val, "heatmap") == 0 || strcmp(val, "heatmap_regression") == 0) net->prediction_type = HEATMAP_REGRESSION;
 		else if (strcmp(val, "segmentation") == 0) net->prediction_type = SEGMENTATION;
+	}
+	else if (strcmp(name, "finetune_id") == 0) {
+		net->nb_finetune++;
+		if (net->nb_finetune == 1)
+			net->finetune_id = (char **)calloc(net->nb_finetune, sizeof(char *));
+		else
+			net->finetune_id = (char **)realloc(net->finetune_id, net->nb_finetune);
+		bh_fill_option(&net->finetune_id[net->nb_finetune - 1], val);
 	}
 	return BCNN_SUCCESS;
 }
@@ -375,19 +392,57 @@ int bcnn_apply_update_to_layer(bcnn_connection *conn, int batch_size, float lear
 
 int bcnn_update(bcnn_net *net)
 {
-    int i;
-    float rate = bcnn_update_learning_rate(net);
+    int i, j;
+    float lr = bcnn_update_learning_rate(net);
 	bcnn_layer_type	type;
 
 	for (i = 0; i < net->nb_connections; ++i) {
 		type = net->connections[i].layer->type;
-		if (type == CONVOLUTIONAL || type == FULL_CONNECTED || type == BATCHNORM)
+		if ((type == CONVOLUTIONAL || type == FULL_CONNECTED || type == BATCHNORM)) {
 			bcnn_apply_update_to_layer(&net->connections[i],
-			net->input_node.b, rate, net->learner.momentum, net->learner.decay);
+					net->input_node.b, lr, net->learner.momentum, net->learner.decay);
+		}
     }
 	return BCNN_SUCCESS;
 }
 
+static int _bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_to_bgr, 
+	float mean_r, float mean_g, float mean_b, float *dst)
+{
+	int x, y, k;
+	float m = 0.0f;
+	
+	if (swap_to_bgr) {
+		for (k = 0; k < c; ++k){
+			switch (k) {
+			case 0:
+				m = mean_r;
+				break;
+			case 1:
+				m = mean_g;
+				break;
+			case 2:
+				m = mean_b;
+				break;
+			}
+			for (y = 0; y < h; ++y){
+				for (x = 0; x < w; ++x){
+					dst[w * (h * (2 - k) + y) + x] = (float)src[c * (x + w * y) + k] / 255.0f - m;
+				}
+			}
+		}
+	}
+	else {
+		for (k = 0; k < c; ++k){
+			for (y = 0; y < h; ++y){
+				for (x = 0; x < w; ++x){
+					dst[w * (h * k + y) + x] = (float)src[c * (x + w * y) + k] / 255.0f - m;
+				}
+			}
+		}
+	}
+	return 0;
+}
 
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 {
@@ -425,7 +480,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 			// Data augmentation
 			if (net->task == TRAIN && net->state)
 				bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-			bip_convert_u8_to_f32(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
+			_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+				param->mean_r, param->mean_g, param->mean_b, x);
 			x += sz;
 			if (net->task != PREDICT) {
 				// Load truth
@@ -440,7 +496,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 			// Data augmentation
 			if (net->task == TRAIN && net->state)
 				bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-			bip_convert_u8_to_f32(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
+			_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+				param->mean_r, param->mean_g, param->mean_b, x);
 			x += sz;
 			if (net->task != PREDICT) {
 				// Load truth
@@ -484,7 +541,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 				// Online data augmentation
 				if (net->task == TRAIN && net->state)
 					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-				bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
+				_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+					param->mean_r, param->mean_g, param->mean_b, x);
 				bh_free(img);
 			}
 			x += sz;
@@ -522,7 +580,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 				// Online data augmentation
 				if (net->task == TRAIN && net->state)
 					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-				bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
+				_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+					param->mean_r, param->mean_g, param->mean_b, x);
 				bh_free(img);
 			}
 			x += sz;
@@ -563,8 +622,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 				// Online data augmentation
 				if (net->task == TRAIN && net->state)
 					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-				bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c,
-					net->input_node.w * net->input_node.c, x);
+				_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+					param->mean_r, param->mean_g, param->mean_b, x);
 				bh_free(img);
 			}
 			x += sz;
@@ -628,7 +687,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 					net->data_aug.use_precomputed = 0;
 					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
 				}
-				bip_convert_u8_to_f32(img, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c, x);
+				_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+					param->mean_r, param->mean_g, param->mean_b, x);
 				bh_free(img);
 			}
 			x += sz;
@@ -683,7 +743,7 @@ int bcnn_train_on_batch(bcnn_net *net, bcnn_iterator *iter, float *loss)
 	// Update network weight
 	bcnn_update(net);
 	*loss = net->connections[net->nb_connections - 1].dst_node.data[0];
-
+	
 	return BCNN_SUCCESS;
 }
 
@@ -745,31 +805,44 @@ int bcnn_load_model(bcnn_net *net, char *filename)
 {
 	FILE *fp = fopen(filename, "rb");
 	bcnn_layer *layer = NULL;
-	int i;
+	int i, j, is_ft = 0;
 	size_t nb_read = 0;
-
+	float tmp = 0.0f;
+	
 	if (!fp) {
 		fprintf(stderr, "[ERROR] can't open file %s\n", filename);
 		return -1;
 	}
 
-	fread(&net->learner.learning_rate, sizeof(float), 1, fp);
-	fread(&net->learner.momentum, sizeof(float), 1, fp);
-	fread(&net->learner.decay, sizeof(float), 1, fp);
+	fread(&tmp, sizeof(float), 1, fp);
+	fread(&tmp, sizeof(float), 1, fp);
+	fread(&tmp, sizeof(float), 1, fp);
 	fread(&net->seen, sizeof(int), 1, fp);
-
+	fprintf(stderr, "lr= %f ", net->learner.learning_rate);
+	fprintf(stderr, "m= %f ", net->learner.momentum);
+	fprintf(stderr, "decay= %f ", net->learner.decay);
+	fprintf(stderr, "seen= %d\n", net->seen);
 
 	for (i = 0; i < net->nb_connections; ++i) {
 		layer = net->connections[i].layer;
-		if (layer->type == CONVOLUTIONAL ||
+		is_ft = 0;
+		if (net->connections[i].id != NULL) {
+			for (j = 0; j < net->nb_finetune; ++j) {
+				if (strcmp(net->connections[i].id, net->finetune_id[j]) == 0)
+					is_ft = 1;
+			}
+		}
+		if ((layer->type == CONVOLUTIONAL ||
 			layer->type == DECONVOLUTIONAL ||
-			layer->type == FULL_CONNECTED) {
+			layer->type == FULL_CONNECTED) && is_ft == 0) {
 			nb_read = fread(layer->bias, sizeof(float), layer->bias_size, fp);
+			fprintf(stderr, "layer= %d nbread_bias= %d bias_size_expected= %d\n", i, nb_read, layer->bias_size);
 			nb_read = fread(layer->weight, sizeof(float), layer->weights_size, fp);
+			fprintf(stderr, "layer= %d nbread_weight= %d weight_size_expected= %d\n", i, nb_read, layer->weights_size);
 #ifdef BCNN_USE_CUDA
 			bcnn_cuda_memcpy_host2dev(layer->weight_gpu, layer->weight, layer->weights_size);
 			bcnn_cuda_memcpy_host2dev(layer->bias_gpu, layer->bias, layer->bias_size);
-#endif
+#endif	
 		}
 	}
 	if (fp != NULL)
@@ -783,35 +856,90 @@ int bcnn_load_model(bcnn_net *net, char *filename)
 
 
 
-
-/* CPU only */
-#ifndef BCNN_USE_CUDA
 int bcnn_visualize_network(bcnn_net *net)
 {
 	int i, j, k, sz, w, h, c;
 	bcnn_layer *layer = NULL;
 	char name[256];
-
-	for (i = 0; i < net->input_node.b; ++i) {
-		for (j = 0; j < net->nb_connections; ++j) {
-			if (net->connections[j].layer->type == CONVOLUTIONAL) {
+	FILE *ftmp = NULL;
+	int nb = net->nb_connections;
+	int output_size = net->connections[nb - 2].dst_node.w * 
+		net->connections[nb - 2].dst_node.h *
+		net->connections[nb - 2].dst_node.c;
+		
+	for (j = 0; j < net->nb_connections; ++j) {
+		if (net->connections[j].layer->type == CONVOLUTIONAL) {
+			w = net->connections[j].dst_node.w;
+			h = net->connections[j].dst_node.h;
+			c = net->connections[j].dst_node.c;
+			sz = w * h * c;
+#ifdef BCNN_USE_CUDA
+			bcnn_cuda_memcpy_dev2host(net->connections[j].dst_node.data_gpu,
+					net->connections[j].dst_node.data, sz * net->input_node.b);
+#endif
+			for (i = 0; i < net->input_node.b / 8; ++i) {	
 				layer = net->connections[j].layer;
-				w = net->connections[j].dst_node.w;
-				h = net->connections[j].dst_node.h;
-				c = net->connections[j].dst_node.c;
-				sz = w * h * c;
-				for (k = 0; k < net->connections[j].dst_node.c; ++k) {
+				for (k = 0; k < net->connections[j].dst_node.c / 16; ++k) {
 					sprintf(name, "sample%d_layer%d_fmap%d.png", i, j, k);
-					bip_write_float_image(name, net->connections[j].dst_node.data +
+					bip_write_float_image_norm(name, net->connections[j].dst_node.data +
 						i * sz + k * w * h, w, h, 1, w * sizeof(float));
 				}
+			}
+		}
+		else if (net->connections[j].layer->type == FULL_CONNECTED || 
+			net->connections[j].layer->type == SOFTMAX) {
+			w = net->connections[j].dst_node.w;
+			h = net->connections[j].dst_node.h;
+			c = net->connections[j].dst_node.c;
+			sz = w * h * c;
+#ifdef BCNN_USE_CUDA
+			bcnn_cuda_memcpy_dev2host(net->connections[j].dst_node.data_gpu,
+					net->connections[j].dst_node.data, sz * net->input_node.b);
+#endif
+			sprintf(name, "ip_%d.txt", j);
+			ftmp = fopen(name, "wt");
+			for (i = 0; i < net->input_node.b; ++i) {
+				layer = net->connections[j].layer;
+				for (k = 0; k < sz; ++k) {
+					fprintf(ftmp, "%f ", net->connections[j].dst_node.data[i * sz + k]);
+				}
+				fprintf(ftmp, "\n");
+			}
+			fclose(ftmp);
+			if (sz == 2 && net->connections[j].layer->type == FULL_CONNECTED) {
+				sz = sz * net->connections[j].src_node.w * net->connections[j].src_node.h
+					*net->connections[j].src_node.c;
+#ifdef BCNN_USE_CUDA
+				bcnn_cuda_memcpy_dev2host(net->connections[j].layer->weight_gpu,
+					net->connections[j].layer->weight, sz);
+#endif
+				sprintf(name, "wgt_%d.txt", j);
+				ftmp = fopen(name, "wt");
+				layer = net->connections[j].layer;
+				for (k = 0; k < sz; ++k) {
+					fprintf(ftmp, "%f ", layer->weight[k]);
+				}
+				fprintf(ftmp, "\n");
+				fclose(ftmp);
+				sz = 2;
+#ifdef BCNN_USE_CUDA
+				bcnn_cuda_memcpy_dev2host(net->connections[j].layer->bias_gpu,
+					net->connections[j].layer->bias, sz);
+#endif
+				sprintf(name, "b_%d.txt", j);
+				ftmp = fopen(name, "wt");
+				layer = net->connections[j].layer;
+				for (k = 0; k < sz; ++k) {
+					fprintf(ftmp, "%f ", layer->bias[k]);
+				}
+				fprintf(ftmp, "\n");
+				fclose(ftmp);
 			}
 		}
 	}
 
 	return BCNN_SUCCESS;
 }
-#endif
 
 
 int bcnn_free_layer(bcnn_layer **layer)

@@ -22,10 +22,11 @@
 
 #include <bh/bh_error.h>
 #include <bh/bh_mem.h>
+#include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
 
-int bcnn_add_dropout_layer(bcnn_net *net, float rate)
+int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id)
 {
 	int sz = 0;
 	int nb_connections = net->nb_connections + 1;
@@ -34,6 +35,8 @@ int bcnn_add_dropout_layer(bcnn_net *net, float rate)
 	bh_assert(nb_connections > 2,
 		"Dropout layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);
 
+	if (id != NULL)
+		bh_fill_option(&conn.id, id);
 	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
 	conn.layer->type = DROPOUT;
 	if (nb_connections > 1)

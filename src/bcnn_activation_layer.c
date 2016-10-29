@@ -22,11 +22,12 @@
 
 #include <bh/bh_error.h>
 #include <bh/bh_mem.h>
+#include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
 
 
-int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type)
+int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id)
 {
 	int nb_connections = net->nb_connections + 1;
 	int sz;
@@ -36,6 +37,8 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type)
 	bh_assert(nb_connections >= 2,
 		"Activation layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);
 
+	if (id != NULL)
+		bh_fill_option(&conn.id, id);
 	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
 	conn.layer->type = ACTIVATION;
 	if (nb_connections > 1)

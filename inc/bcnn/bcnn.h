@@ -32,7 +32,7 @@
 #include <curand.h>
 #include <driver_types.h>  // cuda driver types
 #ifdef BCNN_USE_CUDNN
-#include "cudnn.h"
+#include <cudnn.h>
 #endif
 #endif
 
@@ -161,6 +161,10 @@ typedef struct {
 	float		distortion;				/**< Current distortion factor. */
 	float		distortion_kx;			/**< Current distortion x kernel. */
 	float		distortion_ky;			/**< Current distortion y kernel. */
+	float		mean_r;
+	float		mean_g;
+	float		mean_b;
+	int			swap_to_bgr;
 } bcnn_data_augment;
 
 
@@ -222,6 +226,7 @@ typedef enum {
  * \brief Enum of available activations functions (non-linearities).
  */
 typedef enum {
+	NONE,
 	TANH,
 	RELU,
 	RAMP,
@@ -356,8 +361,12 @@ typedef struct {
 #ifdef BCNN_USE_CUDNN
 	cudnnTensorDescriptor_t			src_tensor_desc;
 	cudnnTensorDescriptor_t			dst_tensor_desc;
+	cudnnTensorDescriptor_t			src_tensor_desc_diff;
+	cudnnTensorDescriptor_t			dst_tensor_desc_diff;
 	cudnnFilterDescriptor_t			filter_desc;
+	cudnnFilterDescriptor_t			filter_desc_diff;
 	cudnnTensorDescriptor_t			bias_desc;
+	cudnnTensorDescriptor_t			bias_desc_diff;
 	cudnnConvolutionDescriptor_t	conv_desc;
 	cudnnPoolingDescriptor_t		pooling_desc;
 	cudnnConvolutionFwdAlgo_t		fwd_algo;
@@ -377,6 +386,7 @@ typedef struct {
 	bcnn_node		dst_node;
 	bcnn_layer		*layer;
 	float			*label;
+	char			*id;
 #ifdef BCNN_USE_CUDA
 	float			*label_gpu;
 #endif
@@ -393,10 +403,12 @@ typedef struct {
 	int					nb_connections;
 	bcnn_connection		*connections;
 	bcnn_target			prediction_type;
-	bcnn_data_augment   data_aug;
+	bcnn_data_augment   data_aug;			/**< Parameters for online data augmentation */
 	bcnn_task			task;
 	int					state;
 	bcnn_node			input_node;
+	int					nb_finetune;
+	char				**finetune_id;
 } bcnn_net;
 
 
@@ -454,45 +466,45 @@ int bcnn_realloc(bcnn_net *net, int nb_layers);
 
 /* Conv layer */
 int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int pad,
-	int batch_norm, bcnn_weights_init init, bcnn_activation activation);
+	int batch_norm, bcnn_weights_init init, bcnn_activation activation, char *id);
 int bcnn_forward_conv_layer(bcnn_connection *conn);
 int bcnn_backward_conv_layer(bcnn_connection *conn);
 
 /* Deconv layer */
 int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, int pad,
-	bcnn_weights_init init, bcnn_activation activation);
+	bcnn_weights_init init, bcnn_activation activation, char *id);
 int bcnn_forward_deconv_layer(bcnn_connection *conn);
 int bcnn_backward_deconv_layer(bcnn_connection *conn);
 
 /* Batchnorm layer */
-int bcnn_add_batchnorm_layer(bcnn_net *net);
+int bcnn_add_batchnorm_layer(bcnn_net *net, char *id);
 int bcnn_forward_batchnorm_layer(bcnn_connection *conn);
 int bcnn_backward_batchnorm_layer(bcnn_connection *conn);
 
 /* Full-connected layer */
-int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation);
+int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation, char *id);
 int bcnn_forward_fullc_layer(bcnn_connection *conn);
 int bcnn_backward_fullc_layer(bcnn_connection *conn);
 
 /* Activation layer */
-int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type);
+int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id);
 int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a);
 int bcnn_forward_activation_layer(bcnn_connection *conn);
 int bcnn_backward_activation_cpu(float *x, float *dx, int sz, bcnn_activation a);
 int bcnn_backward_activation_layer(bcnn_connection *conn);
 
 /* Softmax layer */
-int bcnn_add_softmax_layer(bcnn_net *net);
+int bcnn_add_softmax_layer(bcnn_net *net, char *id);
 int bcnn_forward_softmax_layer(bcnn_connection *conn);
 int bcnn_backward_softmax_layer(bcnn_connection *conn);
 
 /* Pooling layer */
-int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride);
+int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *id);
 int bcnn_forward_maxpool_layer(bcnn_connection *conn);
 int bcnn_backward_maxpool_layer(bcnn_connection *conn);
 
 /* Dropout layer */
-int bcnn_add_dropout_layer(bcnn_net *net, float rate);
+int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id);
 int bcnn_forward_dropout_layer(bcnn_connection *conn);
 int bcnn_backward_dropout_layer(bcnn_connection *conn);
 
@@ -559,7 +571,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter);
 #ifdef BCNN_USE_CUDNN
 #define bcnn_cudnn_check(RET) {													\
 	if ((RET) != CUDNN_STATUS_SUCCESS) {										\
-		fprintf(stderr, "[ERROR] [CUDNN] %d\n", (int)(RET));					\
+		fprintf(stderr, "[ERROR] [CUDNN] %s\n", cudnnGetErrorString((RET)));	\
 		exit((RET));															\
 	}																			\
 }

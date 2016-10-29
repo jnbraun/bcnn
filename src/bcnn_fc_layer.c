@@ -22,17 +22,20 @@
 
 
 #include <bh/bh_mem.h>
+#include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
 
-int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation)
+int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation, char *id)
 {
 	int nb_connections = net->nb_connections + 1;
 	int i;
 	float std_init = 0.0f;
 	bcnn_connection conn = { 0 };
 	int input_size = 0;
-
+	
+	if (id != NULL)
+		bh_fill_option(&conn.id, id);
 	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
 	conn.layer->type = FULL_CONNECTED;
 	if (nb_connections > 1)
@@ -101,11 +104,15 @@ int bcnn_forward_fullc_layer_cpu(bcnn_connection *conn)
 	bcnn_node src = conn->src_node;
 	bcnn_node dst = conn->dst_node;
 
-	for (i = 0; i < batch_size; ++i)
-		bcnn_copy_f32(dst_size, layer->bias, dst.data + i * dst_size);
+	/*for (i = 0; i < batch_size; ++i)
+		bcnn_copy_f32(dst_size, layer->bias, dst.data + i * dst_size);*/
+	memset(dst.data, 0, dst_size * batch_size * sizeof(float));
 
 	bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1,
 		src.data, src_size, layer->weight, src_size, 1, dst.data, dst_size);
+		
+	for (i = 0; i < batch_size; ++i)
+		bcnn_axpy(dst_size, 1, layer->bias, dst.data + i * dst_size);
 
 	bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
 

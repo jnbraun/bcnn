@@ -22,17 +22,20 @@
 
 
 #include <bh/bh_mem.h>
+#include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
 
 
-int bcnn_add_softmax_layer(bcnn_net *net)
+int bcnn_add_softmax_layer(bcnn_net *net, char *id)
 {
 	int nb_connections = net->nb_connections + 1;
 	int sz;
 	float std_init = 0.0f;
 	bcnn_connection conn = { 0 };
 
+	if (id != NULL)
+		bh_fill_option(&conn.id, id);
 	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
 	conn.layer->type = SOFTMAX;
 	if (nb_connections > 1)

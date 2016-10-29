@@ -21,15 +21,18 @@
 */
 
 #include <bh/bh.h>
+#include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
 
-int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride)
+int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *id)
 {
 	int nb_connections = net->nb_connections + 1;
 	int sz;
 	bcnn_connection conn = { 0 };
 
+	if (id != NULL)
+		bh_fill_option(&conn.id, id);
 	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
 	conn.layer->type = MAXPOOL;
 	if (nb_connections > 1)

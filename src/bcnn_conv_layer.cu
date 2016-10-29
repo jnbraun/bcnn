@@ -187,9 +187,9 @@ int bcnn_forward_conv_layer_gpu(bcnn_connection *conn)
 	bcnn_node src = conn->src_node;
 	bcnn_node dst = conn->dst_node;
 	int batch_size = dst.b;
+	int sz;
 #ifdef BCNN_USE_CUDNN
-	float alpha = 1.0f, beta = 1.0f;
-	//fprintf(stderr, "%d %d\n", layer->fwd_algo, layer->workspace_size);
+	float alpha = 1.0f, beta = 0.0f;
     bcnn_cudnn_check(cudnnConvolutionForward(bcnn_cudnn_handle(),
 										&alpha,
 										layer->src_tensor_desc,
@@ -203,14 +203,12 @@ int bcnn_forward_conv_layer_gpu(bcnn_connection *conn)
 										&beta,
 										layer->dst_tensor_desc,
 										dst.data_gpu));
-
 	bcnn_cudnn_check(cudnnAddTensor(bcnn_cudnn_handle(), CUDNN_ADD_SAME_C, &alpha,
               layer->bias_desc, layer->bias_gpu,
-              &beta,
+              &alpha,
               layer->dst_tensor_desc, dst.data_gpu));
-	//bcnn_forward_bias_gpu(dst.data_gpu, layer->bias_gpu, batch_size, layer->num, out_spatial_dim);
 #else
-	int i, w_sz, sz, out_sz, out_spatial_dim;
+	int i, w_sz, out_sz, out_spatial_dim;
 
 	out_sz = batch_size * dst.w * dst.h * dst.c;
 	w_sz = layer->size * layer->size * src.c;
@@ -264,29 +262,28 @@ int bcnn_backward_conv_layer_gpu(bcnn_connection *conn)
 											&one,
 											layer->src_tensor_desc,
 											src.data_gpu,
-											layer->dst_tensor_desc,
+											layer->dst_tensor_desc_diff,
 											dst.grad_data_gpu,
 											layer->conv_desc,
 											layer->bwd_filter_algo,
 											layer->conv_workspace_gpu,
 											layer->workspace_size,
 											&one,
-											layer->filter_desc,
+											layer->filter_desc_diff,
 											layer->weight_diff_gpu));
-
     if (src.grad_data_gpu) {
         bcnn_cudnn_check(cudnnConvolutionBackwardData_v3(bcnn_cudnn_handle(),
 											&one,
 											layer->filter_desc,
 											layer->weight_gpu,
-											layer->dst_tensor_desc,
+											layer->dst_tensor_desc_diff,
 											dst.grad_data_gpu,
 											layer->conv_desc,
 											layer->bwd_data_algo,
 											layer->conv_workspace_gpu,
 											layer->workspace_size,
 											&zero,
-											layer->src_tensor_desc,
+											layer->src_tensor_desc_diff,
 											src.grad_data_gpu));
     }
 #else

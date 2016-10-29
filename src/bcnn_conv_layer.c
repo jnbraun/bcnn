@@ -22,6 +22,7 @@
 
 
 #include <bh/bh_mem.h>
+#include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
 
@@ -136,7 +137,7 @@ static int _bcnn_backward_bias(float *bias_diff, float *diff, int batch_size, in
 
 
 int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int pad,
-	int batch_norm, bcnn_weights_init init, bcnn_activation activation)
+	int batch_norm, bcnn_weights_init init, bcnn_activation activation, char *id)
 {
 	int nb_connections = net->nb_connections + 1;
 	int i, sz;
@@ -145,6 +146,9 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 #ifdef BCNN_USE_CUDNN
 	size_t cudnn_wrk_sz = 0;
 #endif
+
+	if (id != NULL)
+		bh_fill_option(&conn.id, id);
 
 	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
 	conn.layer->type = CONVOLUTIONAL;
@@ -201,15 +205,27 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
     bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->dst_tensor_desc));
     bcnn_cudnn_check(cudnnCreateFilterDescriptor(&conn.layer->filter_desc));
 	bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->bias_desc));
+	bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->src_tensor_desc_diff));
+    bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->dst_tensor_desc_diff));
+    bcnn_cudnn_check(cudnnCreateFilterDescriptor(&conn.layer->filter_desc_diff));
+	bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->bias_desc_diff));
     bcnn_cudnn_check(cudnnCreateConvolutionDescriptor(&conn.layer->conv_desc));  
     bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->src_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		net->batch_size, conn.src.c, conn.src.h, conn.src.w)); 
+		conn.dst_node.b, conn.src_node.c, conn.src_node.h, conn.src_node.w)); 
     bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		net->batch_size, conn.dst.c, conn.dst.h, conn.layer->output_shape[0])); 
+		conn.dst_node.b, conn.dst_node.c, conn.dst_node.h, conn.dst_node.w));
+	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->src_tensor_desc_diff, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+		conn.dst_node.b, conn.src_node.c, conn.src_node.h, conn.src_node.w)); 
+    bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->dst_tensor_desc_diff, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+		conn.dst_node.b, conn.dst_node.c, conn.dst_node.h, conn.dst_node.w)); 
     bcnn_cudnn_check(cudnnSetFilter4dDescriptor(conn.layer->filter_desc, CUDNN_DATA_FLOAT,
-		conn.layer->num, conn.src.c, conn.layer->size, conn.layer->size));
+		conn.layer->num, conn.src_node.c, conn.layer->size, conn.layer->size));
+	bcnn_cudnn_check(cudnnSetFilter4dDescriptor(conn.layer->filter_desc_diff, CUDNN_DATA_FLOAT,
+		conn.layer->num, conn.src_node.c, conn.layer->size, conn.layer->size));
 	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		1, conn.dst.c, 1, 1));
+		1, conn.dst_node.c, 1, 1));
+	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->bias_desc_diff, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+		1, conn.dst_node.c, 1, 1));
     bcnn_cudnn_check(cudnnSetConvolution2dDescriptor(conn.layer->conv_desc, conn.layer->pad, conn.layer->pad, conn.layer->stride, conn.layer->stride, 1, 1, CUDNN_CROSS_CORRELATION));
     bcnn_cudnn_check(cudnnGetConvolutionForwardAlgorithm(bcnn_cudnn_handle(),
             conn.layer->src_tensor_desc,
@@ -229,9 +245,9 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
             &conn.layer->bwd_data_algo));
     bcnn_cudnn_check(cudnnGetConvolutionBackwardFilterAlgorithm(bcnn_cudnn_handle(),
             conn.layer->src_tensor_desc,
-            conn.layer->dst_tensor_desc,
+            conn.layer->dst_tensor_desc_diff,
             conn.layer->conv_desc,
-            conn.layer->filter_desc,
+            conn.layer->filter_desc_diff,
             CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST,
             0,
             &conn.layer->bwd_filter_algo));
@@ -245,17 +261,17 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
     conn.layer->workspace_size = bh_max(conn.layer->workspace_size, cudnn_wrk_sz);
     bcnn_cudnn_check(cudnnGetConvolutionBackwardFilterWorkspaceSize(bcnn_cudnn_handle(),
             conn.layer->src_tensor_desc,
-            conn.layer->dst_tensor_desc,
+            conn.layer->dst_tensor_desc_diff,
             conn.layer->conv_desc,
-            conn.layer->filter_desc,
+            conn.layer->filter_desc_diff,
             conn.layer->bwd_filter_algo,
             &cudnn_wrk_sz));
     conn.layer->workspace_size = bh_max(conn.layer->workspace_size, cudnn_wrk_sz);
     bcnn_cudnn_check(cudnnGetConvolutionBackwardDataWorkspaceSize(bcnn_cudnn_handle(),
             conn.layer->filter_desc,
-            conn.layer->dst_tensor_desc,
+            conn.layer->dst_tensor_desc_diff,
             conn.layer->conv_desc,
-            conn.layer->src_tensor_desc,
+            conn.layer->src_tensor_desc_diff,
             conn.layer->bwd_data_algo,
             &cudnn_wrk_sz));
     conn.layer->workspace_size = bh_max(conn.layer->workspace_size, cudnn_wrk_sz);
@@ -380,13 +396,15 @@ int bcnn_backward_conv_layer(bcnn_connection *conn)
 
 /* Deconv layer */
 int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, int pad,
-	bcnn_weights_init init, bcnn_activation activation)
+	bcnn_weights_init init, bcnn_activation activation, char *id)
 {
 	int nb_connections = net->nb_connections + 1;
 	int i, sz;
 	float std_init = 0.0f;
 	bcnn_connection conn = { 0 };
 
+	if (id != NULL)
+		bh_fill_option(&conn.id, id);
 	conn.layer->type = DECONVOLUTIONAL;
 	if (nb_connections > 1)
 		conn.src_node = net->connections[nb_connections - 2].dst_node;

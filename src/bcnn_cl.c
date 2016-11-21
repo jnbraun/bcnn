@@ -32,6 +32,11 @@
 #include "bcnn/bcnn_cl.h"
 
 
+#ifdef _DEBUG
+#include <vld.h>
+#endif
+
+
 int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *param)
 {
 	FILE *file = NULL;

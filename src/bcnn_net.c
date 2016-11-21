@@ -392,13 +392,16 @@ int bcnn_apply_update_to_layer(bcnn_connection *conn, int batch_size, float lear
 
 int bcnn_update(bcnn_net *net)
 {
-    int i, j;
+    int i;
     float lr = bcnn_update_learning_rate(net);
 	bcnn_layer_type	type;
 
 	for (i = 0; i < net->nb_connections; ++i) {
 		type = net->connections[i].layer->type;
-		if ((type == CONVOLUTIONAL || type == FULL_CONNECTED || type == BATCHNORM)) {
+		if ((type == CONVOLUTIONAL || 
+			type == DECONVOLUTIONAL || 
+			type == FULL_CONNECTED ||
+			type == BATCHNORM)) {
 			bcnn_apply_update_to_layer(&net->connections[i],
 					net->input_node.b, lr, net->learner.momentum, net->learner.decay);
 		}
@@ -406,7 +409,7 @@ int bcnn_update(bcnn_net *net)
 	return BCNN_SUCCESS;
 }
 
-static int _bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_to_bgr, 
+int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_to_bgr, 
 	float mean_r, float mean_g, float mean_b, float *dst)
 {
 	int x, y, k;
@@ -444,6 +447,7 @@ static int _bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, i
 	return 0;
 }
 
+
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 {
 	int i, j, sz = net->input_node.w * net->input_node.h * net->input_node.c, n, offset;
@@ -480,7 +484,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 			// Data augmentation
 			if (net->task == TRAIN && net->state)
 				bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-			_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+			bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
 				param->mean_r, param->mean_g, param->mean_b, x);
 			x += sz;
 			if (net->task != PREDICT) {
@@ -496,7 +500,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 			// Data augmentation
 			if (net->task == TRAIN && net->state)
 				bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-			_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+			bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
 				param->mean_r, param->mean_g, param->mean_b, x);
 			x += sz;
 			if (net->task != PREDICT) {
@@ -509,6 +513,33 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 				case REGRESSION:
 					for (j = 0; j < iter->label_width; ++j) {
 						y[j] = iter->label_float[j];
+					}
+					y += output_size;
+					break;
+				case HEATMAP_REGRESSION:
+					// Load truth
+					w = net->connections[net->nb_connections - 2].dst_node.w;
+					h = net->connections[net->nb_connections - 2].dst_node.h;
+					c = net->connections[net->nb_connections - 2].dst_node.c;
+					x_scale = (float)w / (float)net->input_node.w;
+					y_scale = (float)h / (float)net->input_node.h;
+					for (j = 0; j < iter->label_width; j += 2) {
+						x_pos = (int)((iter->label_float[j] - net->data_aug.shift_x) * x_scale + 0.5f);
+						y_pos = (int)((iter->label_float[j + 1] - net->data_aug.shift_y) * y_scale + 0.5f);
+						// Set gaussian kernel around (x_pos, y_pos)
+						n = j >> 1;
+						offset = n * w * h + (y_pos * w + x_pos);
+						if (x_pos >= 0 && x_pos < w && y_pos >= 0 && y_pos < h) {
+							y[offset] = 1.0f;
+							if (x_pos > 0) y[offset - 1] = 0.5f;
+							if (x_pos < w - 1) y[offset + 1] = 0.5f;
+							if (y_pos > 0) y[offset - w] = 0.5f;
+							if (y_pos < h - 1) y[offset + w] = 0.5f;
+							if (x_pos > 0 && y_pos > 0) y[offset - w - 1] = 0.25f;
+							if (x_pos < w - 1 && y_pos > 0) y[offset - w + 1] = 0.25f;
+							if (x_pos > 0 && y_pos < h - 1) y[offset + w - 1] = 0.25f;
+							if (x_pos < w - 1 && y_pos < h - 1) y[offset + w + 1] = 0.25f;
+						}
 					}
 					y += output_size;
 					break;
@@ -541,7 +572,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 				// Online data augmentation
 				if (net->task == TRAIN && net->state)
 					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-				_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+				bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
 					param->mean_r, param->mean_g, param->mean_b, x);
 				bh_free(img);
 			}
@@ -580,7 +611,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 				// Online data augmentation
 				if (net->task == TRAIN && net->state)
 					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-				_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+				bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
 					param->mean_r, param->mean_g, param->mean_b, x);
 				bh_free(img);
 			}
@@ -622,7 +653,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 				// Online data augmentation
 				if (net->task == TRAIN && net->state)
 					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-				_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+				bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
 					param->mean_r, param->mean_g, param->mean_b, x);
 				bh_free(img);
 			}
@@ -640,15 +671,17 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 					// Set gaussian kernel around (x_pos,y_pos)
 					n = j >> 1;
 					offset = n * w * h + (y_pos * w + x_pos);
-					if (x_pos >= 0 && x_pos < w && y_pos >= 0 && y_pos < h) y[offset] = 1.0f;
-					if (x_pos > 0) y[offset - 1] = 0.5f;
-					if (x_pos < w - 1) y[offset + 1] = 0.5f;
-					if (y_pos > 0) y[offset - w] = 0.5f;
-					if (y_pos < h - 1) y[offset + w] = 0.5f;
-					if (x_pos > 0 && y_pos > 0) y[offset - w - 1] = 0.25f;
-					if (x_pos < w - 1 && y_pos > 0) y[offset - w + 1] = 0.25f;
-					if (x_pos > 0 && y_pos < h - 1) y[offset + w - 1] = 0.25f;
-					if (x_pos < w - 1 && y_pos < h - 1) y[offset + w + 1] = 0.25f;
+					if (x_pos >= 0 && x_pos < w && y_pos >= 0 && y_pos < h) {
+						y[offset] = 1.0f;
+						if (x_pos > 0) y[offset - 1] = 0.5f;
+						if (x_pos < w - 1) y[offset + 1] = 0.5f;
+						if (y_pos > 0) y[offset - w] = 0.5f;
+						if (y_pos < h - 1) y[offset + w] = 0.5f;
+						if (x_pos > 0 && y_pos > 0) y[offset - w - 1] = 0.25f;
+						if (x_pos < w - 1 && y_pos > 0) y[offset - w + 1] = 0.25f;
+						if (x_pos > 0 && y_pos < h - 1) y[offset + w - 1] = 0.25f;
+						if (x_pos < w - 1 && y_pos < h - 1) y[offset + w + 1] = 0.25f;
+					}
 				}
 				y += output_size;
 			}
@@ -687,7 +720,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 					net->data_aug.use_precomputed = 0;
 					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
 				}
-				_bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+				bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
 					param->mean_r, param->mean_g, param->mean_b, x);
 				bh_free(img);
 			}

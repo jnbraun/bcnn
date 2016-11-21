@@ -108,6 +108,7 @@ typedef struct {
 	bcnn_iterator_type type;
 	FILE *f_input;
 	FILE *f_label;
+	FILE *f_list;
 	int n_iter;
 	int input_width;
 	int input_height;
@@ -532,6 +533,8 @@ int bcnn_free_net(bcnn_net *cnn);
 int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_pack);
 int bcnn_load_image_from_csv(char *str, int w, int h, int c, unsigned char **img);
 int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **img, int state);
+int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, int h, int c, unsigned char **img, int state,
+	int *x_shift, int *y_shift);
 int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth, bcnn_data_augment *param,
 	unsigned char *buffer);
 int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *data_stream);
@@ -539,6 +542,9 @@ int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter);
 unsigned int _read_int(char *v);
 
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter);
+
+int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_to_bgr, 
+	float mean_r, float mean_g, float mean_b, float *dst);
 
 /* Cuda kernels routines */
 #ifdef BCNN_USE_CUDA

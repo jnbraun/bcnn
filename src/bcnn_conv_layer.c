@@ -405,6 +405,7 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, i
 
 	if (id != NULL)
 		bh_fill_option(&conn.id, id);
+	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
 	conn.layer->type = DECONVOLUTIONAL;
 	if (nb_connections > 1)
 		conn.src_node = net->connections[nb_connections - 2].dst_node;
@@ -457,7 +458,7 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, i
 	conn.layer->conv_workspace_gpu = bcnn_cuda_memcpy_f32(conn.layer->conv_workspace, sz);
 #endif
 	conn.layer->activation = activation;
-
+	net->nb_connections = nb_connections;
 	bcnn_net_add_connection(net, conn);
 
 	fprintf(stderr, "[Deconvolutional] input_shape= %dx%dx%d nb_filters= %d kernel_size= %d stride= %d output_shape= %dx%dx%d\n",
@@ -523,7 +524,7 @@ int bcnn_backward_deconv_layer_cpu(bcnn_connection *conn)
 		pdst = dst.grad_data + i * layer->num * dst.w * dst.h;
 		_bcnn_im2col(pdst, dst.c, dst.h, dst.w,
 			layer->size, 0, layer->stride, layer->conv_workspace);
-		bcnn_gemm(0, 1, m, n, k, alpha, src.data + i * src.c * layer->size * layer->size * layer->num,
+		bcnn_gemm(0, 1, m, n, k, alpha, src.data + i * src.c * src.h * src.w,
 			k, layer->conv_workspace, k, 1.0f, layer->weight_diff, n);
 
 		if (src.grad_data) {

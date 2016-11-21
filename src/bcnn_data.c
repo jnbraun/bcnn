@@ -47,18 +47,25 @@ unsigned char *_pack_int(unsigned char *buffer, int val)
 
 int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_pack)
 {
-	FILE *f_lst = NULL, *f_out = NULL;
+	FILE *f_lst = NULL, *f_out = NULL, *f_outlst = NULL;
 	char *line = NULL;
 	int n = 0, n_tok = 0;
 	char **tok = NULL;
-	int i, w, h, c, buf_sz;
+	int i, w, h, c, buf_sz, part = 0;
 	float lf;
 	unsigned char *img = NULL;
 	unsigned char *buf = NULL;
+	char name[256];
+	size_t cnt = 0, max_part_sz = 256000000;
 
 	f_lst = fopen(list, "rt");
 	if (f_lst == NULL) {
 		fprintf(stderr, "[ERROR] Can not open %s\n", f_lst);
+		return -1;
+	}
+	f_outlst = fopen(out_pack, "wt");
+	if (f_outlst == NULL) {
+		fprintf(stderr, "[ERROR] Can not open %s\n", f_outlst);
 		return -1;
 	}
 
@@ -68,20 +75,33 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
 	}
 	rewind(f_lst);
 
-	f_out = fopen(out_pack, "wb");
-	fwrite(&n, 1, sizeof(int), f_out);
-	fwrite(&label_width, 1, sizeof(int), f_out);
-	fwrite(&type, 1, sizeof(int), f_out);
+	sprintf(name, "%s_%d.bin", out_pack, part);
+	f_out = fopen(name, "wb");
+	cnt += fwrite(&n, 1, sizeof(int), f_out);
+	cnt += fwrite(&label_width, 1, sizeof(int), f_out);
+	cnt += fwrite(&type, 1, sizeof(int), f_out);
 	
 	while ((line = bh_fgetline(f_lst)) != NULL) {
+		if (cnt > max_part_sz) {
+			if (f_out != NULL)
+				fclose(f_out);
+			cnt = 0;
+			part++;
+			fprintf(f_outlst, "%s\n", name);
+			sprintf(name, "%s_%d.bin", out_pack, part);
+			f_out = fopen(name, "wb");
+			cnt += fwrite(&n, 1, sizeof(int), f_out);
+			cnt += fwrite(&label_width, 1, sizeof(int), f_out);
+			cnt += fwrite(&type, 1, sizeof(int), f_out);
+		}
 		n_tok = bh_strsplit(line, ' ', &tok);
 		bh_assert((n_tok - 1 == label_width),
 			"Data and label_width are not consistent", BCNN_INVALID_DATA);
 		bip_load_image(tok[0], &img, &w, &h, &c);
 		bip_write_image_to_memory(&buf, &buf_sz, img, w, h, c, w * c);
 		// Write img
-		fwrite(&buf_sz, 1, sizeof(int), f_out);
-		fwrite(buf, 1, buf_sz, f_out);
+		cnt += fwrite(&buf_sz, 1, sizeof(int), f_out);
+		cnt += fwrite(buf, 1, buf_sz, f_out);
 		bh_free(buf);
 		bh_free(img);
 		// Write label(s)
@@ -89,25 +109,28 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
 		case LABEL_INT:
 			for (i = 1; i < n_tok; ++i) {
 				lf = (float)atoi(tok[i]);
-				fwrite(&lf, 1, sizeof(float), f_out);
+				cnt += fwrite(&lf, 1, sizeof(float), f_out);
 			}
 			break;
 		case LABEL_FLOAT:
 			for (i = 1; i < n_tok; ++i) {
 				lf = (float)atof(tok[i]);
-				fwrite(&lf, 1, sizeof(float), f_out);
+				cnt += fwrite(&lf, 1, sizeof(float), f_out);
 			}
 			break;
 		}
-		n++;
+		
 		bh_free(line);
 		for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
 		bh_free(tok);
 	}
+	fprintf(f_outlst, "%s\n", name);
 	if (f_out != NULL)
 		fclose(f_out);
 	if (f_lst != NULL)
 		fclose(f_lst);
+	if (f_outlst != NULL)
+		fclose(f_outlst);
 
 	return BCNN_SUCCESS;
 }
@@ -175,9 +198,10 @@ int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **i
 }
 
 
-int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, int h, int c, unsigned char **img, int state)
+int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, int h, int c, unsigned char **img, int state,
+	int *x_shift, int *y_shift)
 {
-	int w_img, h_img, c_img, x_ul, y_ul;
+	int w_img, h_img, c_img, x_ul = 0, y_ul = 0;
 	unsigned char *tmp = NULL, *pimg = NULL;
 
 	bip_load_image_from_memory(buffer, buffer_size, &tmp, &w_img, &h_img, &c_img);
@@ -209,6 +233,8 @@ int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, i
 		memcpy(*img, tmp, w * h * c);
 	}
 	bh_free(tmp);
+	*x_shift = x_ul;
+	*y_shift = y_ul;
 
 	return BCNN_SUCCESS;
 }
@@ -269,7 +295,7 @@ int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter)
 
 int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
 {
-	FILE *f_bin = NULL;
+	FILE *f_bin = NULL, *f_lst = NULL;
 	char *line = NULL;
 	char **tok = NULL;
 	int n_tok = 0;
@@ -279,9 +305,20 @@ int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
 
 	iter->type = ITER_BIN;
 
-	f_bin = fopen(path_input, "rb");
+	f_lst = fopen(path_input, "rt");
+	if (f_lst == NULL) {
+		fprintf(stderr, "[ERROR] Can not open file %s\n", path_input);
+		return BCNN_INVALID_PARAMETER;
+	}
+	// Open first binary file
+	line = bh_fgetline(f_lst);
+	if (line == NULL)
+		bh_error("Empty data list", BCNN_INVALID_DATA);
+
+	//bh_strstrip(line);
+	f_bin = fopen(line, "rb");
 	if (f_bin == NULL) {
-		fprintf(stderr, "[ERROR] Can not open file %s\n", f_bin);
+		fprintf(stderr, "[ERROR] Can not open file %s\n", line);
 		return BCNN_INVALID_PARAMETER;
 	}
 
@@ -296,6 +333,9 @@ int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
 	iter->label_float = (float *)calloc(iter->label_width, sizeof(float));
 
 	iter->f_input = f_bin;
+	iter->f_list = f_lst;
+
+	bh_free(line);
 
 	return BCNN_SUCCESS;
 }
@@ -308,9 +348,23 @@ int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
 	int i, buf_sz = 0, label_width, type;
 	float lf;
 	unsigned char *buf = NULL;
+	char *line = NULL;
 
-	if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0)
-		rewind(iter->f_input);
+	if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0) {
+		// Jump to next binary part file
+		fclose(iter->f_input);
+		line = bh_fgetline(iter->f_list);
+		if (line == NULL) {
+			rewind(iter->f_list);
+			line = bh_fgetline(iter->f_list);
+		}
+		iter->f_input = fopen(line, "rb");
+		if (iter->f_input == NULL) {
+			fprintf(stderr, "[ERROR] Can not open file %s\n", line);
+			return BCNN_INVALID_PARAMETER;
+		}
+		bh_free(line);
+	}
 	else
 		fseek(iter->f_input, -1, SEEK_CUR);
 
@@ -325,7 +379,7 @@ int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
 	buf = (unsigned char *)calloc(buf_sz, sizeof(unsigned char));
 	fread(buf, 1, buf_sz, iter->f_input);
 	bcnn_load_image_from_memory(buf, buf_sz, net->input_node.w, net->input_node.h, net->input_node.c,
-		&iter->input_uchar, net->state);
+		&iter->input_uchar, net->state, &net->data_aug.shift_x, &net->data_aug.shift_y);
 	bh_free(buf);
 
 	// Read label
@@ -536,6 +590,8 @@ int bcnn_free_iterator(bcnn_iterator *iter)
 		fclose(iter->f_input);
 	if (iter->f_label != NULL)
 		fclose(iter->f_label);
+	if (iter->f_list != NULL)
+		fclose(iter->f_list);
 	bh_free(iter->input_uchar);
 	bh_free(iter->label_float);
 	bh_free(iter->label_uchar);

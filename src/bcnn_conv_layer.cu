@@ -360,11 +360,11 @@ int bcnn_backward_deconv_layer_gpu(bcnn_connection *conn)
 		dst.h * dst.w);
 	
 	for (i = 0; i < batch_size; ++i) {
-		a = src.data_gpu + i * src.c * layer->size * layer->size * layer->num;
+		a = src.data_gpu + i * src.c * src.w * src.h;
 		b = layer->conv_workspace_gpu;
 		c = layer->weight_diff_gpu;
 
-		pdst = dst.grad_data_gpu + i * layer->num * dst.w * dst.h;
+		pdst = dst.grad_data_gpu + i * dst.c * dst.w * dst.h;
 
 		bcnn_im2col_gpu(pdst, dst.c, dst.h, dst.w,
 			layer->size, layer->stride, 0, layer->conv_workspace_gpu);

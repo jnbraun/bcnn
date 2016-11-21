@@ -41,17 +41,17 @@ int create_network(bcnn_net *net)
 	net->learner.step = 40000;
 	net->max_batches = 50000;
 
-	bcnn_add_convolutional_layer(net, 12, 3, 1, 1, 0, XAVIER, RELU);
-	bcnn_add_maxpool_layer(net, 2, 2);
+	bcnn_add_convolutional_layer(net, 12, 3, 1, 1, 0, XAVIER, RELU, "conv1");
+	bcnn_add_maxpool_layer(net, 2, 2, "pool1");
 
-	bcnn_add_convolutional_layer(net, 12, 3, 1, 1, 0, XAVIER, RELU);
-	bcnn_add_maxpool_layer(net, 2, 2);
+	bcnn_add_convolutional_layer(net, 12, 3, 1, 1, 0, XAVIER, RELU, "conv2");
+	bcnn_add_maxpool_layer(net, 2, 2, "pool2");
 
-	bcnn_add_fullc_layer(net, 256, XAVIER, RELU);
+	bcnn_add_fullc_layer(net, 256, XAVIER, RELU, "fc1");
 
-	bcnn_add_fullc_layer(net, 10, XAVIER, RELU);
+	bcnn_add_fullc_layer(net, 10, XAVIER, RELU, "fc2");
 
-	bcnn_add_softmax_layer(net);
+	bcnn_add_softmax_layer(net, "softmax");
 	bcnn_add_cost_layer(net, COST_ERROR, 1.0f);
 
 	// Data augmentation
@@ -119,7 +119,7 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
 
 	if (f != NULL)
 		fclose(f);
-	bcnn_free_mnist_iterator(&data_mnist);
+	bcnn_free_iterator(&data_mnist);
 	return 0;
 }
 
@@ -156,7 +156,7 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
 		
 	}
 
-	bcnn_free_mnist_iterator(&data_mnist);
+	bcnn_free_iterator(&data_mnist);
 	*error = (float)sum_error / (eval_period * net->input_node.b);
 
 	return 0;

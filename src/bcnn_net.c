@@ -115,8 +115,14 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val)
 		else if (strcmp(val, "poly") == 0) net->learner.policy = POLY;
 		else net->learner.policy = CONSTANT;
 	}
+	else if (strcmp(name, "optimizer") == 0) {
+		if (strcmp(val, "sgd") == 0) net->learner.optimizer = SGD;
+		else if (strcmp(val, "adam") == 0) net->learner.optimizer = ADAM;
+	}
 	else if (strcmp(name, "step") == 0) net->learner.step = atoi(val);
 	else if (strcmp(name, "learning_rate") == 0) net->learner.learning_rate = (float)atof(val);
+	else if (strcmp(name, "beta1") == 0) net->learner.beta1 = (float)atof(val);
+	else if (strcmp(name, "beta2") == 0) net->learner.beta2 = (float)atof(val);
 	else if (strcmp(name, "decay") == 0) net->learner.decay = (float)atof(val);
 	else if (strcmp(name, "momentum") == 0) net->learner.momentum = (float)atof(val);
 	else if (strcmp(name, "gamma") == 0) net->learner.gamma = (float)atof(val);
@@ -390,22 +396,89 @@ int bcnn_apply_update_to_layer(bcnn_connection *conn, int batch_size, float lear
 }
 
 
+int bcnn_adam_optimizer(bcnn_connection *conn, int iter, int batch_size, float beta1, float beta2, float learning_rate, float momentum, float decay)
+{
+	bcnn_layer *layer = conn->layer;
+	bcnn_node dst = conn->dst_node;
+	float mu_correction = sqrtf(1.0f - powf(beta2, (float)iter + 1)) / (1.0f - powf(beta1, (float)iter + 1));
+
+#ifdef BCNN_USE_CUDA
+	bcnn_cuda_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff_gpu, 1, layer->bias_gpu, 1);
+	bcnn_cuda_scal(layer->bias_size, momentum, layer->bias_diff_gpu, 1);
+
+	if (layer->bn_scale_diff_gpu && layer->bn_scale_gpu && layer->bn_shift_gpu && layer->bn_shift_diff_gpu) {
+		bcnn_cuda_axpy(dst.c, -learning_rate / batch_size, layer->bn_scale_diff_gpu, 1, layer->bn_scale_gpu, 1);
+		bcnn_cuda_scal(dst.c, momentum, layer->bn_scale_diff_gpu, 1);
+		bcnn_cuda_axpy(dst.c, -learning_rate / batch_size, layer->bn_shift_diff_gpu, 1, layer->bn_shift_gpu, 1);
+		bcnn_cuda_scal(dst.c, momentum, layer->bn_shift_diff_gpu, 1);
+	}
+
+	bcnn_cuda_axpy(layer->weights_size, decay * batch_size, layer->weight_gpu, 1, layer->weight_diff_gpu, 1);
+	bcnn_cuda_axpby(layer->weights_size, 1.0f - beta1, layer->weight_diff_gpu, beta1, layer->adam_m_gpu);
+	bcnn_cuda_vmul(layer->weights_size, layer->weight_diff_gpu, layer->weight_diff_gpu, layer->weight_diff_gpu);
+	bcnn_cuda_axpby(layer->weights_size, 1.0f - beta2, layer->weight_diff_gpu, beta2, layer->adam_v_gpu);
+	bcnn_cuda_pow(layer->weights_size, layer->adam_v_gpu, 0.5f, layer->weight_diff_gpu);
+	bcnn_cuda_add_scalar(layer->weights_size, 0.0000001f, layer->weight_diff_gpu);
+	bcnn_cuda_vdiv(layer->weights_size, layer->adam_m_gpu, layer->weight_diff_gpu, layer->weight_diff_gpu);
+	bcnn_cuda_axpy(layer->weights_size, -learning_rate / batch_size * mu_correction, layer->weight_diff_gpu, 1, layer->weight_gpu, 1);
+	bcnn_cuda_fill_f32(layer->weights_size, 0.0f, layer->weight_diff_gpu, 1);
+#else
+	bcnn_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff, layer->bias);
+	bcnn_scal(layer->bias_size, momentum, layer->bias_diff);
+
+	if (layer->bn_scale_diff && layer->bn_scale && layer->bn_shift && layer->bn_shift_diff) {
+		bcnn_axpy(dst.c, -learning_rate / batch_size, layer->bn_scale_diff, layer->bn_scale);
+		bcnn_scal(dst.c, momentum, layer->bn_scale_diff);
+		bcnn_axpy(dst.c, -learning_rate / batch_size, layer->bn_shift_diff, layer->bn_shift);
+		bcnn_scal(dst.c, momentum, layer->bn_shift_diff);
+	}
+
+	bcnn_axpy(layer->weights_size, decay * batch_size, layer->weight, layer->weight_diff);
+	bcnn_axpby(layer->weights_size, 1.0f - beta1, layer->weight_diff, beta1, layer->adam_m);
+	bcnn_vmul(layer->weights_size, layer->weight_diff, layer->weight_diff, layer->weight_diff);
+	bcnn_axpby(layer->weights_size, 1.0f - beta2, layer->weight_diff, beta2, layer->adam_v);
+
+	bcnn_pow(layer->weights_size, layer->adam_v, 0.5f, layer->weight_diff);
+	bcnn_add_scalar(layer->weights_size, 0.0000001f, layer->weight_diff);
+	bcnn_vdiv(layer->weights_size, layer->adam_m, layer->weight_diff, layer->weight_diff);
+
+	bcnn_axpy(layer->weights_size, -learning_rate / batch_size * mu_correction, layer->weight_diff, layer->weight);
+	memset(layer->weight_diff, 0, layer->weights_size * sizeof(float));
+#endif
+	return 0;
+}
+
+
 int bcnn_update(bcnn_net *net)
 {
     int i;
     float lr = bcnn_update_learning_rate(net);
 	bcnn_layer_type	type;
 
-	for (i = 0; i < net->nb_connections; ++i) {
-		type = net->connections[i].layer->type;
-		if ((type == CONVOLUTIONAL || 
-			type == DECONVOLUTIONAL || 
-			type == FULL_CONNECTED ||
-			type == BATCHNORM)) {
-			bcnn_apply_update_to_layer(&net->connections[i],
-					net->input_node.b, lr, net->learner.momentum, net->learner.decay);
+	if (net->learner.optimizer == SGD) {
+		for (i = 0; i < net->nb_connections; ++i) {
+			type = net->connections[i].layer->type;
+			if ((type == CONVOLUTIONAL || 
+				type == DECONVOLUTIONAL || 
+				type == FULL_CONNECTED ||
+				type == BATCHNORM)) {
+				bcnn_apply_update_to_layer(&net->connections[i],
+						net->input_node.b, lr, net->learner.momentum, net->learner.decay);
+			}
 		}
-    }
+	}
+	else if (net->learner.optimizer == ADAM) {
+		for (i = 0; i < net->nb_connections; ++i) {
+			type = net->connections[i].layer->type;
+			if ((type == CONVOLUTIONAL || 
+				type == DECONVOLUTIONAL || 
+				type == FULL_CONNECTED ||
+				type == BATCHNORM)) {
+				bcnn_adam_optimizer(&net->connections[i], net->seen, net->input_node.b, net->learner.beta1, net->learner.beta2,
+					lr, net->learner.momentum, net->learner.decay);
+			}
+		}
+	}
 	return BCNN_SUCCESS;
 }
 
@@ -430,7 +503,7 @@ int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_
 			}
 			for (y = 0; y < h; ++y){
 				for (x = 0; x < w; ++x){
-					dst[w * (h * (2 - k) + y) + x] = (float)src[c * (x + w * y) + k] / 255.0f - m;
+					dst[w * (h * (2 - k) + y) + x] = ((float)src[c * (x + w * y) + k] / 255.0f - m) * 2.0f;
 				}
 			}
 		}
@@ -439,7 +512,7 @@ int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_
 		for (k = 0; k < c; ++k){
 			for (y = 0; y < h; ++y){
 				for (x = 0; x < w; ++x){
-					dst[w * (h * k + y) + x] = (float)src[c * (x + w * y) + k] / 255.0f - m;
+					dst[w * (h * k + y) + x] = ((float)src[c * (x + w * y) + k] / 255.0f - 0.5f) * 2.0f;
 				}
 			}
 		}
@@ -451,10 +524,9 @@ int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 {
 	int i, j, sz = net->input_node.w * net->input_node.h * net->input_node.c, n, offset;
-	int ret;
 	int nb = net->nb_connections;
 	int end_node = (net->connections[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
-	int w, h, c, out_w, out_h, out_c;
+	int w, h, c;
 	char *line = NULL;
 	unsigned char *img = NULL, *img_tmp = NULL;
 	float *x = net->input_node.data;
@@ -476,7 +548,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 		memset(y, 0, output_size * net->input_node.b * sizeof(float));
 
 	if (use_buffer_img)
-		img_tmp = (uint8_t *)calloc(sz, sizeof(uint8_t));
+		img_tmp = (unsigned char *)calloc(sz, sizeof(unsigned char));
 	
 	if (iter->type == ITER_MNIST) {
 		for (i = 0; i < net->input_node.b; ++i) {
@@ -524,21 +596,23 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 					x_scale = (float)w / (float)net->input_node.w;
 					y_scale = (float)h / (float)net->input_node.h;
 					for (j = 0; j < iter->label_width; j += 2) {
-						x_pos = (int)((iter->label_float[j] - net->data_aug.shift_x) * x_scale + 0.5f);
-						y_pos = (int)((iter->label_float[j + 1] - net->data_aug.shift_y) * y_scale + 0.5f);
-						// Set gaussian kernel around (x_pos, y_pos)
-						n = j >> 1;
-						offset = n * w * h + (y_pos * w + x_pos);
-						if (x_pos >= 0 && x_pos < w && y_pos >= 0 && y_pos < h) {
-							y[offset] = 1.0f;
-							if (x_pos > 0) y[offset - 1] = 0.5f;
-							if (x_pos < w - 1) y[offset + 1] = 0.5f;
-							if (y_pos > 0) y[offset - w] = 0.5f;
-							if (y_pos < h - 1) y[offset + w] = 0.5f;
-							if (x_pos > 0 && y_pos > 0) y[offset - w - 1] = 0.25f;
-							if (x_pos < w - 1 && y_pos > 0) y[offset - w + 1] = 0.25f;
-							if (x_pos > 0 && y_pos < h - 1) y[offset + w - 1] = 0.25f;
-							if (x_pos < w - 1 && y_pos < h - 1) y[offset + w + 1] = 0.25f;
+						if (iter->label_float[j] >= 0 && iter->label_float[j + 1] >= 0) {
+							x_pos = (int)((iter->label_float[j] - net->data_aug.shift_x) * x_scale + 0.5f);
+							y_pos = (int)((iter->label_float[j + 1] - net->data_aug.shift_y) * y_scale + 0.5f);
+							// Set gaussian kernel around (x_pos, y_pos)
+							n = (j / 2) % c;
+							offset = n * w * h + (y_pos * w + x_pos);
+							if (x_pos >= 0 && x_pos < w && y_pos >= 0 && y_pos < h) {
+								y[offset] = 1.0f;
+								if (x_pos > 0) y[offset - 1] = 0.5f;
+								if (x_pos < w - 1) y[offset + 1] = 0.5f;
+								if (y_pos > 0) y[offset - w] = 0.5f;
+								if (y_pos < h - 1) y[offset + w] = 0.5f;
+								if (x_pos > 0 && y_pos > 0) y[offset - w - 1] = 0.25f;
+								if (x_pos < w - 1 && y_pos > 0) y[offset - w + 1] = 0.25f;
+								if (x_pos > 0 && y_pos < h - 1) y[offset + w - 1] = 0.25f;
+								if (x_pos < w - 1 && y_pos < h - 1) y[offset + w + 1] = 0.25f;
+							}
 						}
 					}
 					y += output_size;
@@ -549,207 +623,66 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 			}
 		}
 	}
-	else if (net->prediction_type == CLASSIFICATION) { //  Classification
+	else if (iter->type == ITER_LIST || iter->type == ITER_CSV) {
 		for (i = 0; i < net->input_node.b; ++i) {
-			//nb_lines_skipped = (int)((float)rand() / RAND_MAX * net->input_node.b);
-			//bh_fskipline(f, nb_lines_skipped);
-			line = bh_fgetline(iter->f_input);
-			if (line == NULL) {
-				rewind(iter->f_input);
-				line = bh_fgetline(iter->f_input);
-			}
-			n_tok = bh_strsplit(line, ' ', &tok);
-			if (net->task != PREDICT) {
-				bh_assert(n_tok == 2,
-					"Wrong data format for classification", BCNN_INVALID_DATA);
-			}
-			if (iter->type == ITER_LIST) {
-				bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state);
-			}
-			else
-				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);
-			if (img) {
-				// Online data augmentation
-				if (net->task == TRAIN && net->state)
-					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-				bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
-					param->mean_r, param->mean_g, param->mean_b, x);
-				bh_free(img);
-			}
+			bcnn_list_iter(net, iter);
+			// Online data augmentation
+			if (net->task == TRAIN && net->state)
+				bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
+			bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+				param->mean_r, param->mean_g, param->mean_b, x);
 			x += sz;
 			if (net->task != PREDICT) {
 				// Load truth
-				y[atoi(tok[1])] = 1;
-				y += output_size;
-			}
-			bh_free(line);
-			for (j = 0; j < n_tok; ++j)
-				bh_free(tok[j]);
-			bh_free(tok);
-		}
-	}
-	else if (net->prediction_type == REGRESSION) { // Regression
-		for (i = 0; i < net->input_node.b; ++i) {
-			line = bh_fgetline(iter->f_input);
-			if (line == NULL) {
-				rewind(iter->f_input);
-				line = bh_fgetline(iter->f_input);
-			}
-			j = 0;
-			//field = strtok(line, delims);
-			n_tok = bh_strsplit(line, ' ', &tok);
-			if (net->task != PREDICT) {
-				bh_assert(n_tok == output_size + 1,
-					"Wrong data format for regression", BCNN_INVALID_DATA);
-			}
-			if (iter->type == ITER_LIST) {
-				bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state);
-			}
-			else
-				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);
-			if (img) {
-				// Online data augmentation
-				if (net->task == TRAIN && net->state)
-					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-				bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
-					param->mean_r, param->mean_g, param->mean_b, x);
-				bh_free(img);
-			}
-			x += sz;
-			if (net->task != PREDICT) {
-				// Load truth
-				for (j = 1; j < n_tok; ++j) {
-					y[j - 1] = (float)atof(tok[j]);
-				}
-				y += output_size;
-			}
-			bh_free(line);
-			for (j = 0; j < n_tok; ++j)
-				bh_free(tok[j]);
-			bh_free(tok);
-		}
-	}
-	else if (net->prediction_type == HEATMAP_REGRESSION) {
-		// Format must be this way: train/img.png X1 Y1 ... Xn Yn
-		// With (Xk, Yk) being a target position on the heatmap
-		// Size of the heatmap is the last (conv) layer size before cost
-		for (i = 0; i < net->input_node.b; ++i) {
-			line = bh_fgetline(iter->f_input);
-			if (line == NULL) {
-				rewind(iter->f_input);
-				line = bh_fgetline(iter->f_input);
-			}
-			n_tok = bh_strsplit(line, ' ', &tok);
-			if (net->task != PREDICT) {
-				bh_assert(n_tok > 0 && (n_tok % 2) != 0,
-					"Wrong data format for heatmap regression", BCNN_INVALID_DATA);
-			}
-			if (iter->type == ITER_LIST) {
-				bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state);
-			}
-			else
-				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);
-			if (img) {
-				// Online data augmentation
-				if (net->task == TRAIN && net->state)
-					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-				bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
-					param->mean_r, param->mean_g, param->mean_b, x);
-				bh_free(img);
-			}
-			x += sz;
-			if (net->task != PREDICT) {
-				// Load truth
-				w = net->connections[net->nb_connections - 2].dst_node.w;
-				h = net->connections[net->nb_connections - 2].dst_node.h;
-				c = net->connections[net->nb_connections - 2].dst_node.c;
-				x_scale = w / (float)net->input_node.w;
-				y_scale = h / (float)net->input_node.h;
-				for (j = 1; j < n_tok; j += 2) {
-					x_pos = (int)(atof(tok[j]) * x_scale);
-					y_pos = (int)(atof(tok[j + 1]) * y_scale);
-					// Set gaussian kernel around (x_pos,y_pos)
-					n = j >> 1;
-					offset = n * w * h + (y_pos * w + x_pos);
-					if (x_pos >= 0 && x_pos < w && y_pos >= 0 && y_pos < h) {
-						y[offset] = 1.0f;
-						if (x_pos > 0) y[offset - 1] = 0.5f;
-						if (x_pos < w - 1) y[offset + 1] = 0.5f;
-						if (y_pos > 0) y[offset - w] = 0.5f;
-						if (y_pos < h - 1) y[offset + w] = 0.5f;
-						if (x_pos > 0 && y_pos > 0) y[offset - w - 1] = 0.25f;
-						if (x_pos < w - 1 && y_pos > 0) y[offset - w + 1] = 0.25f;
-						if (x_pos > 0 && y_pos < h - 1) y[offset + w - 1] = 0.25f;
-						if (x_pos < w - 1 && y_pos < h - 1) y[offset + w + 1] = 0.25f;
+				switch (net->prediction_type) {
+				case CLASSIFICATION:
+					y[(int)iter->label_float[0]] = 1;
+					y += output_size;
+					break;
+				case REGRESSION:
+					for (j = 0; j < iter->label_width; ++j) {
+						y[j] = iter->label_float[j];
 					}
+					y += output_size;
+					break;
+				case HEATMAP_REGRESSION:
+					// Load truth
+					w = net->connections[net->nb_connections - 2].dst_node.w;
+					h = net->connections[net->nb_connections - 2].dst_node.h;
+					c = net->connections[net->nb_connections - 2].dst_node.c;
+					x_scale = (float)w / (float)net->input_node.w;
+					y_scale = (float)h / (float)net->input_node.h;
+					for (j = 0; j < iter->label_width; j += 2) {
+						if (iter->label_float[j] >= 0 && iter->label_float[j + 1] >= 0) {
+							x_pos = (int)((iter->label_float[j] - net->data_aug.shift_x) * x_scale + 0.5f);
+							y_pos = (int)((iter->label_float[j + 1] - net->data_aug.shift_y) * y_scale + 0.5f);
+							// Set gaussian kernel around (x_pos, y_pos)
+							n = (j / 2) % c;
+							offset = n * w * h + (y_pos * w + x_pos);
+							if (x_pos >= 0 && x_pos < w && y_pos >= 0 && y_pos < h) {
+								y[offset] = 1.0f;
+								if (x_pos > 0) y[offset - 1] = 0.5f;
+								if (x_pos < w - 1) y[offset + 1] = 0.5f;
+								if (y_pos > 0) y[offset - w] = 0.5f;
+								if (y_pos < h - 1) y[offset + w] = 0.5f;
+								if (x_pos > 0 && y_pos > 0) y[offset - w - 1] = 0.25f;
+								if (x_pos < w - 1 && y_pos > 0) y[offset - w + 1] = 0.25f;
+								if (x_pos > 0 && y_pos < h - 1) y[offset + w - 1] = 0.25f;
+								if (x_pos < w - 1 && y_pos < h - 1) y[offset + w + 1] = 0.25f;
+							}
+						}
+					}
+					y += output_size;
+					break;
+				case SEGMENTATION:
+					memcpy(y, iter->label_float, output_size * sizeof(float));
+					y += output_size;
+					break;
+				default:
+					bh_error("Target type not implemented for this data format.", BCNN_INVALID_PARAMETER);
 				}
-				y += output_size;
 			}
-			bh_free(line);
-			for (j = 0; j < n_tok; ++j)
-				bh_free(tok[j]);
-			bh_free(tok);
-		}
-	}
-	else if (net->prediction_type == SEGMENTATION) {
-		// Format must be this way: img.png mask.png
-		out_w = net->connections[net->nb_connections - 2].dst_node.w;
-		out_h = net->connections[net->nb_connections - 2].dst_node.h;
-		out_c = net->connections[net->nb_connections - 2].dst_node.c;
-		for (i = 0; i < net->input_node.b; ++i) {
-			line = bh_fgetline(iter->f_input);
-			if (line == NULL) {
-				rewind(iter->f_input);
-				line = bh_fgetline(iter->f_input);
-			}
-			n_tok = bh_strsplit(line, ' ', &tok);
-			if (net->task != PREDICT) {
-				bh_assert(n_tok > 0 && (n_tok == 2),
-					"Wrong data format for segmentation", BCNN_INVALID_DATA);
-			}
-			// First load the image
-			if (iter->type == ITER_LIST) {
-				bh_assert(ret = bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state)
-					== BCNN_SUCCESS, "Problem while loading image", ret);
-			}
-			else
-				bcnn_load_image_from_csv(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img);
-			if (img) {
-				// Online data augmentation
-				if (net->task == TRAIN && net->state) {
-					net->data_aug.use_precomputed = 0;
-					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-				}
-				bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
-					param->mean_r, param->mean_g, param->mean_b, x);
-				bh_free(img);
-			}
-			x += sz;
-			if (net->task != PREDICT) {
-				// Load truth i.e the segmentation mask
-				if (iter->type == ITER_LIST) {
-					bip_load_image(tok[1], &img, &w, &h, &c);
-					bh_assert(w == out_w &&
-					h == out_h &&
-					c == out_c,
-					"Segmentation mask size and output size of the network must be the same",
-					BCNN_INVALID_DATA);
-				}
-				else
-					bcnn_load_image_from_csv(tok[1], out_w, out_h, out_c, &img);
-				if (net->state) {
-					// Apply to the mask the same data augmentation parameters applied to the image
-					net->data_aug.use_precomputed = 1;
-					bcnn_data_augmentation(img, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-				}
-				bip_convert_u8_to_f32(img, out_w, out_h, out_c, out_w * out_c, y);
-				bh_free(img);
-				y += output_size;
-			}
-			bh_free(line);
-			for (j = 0; j < n_tok; ++j)
-				bh_free(tok[j]);
-			bh_free(tok);
+
 		}
 	}
 	if (use_buffer_img)
@@ -1000,6 +933,8 @@ int bcnn_free_layer(bcnn_layer **layer)
 	bh_free(p_layer->spatial_sum_multiplier);
 	bh_free(p_layer->batch_sum_multiplier);
 	bh_free(p_layer->rand);
+	bh_free(p_layer->adam_m);
+	bh_free(p_layer->adam_v);
 #ifdef BCNN_USE_CUDA
 	if (p_layer->indexes_gpu)          bcnn_cuda_free(p_layer->indexes_gpu);
 	if (p_layer->weight_gpu)          bcnn_cuda_free(p_layer->weight_gpu);
@@ -1023,6 +958,8 @@ int bcnn_free_layer(bcnn_layer **layer)
 	if (p_layer->bn_shift_gpu)	bcnn_cuda_free(p_layer->bn_shift_gpu);
 	if (p_layer->bn_shift_diff_gpu)	bcnn_cuda_free(p_layer->bn_shift_diff_gpu);
 	if (p_layer->rand_gpu)             bcnn_cuda_free(p_layer->rand_gpu);
+	if (p_layer->adam_m_gpu)             bcnn_cuda_free(p_layer->adam_m_gpu);
+	if (p_layer->adam_v_gpu)             bcnn_cuda_free(p_layer->adam_v_gpu);
 #ifdef BCNN_USE_CUDNN
 	cudnnDestroyTensorDescriptor(p_layer->src_tensor_desc);
 	cudnnDestroyTensorDescriptor(p_layer->dst_tensor_desc);

@@ -297,7 +297,10 @@ int bcnn_vdiv(int n, float *a, float *b, float *y)
 		y += 8;
 	}
 	for (i = 0; i < nm; ++i) {
-		y[i] = a[i] * b[i];
+		if (bh_abs(b[i]) >  0.00001f)
+			y[i] = a[i] / b[i];
+		else
+			y[i] = 0.0f;
 	}
 #endif
 	return 0;

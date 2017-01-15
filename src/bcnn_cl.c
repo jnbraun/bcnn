@@ -227,7 +227,6 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error)
 	for (i = 0; i < nb_iter; ++i) {
 		bcnn_train_on_batch(net, &iter_data, &error_batch);
 		sum_error += error_batch;
-
 		if (param->eval_test) {
 			if (i % param->eval_period == 0 && i > 0) {
 				bh_timer_stop(&t);
@@ -277,8 +276,8 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error, int dump_pr
 	bcnn_init_iterator(net, &iter_data, param->test_input, NULL, param->data_format);
 
 	if (dump_pred) {
-		if (param->prediction_type == HEATMAP_REGRESSION ||
-			param->prediction_type == SEGMENTATION) {
+		if (net->prediction_type == HEATMAP_REGRESSION ||
+			net->prediction_type == SEGMENTATION) {
 			img_pred = (unsigned char *)calloc(out_w * out_h, sizeof(unsigned char));
 		}
 		else {
@@ -297,15 +296,14 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error, int dump_pr
 		bcnn_predict_on_batch(net, &iter_data, &out, &error_batch);
 		err += error_batch;
 		// Dump predictions
-		// Dump predictions
 		if (dump_pred) {
-			if (param->prediction_type == HEATMAP_REGRESSION ||
-				param->prediction_type == SEGMENTATION) {
+			if (net->prediction_type == HEATMAP_REGRESSION ||
+				net->prediction_type == SEGMENTATION) {
 				for (j = 0; j < net->input_node.b; ++j) {
 					for (k = 0; k < out_c; ++k) {
 						sprintf(out_pred_name, "%d_%d.png", i * net->input_node.b + j, k);
 						bip_write_float_image(out_pred_name,
-							out + j * out_w * out_h + k * out_w * out_h,
+							out + j * out_w * out_h * out_c + k * out_w * out_h,
 							out_w, out_h, 1, out_w * sizeof(float));
 					}
 				}
@@ -327,8 +325,8 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error, int dump_pr
 			err += error_batch;
 			// Dump predictions
 			if (dump_pred) {
-				if (param->prediction_type == HEATMAP_REGRESSION ||
-					param->prediction_type == SEGMENTATION) {
+				if (net->prediction_type == HEATMAP_REGRESSION ||
+					net->prediction_type == SEGMENTATION) {
 					for (k = 0; k < out_c; ++k) {
 						sprintf(out_pred_name, "%d_%d.png", i, k);
 						bip_write_float_image(out_pred_name,

@@ -30,6 +30,27 @@ int bcnn_node_size(bcnn_node *node)
 	return node->w * node->h * node->c * node->b;
 }
 
+float bcnn_rng_gaussian(bcnn_gauss_gen *g)
+{
+	float v1, v2, s, m;
+	if (g->state){
+       g->state = 0;
+       return g->r;
+    }
+    else {
+		do {
+		   v1 = 2 * (float)rand() / RAND_MAX - 1;
+		   v2 = 2 * (float)rand() / RAND_MAX - 1;
+		   s = v1 * v1 + v2 * v2;
+		}
+		while (s >= 1.0f || s == 0.0f);
+		g->state = 1;
+		m = sqrt(-2.0f * log(s) / s);
+		g->r = v2 * m;
+		return v1 * m;
+	}
+}
+
 
 #ifdef BCNN_USE_CUDA
 #ifdef BCNN_USE_CUDNN

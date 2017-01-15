@@ -203,7 +203,7 @@ int bcnn_forward_conv_layer_gpu(bcnn_connection *conn)
 										&beta,
 										layer->dst_tensor_desc,
 										dst.data_gpu));
-	bcnn_cudnn_check(cudnnAddTensor(bcnn_cudnn_handle(), CUDNN_ADD_SAME_C, &alpha,
+	bcnn_cudnn_check(cudnnAddTensor(bcnn_cudnn_handle(), &alpha,
               layer->bias_desc, layer->bias_gpu,
               &alpha,
               layer->dst_tensor_desc, dst.data_gpu));
@@ -258,7 +258,7 @@ int bcnn_backward_conv_layer_gpu(bcnn_connection *conn)
               &one,
               layer->bias_desc, layer->bias_diff_gpu));
 	//bcnn_backward_bias_gpu(layer->bias_diff_gpu, dst.grad_data_gpu, batch_size, layer->num, out_spatial_dim);
-    bcnn_cudnn_check(cudnnConvolutionBackwardFilter_v3(bcnn_cudnn_handle(),
+    bcnn_cudnn_check(cudnnConvolutionBackwardFilter(bcnn_cudnn_handle(),
 											&one,
 											layer->src_tensor_desc,
 											src.data_gpu,
@@ -272,7 +272,7 @@ int bcnn_backward_conv_layer_gpu(bcnn_connection *conn)
 											layer->filter_desc_diff,
 											layer->weight_diff_gpu));
     if (src.grad_data_gpu) {
-        bcnn_cudnn_check(cudnnConvolutionBackwardData_v3(bcnn_cudnn_handle(),
+        bcnn_cudnn_check(cudnnConvolutionBackwardData(bcnn_cudnn_handle(),
 											&one,
 											layer->filter_desc,
 											layer->weight_gpu,

@@ -62,6 +62,7 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *id)
 	bcnn_cudnn_check(cudnnCreatePoolingDescriptor(&conn.layer->pooling_desc));
 	bcnn_cudnn_check(cudnnSetPooling2dDescriptor(conn.layer->pooling_desc,
                                             CUDNN_POOLING_MAX,
+											CUDNN_NOT_PROPAGATE_NAN,
 											conn.layer->size,
 											conn.layer->size,
                                             0,

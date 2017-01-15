@@ -54,6 +54,28 @@ extern "C" {
 #include <emmintrin.h> // SSE2
 #endif
 
+#if defined(__GNUC__) || (defined(_MSC_VER) && (_MSC_VER >= 1600))
+#include <stdint.h>
+#else
+#  if (_MSC_VER < 1300)
+typedef signed char       int8_t;
+typedef signed short      int16_t;
+typedef signed int        int32_t;
+typedef unsigned char     uint8_t;
+typedef unsigned short    uint16_t;
+typedef unsigned int      uint32_t;
+#  else
+typedef signed __int8     int8_t;
+typedef signed __int16    int16_t;
+typedef signed __int32    int32_t;
+typedef unsigned __int8   uint8_t;
+typedef unsigned __int16  uint16_t;
+typedef unsigned __int32  uint32_t;
+#  endif
+typedef signed __int64    int64_t;
+typedef unsigned __int64  uint64_t;
+#endif
+
 /**
 * \brief Enum of error codes.
 */
@@ -358,6 +380,12 @@ typedef struct {
 	float				*spatial_sum_multiplier_gpu;
 	float				*batch_sum_multiplier_gpu;
 #endif
+	float				*adam_m;		/**< Adam optimizer: first moment gradient */
+	float				*adam_v;		/**< Adam optimizer: second moment gradient */
+#ifdef BCNN_USE_CUDA
+	float				*adam_m_gpu;	/**< Adam optimizer: first moment gradient */
+	float				*adam_v_gpu;	/**< Adam optimizer: second moment gradient */
+#endif
 #ifdef BCNN_USE_CUDA
 #ifdef BCNN_USE_CUDNN
 	cudnnTensorDescriptor_t			src_tensor_desc;
@@ -429,6 +457,9 @@ int bcnn_free_mnist_iterator(bcnn_iterator *iter);
 
 int bcnn_init_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input, char *path_label, char *type);
 int bcnn_free_iterator(bcnn_iterator *iter);
+
+int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input);
+int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter);
 
 /* Load / Write model */
 int bcnn_load_model(bcnn_net *net, char *filename);
@@ -532,7 +563,7 @@ int bcnn_free_net(bcnn_net *cnn);
 /* Helpers */
 int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_pack);
 int bcnn_load_image_from_csv(char *str, int w, int h, int c, unsigned char **img);
-int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **img, int state);
+int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **img, int state, int *x_shift, int *y_shift);
 int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, int h, int c, unsigned char **img, int state,
 	int *x_shift, int *y_shift);
 int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth, bcnn_data_augment *param,
@@ -545,6 +576,12 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter);
 
 int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_to_bgr, 
 	float mean_r, float mean_g, float mean_b, float *dst);
+
+typedef struct {
+	int state;
+	float r;
+} bcnn_gauss_gen;
+float bcnn_rng_gaussian(bcnn_gauss_gen *g);
 
 /* Cuda kernels routines */
 #ifdef BCNN_USE_CUDA

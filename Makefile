@@ -1,10 +1,11 @@
 # config
-CUDA=0
-CUDNN=0
+CUDA=1
+CUDNN=1
 DEBUG=0
 USE_SSE2=1
 CUDA_PATH=/usr/local/cuda
-ARCH= --gpu-architecture=compute_20 --gpu-code=compute_20
+CUDNN_PATH=/usr/local/cuda
+ARCH= --gpu-architecture=compute_50 --gpu-code=compute_50
 
 CC=gcc
 NVCC=$(CUDA_PATH)/bin/nvcc
@@ -24,9 +25,9 @@ CFLAGS+= -DBCNN_USE_CUDA -I$(CUDA_PATH)/include/
 LDFLAGS+= -L$(CUDA_PATH)/lib64 -lcuda -lcudart -lcublas -lcurand
 endif
 
-ifeq ($(CUDNN), 1) 
-LDFLAGS+= -L$(CUDNN_PATH) -lcudnn -I$(CUDNN_PATH)
-CFLAGS+= -DBCNN_USE_CUDNN
+ifeq ($(CUDNN), 1)
+CFLAGS+= -DBCNN_USE_CUDNN -I$(CUDNN_PATH)/include/
+LDFLAGS+= -L$(CUDNN_PATH)/lib64 -lcudnn 
 endif
 
 ifeq ($(USE_SSE2), 1)
@@ -42,13 +43,16 @@ LDFLAGS += -L$(BIP_PATH)
 # bh headers
 BH_PATH=bh
 CFLAGS += -I$(BH_PATH)/inc
-LDFLAGS += -lrt
 
 SRC = $(wildcard src/*.c)
 OBJ = $(patsubst src/%.c, build/%.o, $(SRC))
 SRC_CUDA = $(wildcard src/*.cu)
 OBJ_CUDA = $(patsubst src/%.cu, build/%_gpu.o, $(SRC_CUDA))
 CL_OBJ = build/bcnn_cl.o
+SRC_PACK = tools/pack_img/pack_img.c
+PACK_OBJ = build/tools/pack_img.o
+SRC_DCGAN = examples/dcgan/dcgan.c
+OBJ_DCGAN = examples/examples/dcgan.o
 
 ALL_OBJ = $(OBJ)
 ifeq ($(CUDA), 1)
@@ -76,8 +80,22 @@ lib/libbcnn.a: $(ALL_DEP)
 $(BIN): $(CL_OBJ) $(ALL_DEP)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o %.a, $^) $(LDFLAGS)
 
+$(PACK_OBJ): $(SRC_PACK)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+pack-img: $(PACK_OBJ) $(ALL_DEP)
+	$(CC) $(CFLAGS) -o $@ $(filter %.o %.a, $^) $(LDFLAGS)
+	
+$(OBJ_DCGAN): $(SRC_DCGAN)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+dcgan: $(OBJ_DCGAN) $(ALL_DEP)
+	$(CC) $(CFLAGS) -o $@ $(filter %.o %.a, $^) $(LDFLAGS)
+
 .PHONY: clean
 
 clean:
-	rm -rf $(OBJ) $(OBJ_CUDA) $(BIN) $(BIP_PATH)/libbip.a lib/libbcnn.a
+	rm -rf $(OBJ) $(OBJ_CUDA) $(BIN) $(BIP_PATH)/libbip.a lib/libbcnn.a $(PACK_OBJ) pack-img $(OBJ_DCGAN) dcgan
 	cd $(BIP_PATH); make clean; cd ../

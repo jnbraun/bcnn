@@ -31,6 +31,7 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
 	int nb_connections = net->nb_connections + 1;
 	int i;
 	float std_init = 0.0f;
+	bcnn_gauss_gen g = { 0 };
 	bcnn_connection conn = { 0 };
 	int input_size = 0;
 	
@@ -62,16 +63,22 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
 	switch (init) {
 	case XAVIER:
 		std_init = (float)sqrt(3.0f / input_size);
+		for (i = 0; i < conn.layer->weights_size; ++i)
+			conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);
 		break;
 	case MSRA:
 		std_init = (float)sqrt(2.0f / input_size);
+		for (i = 0; i < conn.layer->weights_size; ++i)
+			conn.layer->weight[i] = std_init * bcnn_rng_gaussian(&g);
 		break;
 	}
 	
-	for (i = 0; i < output_size * input_size; ++i)
-		conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);
-	for (i = 0; i < output_size; ++i)
-		conn.layer->bias[i] = std_init;
+	/*for (i = 0; i < output_size; ++i)
+		conn.layer->bias[i] = std_init;*/
+	if (net->learner.optimizer == ADAM) {
+		conn.layer->adam_m = (float *)calloc(conn.layer->weights_size, sizeof(float));
+		conn.layer->adam_v = (float *)calloc(conn.layer->weights_size, sizeof(float));
+	}
 
 #ifdef BCNN_USE_CUDA
 	conn.layer->weight_gpu = bcnn_cuda_memcpy_f32(conn.layer->weight, output_size * input_size);
@@ -82,6 +89,10 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
 
 	conn.dst_node.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.data, output_size * conn.dst_node.b);
 	conn.dst_node.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.grad_data, output_size * conn.dst_node.b);
+	if (net->learner.optimizer == ADAM) {
+		conn.layer->adam_m_gpu = bcnn_cuda_memcpy_f32(conn.layer->adam_m, conn.layer->weights_size);
+		conn.layer->adam_v_gpu = bcnn_cuda_memcpy_f32(conn.layer->adam_v, conn.layer->weights_size);
+	}
 #endif
 	conn.layer->activation = activation;
 	net->nb_connections = nb_connections;

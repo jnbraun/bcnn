@@ -10,7 +10,7 @@ DEBUG=0
 CC=gcc
 NVCC=$(CUDA_PATH)/bin/nvcc
 OPTS=-O3
-LDFLAGS=-lm 
+LDFLAGS=-lm -lrt
 CFLAGS=-Wall -Wfatal-errors 
 BIN=bcnn-cl
 
@@ -22,7 +22,7 @@ CFLAGS+=$(OPTS) -Iinc
 
 ifeq ($(CUDA), 1) 
 CFLAGS+= -DBCNN_USE_CUDA -I$(CUDA_PATH)/include/
-LDFLAGS+= -L$(CUDA_PATH)/lib64 -lcuda -lcudart -lcublas -lcurand
+LDFLAGS+= -L$(CUDA_PATH)/lib64 -lcuda -lcudart -lcublas
 endif
 
 ifeq ($(CUDNN), 1)

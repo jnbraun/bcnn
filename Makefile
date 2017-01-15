@@ -1,12 +1,12 @@
 # config
-CUDA=1
-CUDNN=1
-DEBUG=0
+CUDA=0
+CUDNN=0
 USE_SSE2=1
 CUDA_PATH=/usr/local/cuda
 CUDNN_PATH=/usr/local/cuda
 ARCH= --gpu-architecture=compute_50 --gpu-code=compute_50
 
+DEBUG=0
 CC=gcc
 NVCC=$(CUDA_PATH)/bin/nvcc
 OPTS=-O3

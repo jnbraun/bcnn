@@ -7,14 +7,14 @@ bcnn is a pure C implementation of Convolutional Neural Networks (widely used in
 
 It is aimed to be easy to build with a very limited number of dependencies and designed with hackability in mind.
 
-At the current state, it can run on CPU and Nvidia's GPU. CuDNNv3 is supported.
+At the current state, it can run on CPU and Nvidia's GPU. CuDNNv5 is now supported.
 
 ## Dependencies:
 ### Minimal build (CPU with or without SSE2 acceleration):
 No external dependency (only requires bip (image processing library) and bh (helpers library) already included).
 
 ### GPU build: 
-Requires CUDA libraries (cudart, cublas, curand) and a GPU with compute capability 2.0 at least.
+Requires CUDA libraries (cudart, cublas) and a GPU with compute capability 2.0 at least.
 
 ## Build:
 - On linux systems: clone the repository and simply type: 
@@ -28,7 +28,7 @@ CUDNN=0
 DEBUG=0
 USE_SSE2=1
 CUDA_PATH=/usr/local/cuda
-ARCH= --gpu-architecture=compute_20 --gpu-code=compute_20
+ARCH= --gpu-architecture=compute_50 --gpu-code=compute_50
 ```
 
 - On windows systems: Use cmake to generate the project (choose x64 configuration if using CUDA lib), then build the solution.
@@ -45,7 +45,7 @@ Only tested with msvc2010 and 2013.
 	- Max-pooling
 	- Dropout
 	- Batch normalization
-* Learning by SGD.
+* Learning algorithms: SGD, Adam.
 * Online data augmentation (crop, rotation, distortion)
 
 ## License:

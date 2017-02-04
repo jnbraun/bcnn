@@ -153,9 +153,9 @@ typedef enum {
 } bcnn_label_type;
 
 typedef struct {
-	int					n_samples;
-	int					width;
-	int					label_width;
+	int			n_samples;
+	int			width;
+	int			label_width;
 	bcnn_label_type		label_type;
 	unsigned char		*data;
 } bcnn_data;
@@ -164,21 +164,21 @@ typedef struct {
  * \brief Structure for online data augmentation parameters.
  */
 typedef struct {
-	int			range_shift_x;			/**< X-shift allowed range (chosen between [-range_shift_x / 2; range_shift_x / 2]). */
-	int			range_shift_y;			/**< Y-shift allowed range (chosen between [-range_shift_y / 2; range_shift_y / 2]). */	
+	int		range_shift_x;			/**< X-shift allowed range (chosen between [-range_shift_x / 2; range_shift_x / 2]). */
+	int		range_shift_y;			/**< Y-shift allowed range (chosen between [-range_shift_y / 2; range_shift_y / 2]). */	
 	float		min_scale;				/**< Minimum scale factor allowed. */
 	float		max_scale;				/**< Maximum scale factor allowed. */
 	float		rotation_range;			/**< Rotation angle allowed range (chosen between [-rotation_range / 2; rotation_range / 2]). Expressed in degree. */
-	int			min_brightness;			/**< Minimum brightness factor allowed (additive factor, range [-255;255]). */
-	int			max_brightness;			/**< Maximum brightness factor allowed (additive factor, range [-255;255]). */
+	int		min_brightness;			/**< Minimum brightness factor allowed (additive factor, range [-255;255]). */
+	int		max_brightness;			/**< Maximum brightness factor allowed (additive factor, range [-255;255]). */
 	float		min_contrast;			/**< Minimum contrast allowed (mult factor). */
 	float		max_contrast;			/**< Maximum contrast allowed (mult factor). */
-	int			use_precomputed;		/**< Flag set to 1 if the parameters to be applied are those already set. */
+	int		use_precomputed;		/**< Flag set to 1 if the parameters to be applied are those already set. */
 	float		scale;					/**< Current scale factor. */
-	int			shift_x;				/**< Current x-shift. */
-	int			shift_y;				/**< Current y-shift. */
+	int		shift_x;				/**< Current x-shift. */
+	int		shift_y;				/**< Current y-shift. */
 	float		rotation;				/**< Current rotation angle. */
-	int			brightness;				/**< Current brightness factor. */
+	int		brightness;				/**< Current brightness factor. */
 	float		contrast;				/**< Current contrast factor. */
 	float		max_distortion;			/**< Maximum distortion factor allowed. */
 	float		distortion;				/**< Current distortion factor. */
@@ -187,7 +187,7 @@ typedef struct {
 	float		mean_r;
 	float		mean_g;
 	float		mean_b;
-	int			swap_to_bgr;
+	int		swap_to_bgr;
 } bcnn_data_augment;
 
 
@@ -208,7 +208,7 @@ typedef enum {
  */
 typedef enum {
 	SGD,
-	ADAM			// Not yet implemented
+	ADAM
 } bcnn_optimizer;
 
 /**
@@ -217,15 +217,15 @@ typedef enum {
 typedef struct {
 	float			momentum;				/**< Momentum parameter */
 	float			decay;					/**< Decay parameter */
-	float			learning_rate;			/**< Base learning rate */
+	float			learning_rate;				/**< Base learning rate */
 	float			gamma;
 	float			scale;
 	float			power;
 	float			beta1;					/**< Parameter for Adam optimizer */
 	float			beta2;					/**< Parameter for Adam optimizer */
-	int				step;
-	bcnn_optimizer	optimizer;				/**< Optimization method */
-	bcnn_lr_policy	policy;					/**< Learning rate policy */
+	int			step;
+	bcnn_optimizer		optimizer;				/**< Optimization method */
+	bcnn_lr_policy		policy;					/**< Learning rate policy */
 } bcnn_learner;
 
 
@@ -272,11 +272,11 @@ typedef enum {
  */
 typedef enum {
 	COST_ERROR,			/**< Error rate (classification only) */
-	COST_LOGLOSS,		/**< Multi-class Logloss (classification only) */
+	COST_LOGLOSS,			/**< Multi-class Logloss (classification only) */
 	COST_SSE,			/**< Sum-squared error */
 	COST_MSE,			/**< Mean-squared error */
 	COST_CRPS,			/**< Continuous Ranked Probability Score */
-	COST_DICE			/**< Sørensen–Dice index: metric for image segmentation */
+	COST_DICE			/**< SÃ¸rensenâ€“Dice index: metric for image segmentation */
 } bcnn_loss_metric;
 
 /**
@@ -316,35 +316,35 @@ typedef struct {
 * \brief Structure defining a generic layer.
 */
 typedef struct {
-	int					num;
-	int					size;
-	int					stride;
-	int					pad;
-	bcnn_layer_type		type;
-	bcnn_activation		activation;
-	bcnn_loss_metric	cost_type;
+	int				num;
+	int				size;
+	int				stride;
+	int				pad;
+	bcnn_layer_type			type;
+	bcnn_activation			activation;
+	bcnn_loss_metric		cost_type;
 	float				dropout_rate;
 	float				scale;
-	int					concat_index;
-	int					weights_size;
+	int				concat_index;
+	int				weights_size;
 	float				*weight;
 	float				*weight_diff;
 #ifdef BCNN_USE_CUDA
 	float				*weight_gpu;
 	float				*weight_diff_gpu;
 #endif
-	int					bias_size;
+	int				bias_size;
 	float				*bias;
 	float				*bias_diff;
 #ifdef BCNN_USE_CUDA
 	float				*bias_gpu;
 	float				*bias_diff_gpu;
 #endif
-	int					*indexes;
+	int				*indexes;
 	float				*conv_workspace;
 	float				*rand;
 #ifdef BCNN_USE_CUDA
-	int					*indexes_gpu;
+	int				*indexes_gpu;
 	float				*conv_workspace_gpu;
 	float				*rand_gpu;
 #endif
@@ -396,12 +396,12 @@ typedef struct {
 	cudnnFilterDescriptor_t			filter_desc_diff;
 	cudnnTensorDescriptor_t			bias_desc;
 	cudnnTensorDescriptor_t			bias_desc_diff;
-	cudnnConvolutionDescriptor_t	conv_desc;
+	cudnnConvolutionDescriptor_t		conv_desc;
 	cudnnPoolingDescriptor_t		pooling_desc;
 	cudnnConvolutionFwdAlgo_t		fwd_algo;
-	cudnnConvolutionBwdDataAlgo_t	bwd_data_algo;
-	cudnnConvolutionBwdFilterAlgo_t bwd_filter_algo;
-	size_t							workspace_size;
+	cudnnConvolutionBwdDataAlgo_t		bwd_data_algo;
+	cudnnConvolutionBwdFilterAlgo_t 	bwd_filter_algo;
+	size_t					workspace_size;
 #endif
 #endif
 } bcnn_layer;
@@ -410,7 +410,7 @@ typedef struct {
 * \brief Structure handling the network architecture and generic parameters.
 */
 typedef struct {
-	int				state; // 1: train / 0: predict
+	int			state; // 1: train / 0: predict
 	bcnn_node		src_node;
 	bcnn_node		dst_node;
 	bcnn_layer		*layer;
@@ -425,19 +425,19 @@ typedef struct {
 * \brief Structure handling the network architecture and generic parameters.
 */
 typedef struct {
-	int					max_batches;		/**< Maximum number of batches during training (=iterations) */ 
+	int			max_batches;		/**< Maximum number of batches during training (=iterations) */ 
 	bcnn_loss_metric	loss_metric;		/**< Loss metric for evaluation */
-	bcnn_learner		learner;			/**< Learner/optimizer parameters */
-	int					seen;				/**< Number of instances seen by the network */
-	int					nb_connections;
+	bcnn_learner		learner;		/**< Learner/optimizer parameters */
+	int			seen;			/**< Number of instances seen by the network */
+	int			nb_connections;
 	bcnn_connection		*connections;
-	bcnn_target			prediction_type;
-	bcnn_data_augment   data_aug;			/**< Parameters for online data augmentation */
-	bcnn_task			task;
-	int					state;
-	bcnn_node			input_node;
-	int					nb_finetune;
-	char				**finetune_id;
+	bcnn_target		prediction_type;
+	bcnn_data_augment   	data_aug;		/**< Parameters for online data augmentation */
+	bcnn_task		task;
+	int			state;
+	bcnn_node		input_node;
+	int			nb_finetune;
+	char			**finetune_id;
 } bcnn_net;
 
 

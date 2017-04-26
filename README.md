@@ -5,7 +5,7 @@
 
 bcnn is a plain C / Cuda implementation of Convolutional Neural Networks (widely used for Deep Learning applications such as object detection and recognition in images).
 
-It is aimed to be easy to build with a very limited number of dependencies and designed with 'hackability' in mind.
+It is aimed to be easy to build with a very limited number of dependencies (standalone if using only CPU) and designed with 'hackability' in mind.
 
 At the current state, it can run on CPU and Nvidia's GPU. CuDNNv5 is now supported.
 

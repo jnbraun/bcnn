@@ -164,7 +164,7 @@ int bcnn_load_image_from_csv(char *str, int w, int h, int c, unsigned char **img
 int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **img, int state,
 	int *x_shift, int *y_shift)
 {
-	int w_img, h_img, c_img, x_ul, y_ul;
+	int w_img, h_img, c_img, x_ul = 0, y_ul = 0;
 	unsigned char *buf = NULL, *pimg = NULL;
 
 	bip_load_image(path, &buf, &w_img, &h_img, &c_img);
@@ -448,7 +448,6 @@ int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
 	char **tok = NULL;
 	int i, n_tok = 0, tmp_x, tmp_y;
 	size_t n = 0;
-	float lf;
 	int out_w = net->connections[net->nb_connections - 2].dst_node.w;
 	int	out_h = net->connections[net->nb_connections - 2].dst_node.h;
 	int	out_c = net->connections[net->nb_connections - 2].dst_node.c;
@@ -475,8 +474,7 @@ int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
 	// Label
 	if (net->prediction_type != SEGMENTATION) {
 		for (i = 0; i < iter->label_width; ++i) {
-			n = fread(&lf, 1, sizeof(float), iter->f_input);
-			iter->label_float[i] = lf;
+			iter->label_float[i] = atof(tok[i + 1]);
 		}
 	}
 	else {

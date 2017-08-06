@@ -16,6 +16,8 @@ extern "C" {
 typedef struct {
 	char						*train_input;		/**< Path to train file. */
 	char						*test_input;		/**< Path to test/validation file. */
+	char						*path_train_label;	/**< Path to label train file (used for mnist format only). */
+	char						*path_test_label;	/**< Path to label test file (used for mnist format only). */
 	char						*input_model;		/**< Path to input model. */
 	char						*output_model;		/**< Path to output model. */
 	char						*pred_out;			/**< Path to output prediction file. */

@@ -134,7 +134,9 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 			else if(strcmp(tok[0], "save_model") == 0) param->save_model = atoi(tok[1]);
 			else if(strcmp(tok[0], "nb_pred") == 0) param->nb_pred = atoi(tok[1]);
 			else if (strcmp(tok[0], "source_train") == 0) bh_fill_option(&param->train_input, tok[1]);
+			else if (strcmp(tok[0], "label_train") == 0) bh_fill_option(&param->path_train_label, tok[1]);
 			else if (strcmp(tok[0], "source_test") == 0) bh_fill_option(&param->test_input, tok[1]);
+			else if (strcmp(tok[0], "label_test") == 0) bh_fill_option(&param->path_test_label, tok[1]);
 			else if (strcmp(tok[0], "dropout_rate") == 0 || strcmp(tok[0], "rate") == 0) rate = (float)atof(tok[1]);
 			else if (strcmp(tok[0], "with") == 0) concat_index = atoi(tok[1]);
 			else if (strcmp(tok[0], "batch_norm") == 0) batch_norm = atoi(tok[1]);
@@ -213,7 +215,7 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error)
 	bh_timer t = { 0 };
 	bcnn_iterator iter_data = { 0 };
 
-	if (bcnn_init_iterator(net, &iter_data, param->train_input, NULL, param->data_format) != 0)
+	if (bcnn_init_iterator(net, &iter_data, param->train_input, param->path_train_label, param->data_format) != 0)
 		return -1;
 
 	bcnn_compile_net(net, "train");
@@ -268,7 +270,8 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error, int dump_pr
 	int out_c = net->connections[net->nb_connections - 2].dst_node.c;
 	int output_size = out_w * out_h * out_c;
 
-	bcnn_init_iterator(net, &iter_data, param->test_input, NULL, param->data_format);
+	if (bcnn_init_iterator(net, &iter_data, param->test_input, param->path_test_label, param->data_format) != 0)
+		return -1;
 
 	if (dump_pred) {
 		if (net->prediction_type == HEATMAP_REGRESSION ||
@@ -353,6 +356,8 @@ int bcnncl_free_param(bcnncl_param *param)
 	bh_free(param->train_input);
 	bh_free(param->test_input);
 	bh_free(param->data_format);
+	bh_free(param->path_train_label);
+	bh_free(param->path_test_label);
 	return 0;
 }
 

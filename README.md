@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/jnbraun/bcnn.svg?branch=master)](https://travis-ci.org/jnbraun/bcnn/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-####***  Contributors are welcomed ! ***
+###***  Contributors are welcomed ! ***
 
 bcnn is a plain C / Cuda implementation of Convolutional Neural Networks (widely used for Deep Learning applications such as object detection and recognition in images).
 

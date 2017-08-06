@@ -52,9 +52,9 @@ Only tested with msvc2010 and 2013.
 
 ## How to use it:
 
-* Use the command line tool bcnn-cl with configuration file: see an example [here] (https://github.com/jnbraun/bcnn/tree/master/examples/mnist_cl)
+* Use the command line tool bcnn-cl with configuration file: see an example [here](https://github.com/jnbraun/bcnn/tree/master/examples/mnist_cl)
 
-* Or use the static library and write your own code: see an example [here] (https://github.com/jnbraun/bcnn/tree/master/examples/mnist)
+* Or use the static library and write your own code: see an example [here](https://github.com/jnbraun/bcnn/tree/master/examples/mnist)
 
 ## License:
 

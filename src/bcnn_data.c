@@ -460,7 +460,7 @@ int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
 		line = bh_fgetline(iter->f_input);
 	}
 	n_tok = bh_strsplit(line, ' ', &tok);
-	if (net->task != PREDICT) {
+	if (net->task != PREDICT && net->prediction_type == CLASSIFICATION) {
 		bh_assert(n_tok == 2,
 			"Wrong data format for classification", BCNN_INVALID_DATA);
 	}

@@ -1,5 +1,5 @@
 # config
-CUDA=0
+CUDA=1
 CUDNN=0
 USE_SSE2=1
 CUDA_PATH=/usr/local/cuda
@@ -12,7 +12,9 @@ NVCC=$(CUDA_PATH)/bin/nvcc
 OPTS=-O3
 LDFLAGS=-lm -lrt
 CFLAGS=-Wall -Wfatal-errors 
-BIN=bcnn-cl
+DELIVERY_BIN=bin/bcnn-cl
+DELIVERY_LIB=lib/libbcnn.a
+DELIVERY_EXAMPLE=bin/examples/mnist-example
 
 ifeq ($(DEBUG), 1) 
 OPTS=-O0 -g
@@ -22,7 +24,7 @@ CFLAGS+=$(OPTS) -Iinc
 
 ifeq ($(CUDA), 1) 
 CFLAGS+= -DBCNN_USE_CUDA -I$(CUDA_PATH)/include/
-LDFLAGS+= -L$(CUDA_PATH)/lib64 -lcuda -lcudart -lcublas
+LDFLAGS+= -L$(CUDA_PATH)/lib64 -lcuda -lcudart -lcublas -lcurand
 endif
 
 ifeq ($(CUDNN), 1)
@@ -51,8 +53,8 @@ OBJ_CUDA = $(patsubst src/%.cu, build/%_gpu.o, $(SRC_CUDA))
 CL_OBJ = build/bcnn_cl.o
 SRC_PACK = tools/pack_img/pack_img.c
 PACK_OBJ = build/tools/pack_img.o
-SRC_DCGAN = examples/dcgan/dcgan.c
-OBJ_DCGAN = examples/examples/dcgan.o
+SRC_MNISTEXAMPLE = examples/mnist/mnist_example.c
+OBJ_MNISTEXAMPLE = build/examples/mnist_example.o
 
 ALL_OBJ = $(OBJ)
 ifeq ($(CUDA), 1)
@@ -60,7 +62,7 @@ ALL_OBJ += $(OBJ_CUDA)
 endif
 ALL_DEP = $(filter-out build/bcnn_cl.o, $(ALL_OBJ)) $(LIB_DEP)
 
-all: clean lib/libbcnn.a $(BIN)
+all: clean $(DELIVERY_LIB) $(DELIVERY_BIN) $(DELIVERY_EXAMPLE)
 
 $(BIP_PATH)/libbip.a: 
 	cd $(BIP_PATH); make; cd ../
@@ -73,11 +75,12 @@ build/%_gpu.o: src/%.cu
 	@mkdir -p $(@D)
 	$(NVCC) $(ARCH) --compiler-options "$(CFLAGS)" -c $< -o $@
 	
-lib/libbcnn.a: $(ALL_DEP)
+$(DELIVERY_LIB): $(ALL_DEP)
 	@mkdir -p $(@D)
 	ar crv $@ $(filter %.o, $?)
 
-$(BIN): $(CL_OBJ) $(ALL_DEP)
+$(DELIVERY_BIN): $(CL_OBJ) $(ALL_DEP)
+	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o %.a, $^) $(LDFLAGS)
 
 $(PACK_OBJ): $(SRC_PACK)
@@ -87,15 +90,16 @@ $(PACK_OBJ): $(SRC_PACK)
 pack-img: $(PACK_OBJ) $(ALL_DEP)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o %.a, $^) $(LDFLAGS)
 	
-$(OBJ_DCGAN): $(SRC_DCGAN)
+$(OBJ_MNISTEXAMPLE): $(SRC_MNISTEXAMPLE)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-dcgan: $(OBJ_DCGAN) $(ALL_DEP)
+$(DELIVERY_EXAMPLE): $(OBJ_MNISTEXAMPLE) $(ALL_DEP)
+	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o %.a, $^) $(LDFLAGS)
 
 .PHONY: clean
 
 clean:
-	rm -rf $(OBJ) $(OBJ_CUDA) $(BIN) $(BIP_PATH)/libbip.a lib/libbcnn.a $(PACK_OBJ) pack-img $(OBJ_DCGAN) dcgan
+	rm -rf $(OBJ) $(OBJ_CUDA) $(DELIVERY_BIN) $(BIP_PATH)/libbip.a $(DELIVERY_LIB) $(PACK_OBJ) pack-img $(OBJ_MNISTEXAMPLE) $(DELIVERY_EXAMPLE)
 	cd $(BIP_PATH); make clean; cd ../

@@ -125,6 +125,7 @@ static void _mean_variance_forward(float *x, int b, int c, int wxh, float *mean,
 			mean[i] += s;
 			var[i] += bcnn_dot(wxh, x + k, x + k);
         }
+		// TODO: check which option is faster here
         //mean[i] *= scale;
         //var[i] = var[i] * scale - mean[i] * mean[i];
     }

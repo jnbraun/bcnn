@@ -54,6 +54,9 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
 
 	conn.dst_node.data = (float *)calloc(sz, sizeof(float));
 	conn.dst_node.grad_data = (float *)calloc(sz, sizeof(float));
+	conn.layer->bias_size = conn.dst_node.c;
+	conn.layer->bias = (float *)calloc(conn.layer->bias_size, sizeof(float));
+	conn.layer->bias_diff = (float *)calloc(conn.layer->bias_size, sizeof(float));
 	conn.layer->bn_scale = (float *)calloc(conn.dst_node.c, sizeof(float));
 	for (i = 0; i < conn.dst_node.c; ++i) {
         conn.layer->bn_scale[i] = 1;
@@ -78,6 +81,8 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
 #ifdef BCNN_USE_CUDA
 	conn.dst_node.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.data, sz);
 	conn.dst_node.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.grad_data, sz);
+	conn.layer->bias_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias, conn.layer->bias_size);
+	conn.layer->bias_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias_diff, conn.layer->bias_size);
 	conn.layer->mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->mean, conn.dst_node.c);
     conn.layer->variance_gpu = bcnn_cuda_memcpy_f32(conn.layer->variance, conn.dst_node.c);
     conn.layer->global_mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->global_mean, conn.dst_node.c);
@@ -105,6 +110,55 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
 	return BCNN_SUCCESS;
 }
 
+static void _mean_variance_forward(float *x, int b, int c, int wxh, float *mean, float *var)
+{
+    float scale = 1.0f / (b * wxh);
+    int i, j, k;
+	float s = 0.0f;
+
+    for (i = 0; i < c; ++i) {
+        mean[i] = 0;
+		var[i] = 0;
+        for (j = 0; j < b; ++j) {
+			k = j * c * wxh + i * wxh;
+			bcnn_vsum(wxh, x + k, &s);
+			mean[i] += s;
+			var[i] += bcnn_dot(wxh, x + k, x + k);
+        }
+        //mean[i] *= scale;
+		//var[i] = var[i] * scale - mean[i] * mean[i];
+    }
+	bcnn_scal(c, scale, mean);
+	bcnn_varmean(c, mean, scale, var);
+}
+
+static void _norm_forward(float *x, float *mean, float *variance, int b, int c, int spatial_sz)
+{
+    int k, j, i, index;
+    for (k = 0; k < b; ++k) {
+        for (j = 0; j < c; ++j) {
+            for (i = 0; i < spatial_sz; ++i) {
+                index = k * c * spatial_sz + j * spatial_sz + i;
+                x[index] = (x[index] - mean[j]) / (sqrtf(variance[j]) + 0.000001f);
+            }
+        }
+    }
+}
+
+
+static void add_bias(float *output, float *biases, int b, int n, int size)
+{
+    int i, j, k;
+
+    for (k = 0; k < b; ++k) {
+        for (i = 0; i < n; ++i) {
+            for (j = 0; j < size; ++j) {
+                output[(k * n + i) * size + j] += biases[i];
+            }
+        }
+    }
+}
+
 
 int bcnn_forward_batchnorm_layer_cpu(bcnn_connection *conn)
 {
@@ -113,100 +167,76 @@ int bcnn_forward_batchnorm_layer_cpu(bcnn_connection *conn)
 	bcnn_node dst = conn->dst_node;
 	int batch_size = src.b;
 	int sz = dst.w * dst.h * dst.c;
-	int spatial_dim = dst.w * dst.h;
+	
+	bcnn_copy_f32(sz * batch_size, src.data, dst.data);
+	bcnn_copy_f32(sz * batch_size, dst.data, layer->bn_workspace);
 
 	if (conn->state) {
-		bcnn_vmul(batch_size * sz, src.data, src.data, layer->bn_workspace);
-		// Compute mean
-		bcnn_gemv(0, dst.c * batch_size, spatial_dim,
-			1.0f / (spatial_dim), src.data,
-			layer->spatial_sum_multiplier, 0.0f,
-			layer->spatial_stats);
-		bcnn_gemv(1, batch_size, dst.c, 1.0f / batch_size,
-			layer->spatial_stats, layer->batch_sum_multiplier, 0.0f,
-			layer->mean);
+		_mean_variance_forward(dst.data, batch_size, dst.c, dst.h * dst.w, layer->mean, layer->variance);
 
 		bcnn_scal(dst.c, 0.9f, layer->global_mean);
 		bcnn_axpy(dst.c, 0.1f, layer->mean, layer->global_mean);
-
-		// E(X^2) across spatial
-		bcnn_gemv(0, dst.c * batch_size, spatial_dim, 1.0f / (spatial_dim), layer->bn_workspace,
-			layer->spatial_sum_multiplier, 0.0f, layer->spatial_stats);
-		// E(X^2) across batch
-		bcnn_gemv(1, batch_size, dst.c, 1.0f / batch_size, layer->spatial_stats,
-			layer->batch_sum_multiplier, 0.0f, layer->variance);
- 
-		bcnn_vmul(dst.c, layer->mean, layer->mean, layer->bn_workspace); // (EX)^2
-		bcnn_vsub(dst.c, layer->variance, layer->bn_workspace, layer->variance);  // variance
-
 		bcnn_scal(dst.c, 0.9f, layer->global_variance);
 		bcnn_axpy(dst.c, 0.1f, layer->variance, layer->global_variance);
 		
-		bcnn_gemm(0, 0, batch_size, dst.c, 1, 1.0f,
-		  layer->batch_sum_multiplier, 1, layer->mean, dst.c, 0.0f,
-		  layer->spatial_stats, dst.c);
-		bcnn_gemm(0, 0, dst.c * batch_size,
-		  spatial_dim, 1, -1.0f, layer->spatial_stats, 1,
-		  layer->spatial_sum_multiplier, spatial_dim, 0.0f, layer->bn_workspace, spatial_dim);
-		bcnn_vadd(batch_size * sz, src.data, layer->bn_workspace, dst.data);
-		
-		// normalize variance
-		bcnn_add_scalar(dst.c, 0.00001f, layer->variance);
-		bcnn_pow(dst.c, layer->variance, 0.5f, layer->variance);
-		bcnn_gemm(0, 0, batch_size, dst.c, 1, 1.0f,
-			layer->batch_sum_multiplier, 1, layer->variance, dst.c, 0.0f,
-			layer->spatial_stats, dst.c);
-		bcnn_gemm(0, 0, dst.c * batch_size, spatial_dim, 1, 1.0f,
-			layer->spatial_stats, 1, layer->spatial_sum_multiplier, spatial_dim, 0.0f,
-			layer->bn_workspace, spatial_dim);
-		bcnn_vdiv(batch_size * sz, dst.data, layer->bn_workspace, dst.data);
-			
-		// save x_norm
+		_norm_forward(dst.data, layer->mean, layer->variance, batch_size, dst.c, dst.h * dst.w);   
 		bcnn_copy_f32(batch_size * sz, dst.data, layer->x_norm);
-
-		// scale
-		bcnn_gemm(0, 0, batch_size, dst.c, 1, 1.0f,
-			layer->batch_sum_multiplier, 1, layer->bn_scale, dst.c, 0.0f,
-			layer->spatial_stats, dst.c);
-		bcnn_gemm(0, 0, dst.c * batch_size, spatial_dim, 1, 1.0f,
-			layer->spatial_stats, 1, layer->spatial_sum_multiplier, spatial_dim, 0.0f,
-			layer->bn_workspace, spatial_dim);
-		bcnn_vmul(batch_size * sz, dst.data, layer->bn_workspace, dst.data);
-
-		// shift
-		bcnn_gemm(0, 0, batch_size, dst.c, 1, 1.0f,
-			layer->batch_sum_multiplier, 1, layer->bn_shift, dst.c, 0.0f,
-			layer->spatial_stats, dst.c);
-		bcnn_gemm(0, 0, dst.c * batch_size, spatial_dim, 1, 1.0f,
-			layer->spatial_stats, 1, layer->spatial_sum_multiplier, spatial_dim, 0.0f,
-			layer->bn_workspace, spatial_dim);
-		bcnn_vadd(batch_size * sz, dst.data, layer->bn_workspace, dst.data);
 	}
 	else {
 		// Normalize with global mean / variance
-		bcnn_gemm(0, 0, batch_size, dst.c, 1, 1.0f,
-		  layer->batch_sum_multiplier, 1, layer->global_mean, dst.c, 0.0f,
-		  layer->spatial_stats, dst.c);
-		bcnn_gemm(0, 0, dst.c * batch_size,
-		  spatial_dim, 1, -1.0f, layer->spatial_stats, 1,
-		  layer->spatial_sum_multiplier, spatial_dim, 0.0f, layer->bn_workspace, spatial_dim);
-		bcnn_vadd(batch_size * sz, src.data, layer->bn_workspace, dst.data);
-		
-		
-		memset(layer->bn_workspace, 0, sz * batch_size * sizeof(float));
-		memcpy(layer->bn_workspace, layer->global_variance, dst.c * sizeof(float));
-		bcnn_add_scalar(dst.c, 0.00001f, layer->bn_workspace);
-		bcnn_pow(dst.c, layer->bn_workspace, 0.5f, layer->bn_workspace);
-		bcnn_gemm(0, 0, batch_size, dst.c, 1, 1.0f,
-			layer->batch_sum_multiplier, 1, layer->bn_workspace, dst.c, 0.0f,
-			layer->spatial_stats, dst.c);
-		bcnn_gemm(0, 0, dst.c * batch_size, spatial_dim, 1, 1.0f,
-			layer->spatial_stats, 1, layer->spatial_sum_multiplier, spatial_dim, 0.0f,
-			layer->bn_workspace, spatial_dim);
-		bcnn_vdiv(batch_size * sz, dst.data, layer->bn_workspace, dst.data);
+		_norm_forward(dst.data, layer->global_mean, layer->global_variance, batch_size, dst.c, dst.h * dst.w);  
 	}
 
+	add_bias(dst.data, layer->bias, batch_size, dst.c, dst.h * dst.w);
+
 	return BCNN_SUCCESS;
+}
+
+static int _backward_bias(float *bias_diff, float *diff, int b, int n, int size)
+{
+    int i, k;
+	float *p = NULL;
+
+    for (k = 0; k < b; ++k) {
+        for (i = 0; i < n; ++i) {
+			p = diff + size * (i + k * n);
+			bcnn_vsum(size, p, &bias_diff[i]);
+        }
+    }
+	return 0;
+}
+
+static void _mean_variance_backward(float *x, float *grad, float *mean, float *var, int b, int c, int wxh, float *mean_diff, float *var_diff)
+{
+    int i, j, k;
+	float s = 0.0f;
+
+    for(i = 0; i < c; ++i){
+        mean_diff[i] = 0;
+		var_diff[i] = 0;
+        for (j = 0; j < b; ++j) {
+			k = j * c * wxh + i * wxh;
+			bcnn_vsum(wxh, grad + k, &s);
+			mean_diff[i] += s;
+			var_diff[i] += bcnn_shiftdot(wxh, x + k, mean[i], grad + k, 0.0f);
+        }
+        mean_diff[i] *= (-1.0f / sqrtf(var[i] + 0.00001f));
+    }
+	bcnn_varnorm(c, var, -0.5f, var_diff);
+}
+
+static void _normalize_backward(float *x, float *mean, float *var, float *mean_delta, float *var_diff, int b, int c, int wxh, float *grad)
+{
+    int i, j, k, ind;
+
+    for (j = 0; j < b; ++j) {
+        for (i = 0; i < c; ++i) {
+            for (k = 0; k < wxh; ++k) {
+                ind = j * c * wxh + i * wxh + k;
+                grad[ind] = grad[ind] * 1.0f / (sqrtf(var[i] + 0.00001f)) + var_diff[i] * 2.0f * (x[ind] - mean[i]) / (wxh * b) + mean_delta[i] / (wxh * b);
+            }
+        }
+    }
 }
 
 int bcnn_backward_batchnorm_layer_cpu(bcnn_connection *conn)
@@ -216,79 +246,18 @@ int bcnn_backward_batchnorm_layer_cpu(bcnn_connection *conn)
 	bcnn_node dst = conn->dst_node;
 	int batch_size = src.b;
 	int sz = dst.w * dst.h * dst.c;
-	int spatial_dim = dst.w * dst.h;
 	
-
-	bcnn_vmul(sz * batch_size, layer->x_norm, dst.grad_data, layer->bn_workspace);
-	// EX across spatial
-	bcnn_gemv(0, batch_size * dst.c, spatial_dim, 1.0f, layer->bn_workspace,
-		layer->spatial_sum_multiplier, 0.0f, layer->spatial_stats);
-	// EX across batch
-	bcnn_gemv(1, batch_size, dst.c, 1.0f, layer->spatial_stats,
-		layer->batch_sum_multiplier, 0.0f, layer->bn_scale_diff);
-	
-	// gradient w.r.t. shift
-	// EX across spatial
-	bcnn_gemv(0, batch_size * dst.c, spatial_dim, 1.0f, dst.grad_data,
-		layer->spatial_sum_multiplier, 0.0f, layer->spatial_stats);
-	// EX across batch
-	bcnn_gemv(1, batch_size, dst.c, 1.0f, layer->spatial_stats,
-		layer->batch_sum_multiplier, 0.0f, layer->bn_shift_diff);
-
-	if (src.grad_data) {
-		bcnn_gemm(0, 0, batch_size, dst.c, 1, 1.0f,
-			layer->batch_sum_multiplier, 1, layer->bn_scale, dst.c, 0.0f,
-			layer->spatial_stats, dst.c);
-		bcnn_gemm(0, 0, batch_size * dst.c, spatial_dim, 1, 1.0f,
-			layer->spatial_stats, 1, layer->spatial_sum_multiplier, spatial_dim, 0.0f,
-			layer->bn_workspace, spatial_dim);
-		bcnn_vmul(batch_size * sz, dst.grad_data, layer->bn_workspace, layer->bn_workspace);
-
-		// use new top conv_workspace_gpu for computation
-		bcnn_vmul(batch_size * sz, layer->x_norm, layer->bn_workspace, src.grad_data);
-		// EX across spatial
-		bcnn_gemv(0, batch_size * dst.c, spatial_dim, 1.0f, src.grad_data,
-			layer->spatial_sum_multiplier, 0.0f, layer->spatial_stats);
-		// EX across batch
-		bcnn_gemv(1, batch_size, dst.c, 1.0f, layer->spatial_stats,
-			layer->batch_sum_multiplier, 0.0f, layer->mean);
-		//bcnn_gemm(0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
-		bcnn_gemm(0, 0, batch_size, dst.c, 1, 1.0f,
-			layer->batch_sum_multiplier, 1, layer->mean, dst.c, 0.0f,
-			layer->spatial_stats, dst.c);
-		bcnn_gemm(0, 0, batch_size * dst.c, spatial_dim, 1, 1.0f,
-			layer->spatial_stats, 1, layer->spatial_sum_multiplier, spatial_dim, 0.0f,
-			src.grad_data, spatial_dim);
-
-		bcnn_vmul(sz * batch_size, layer->x_norm, src.grad_data, src.grad_data);
-
-		//
-		// EX across spatial
-		bcnn_gemv(0,  batch_size * dst.c, spatial_dim, 1.0f, layer->bn_workspace,
-			layer->spatial_sum_multiplier, 0.0f, layer->spatial_stats);
-		// EX across batch
-		bcnn_gemv(1, batch_size, dst.c, 1.0f, layer->spatial_stats,
-			layer->batch_sum_multiplier, 0.0f, layer->mean);
-
-		bcnn_gemm(0, 0, batch_size, dst.c, 1, 1.0f,
-			layer->batch_sum_multiplier, 1, layer->mean, dst.c, 0.0f,
-			layer->spatial_stats, dst.c);
-		bcnn_gemm(0, 0, batch_size * dst.c, spatial_dim, 1, 1.0f,
-			layer->spatial_stats, 1, layer->spatial_sum_multiplier, spatial_dim, 1.0f, src.grad_data, spatial_dim);
-
-		bcnn_axpby(sz * batch_size, 1.0f, layer->bn_workspace, -1.0f / (batch_size * spatial_dim),
-			src.grad_data);
-        
-		// variance normalization
-		bcnn_gemm(0, 0, batch_size, dst.c, 1, 1.0f,
-			layer->batch_sum_multiplier, 1, layer->variance, dst.c, 0.0f,
-			layer->spatial_stats, dst.c);
-		bcnn_gemm(0, 0, batch_size * dst.c, spatial_dim, 1, 1.0f,
-			layer->spatial_stats, 1, layer->spatial_sum_multiplier, spatial_dim, 0.0f,
-			layer->bn_workspace, spatial_dim);
-
-		bcnn_vdiv(sz * batch_size, src.grad_data, layer->bn_workspace, src.grad_data);
+	if (!conn->state) {
+        layer->mean = layer->global_mean;
+        layer->variance = layer->global_variance;
 	}
+
+	_backward_bias(layer->bias_diff, dst.grad_data, batch_size, dst.c, dst.w * dst.h);
+	_mean_variance_backward(layer->bn_workspace, dst.grad_data, layer->mean, layer->variance, batch_size, dst.c, dst.w * dst.h, layer->diff_mean, layer->diff_variance);
+	_normalize_backward(layer->bn_workspace, layer->mean, layer->variance, layer->diff_mean, layer->diff_variance, batch_size, dst.c, dst.w * dst.h, dst.grad_data);
+
+	if (src.grad_data)
+		bcnn_copy_f32(sz * batch_size, dst.grad_data, src.grad_data);
 
 	return BCNN_SUCCESS;
 }

@@ -26,7 +26,7 @@
 
 #include "bcnn/bcnn.h"
 
-int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation, char *id)
+int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation, int quantize, char *id)
 {
 	int nb_connections = net->nb_connections + 1;
 	int i;
@@ -59,6 +59,13 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
 	conn.layer->bias_diff = (float *)calloc(output_size, sizeof(float));
 	conn.layer->weight = (float *)calloc(output_size * input_size, sizeof(float));
 	conn.layer->bias = (float *)calloc(output_size, sizeof(float));
+
+	conn.layer->quantize = quantize;
+	if (conn.layer->quantize == 1) {
+		bh_assert((input_size % BITS_IN_UINT32 == 0), "Number of channels in input must be a multiple of 32", BCNN_INVALID_PARAMETER);
+		conn.layer->binary_workspace = (uint32_t *)calloc(input_size * conn.src_node.b / (sizeof(float) * 8), sizeof(float));
+		conn.layer->binary_weight = (uint32_t *)calloc(conn.layer->weights_size / BITS_IN_UINT32, sizeof(uint32_t));
+	}
 
 	switch (init) {
 	case XAVIER:
@@ -119,8 +126,35 @@ int bcnn_forward_fullc_layer_cpu(bcnn_connection *conn)
 		bcnn_copy_f32(dst_size, layer->bias, dst.data + i * dst_size);*/
 	memset(dst.data, 0, dst_size * batch_size * sizeof(float));
 
-	bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1,
-		src.data, src_size, layer->weight, src_size, 1, dst.data, dst_size);
+	if (layer->quantize) {
+		for (i = 0; i < layer->weights_size; ++i) {
+			layer->weight[i] = (layer->weight[i] > 0) ? 1.0f : -1.0f;
+		}
+		for (i = 0; i < batch_size * src_size; ++i) {
+			src.data[i] = (src.data[i] > 0) ? 1.0f : -1.0f;
+		}
+		if (conn->state == 0) {
+			get_binary_col_unrolled(layer->weight, layer->binary_weight, src_size, dst_size);
+			get_binary_row(src.data, layer->binary_workspace, batch_size * src_size);
+			bcnn_xnor_gemm(0, 0, batch_size, dst_size, src_size / BITS_IN_UINT32, 1.0f,
+					layer->binary_workspace, src_size / BITS_IN_UINT32,
+					layer->binary_weight, dst_size,
+					1.0f,
+					dst.data, dst_size);
+		}
+		else {
+			bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1.0f,
+				src.data, src_size, layer->weight, src_size, 1.0f, dst.data, dst_size);
+			// Mapping to obtain similar range output than xnor gemm
+			for (i = 0; i < batch_size * dst_size; ++i) {
+				dst.data[i] = (dst.data[i] + src_size) / 2;
+			}
+		}
+	}
+	else {
+		bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1.0f,
+			src.data, src_size, layer->weight, src_size, 1.0f, dst.data, dst_size);
+	}
 		
 	for (i = 0; i < batch_size; ++i)
 		bcnn_axpy(dst_size, 1, layer->bias, dst.data + i * dst_size);
@@ -151,6 +185,12 @@ int bcnn_backward_fullc_layer_cpu(bcnn_connection *conn)
 	if (src.grad_data)
 		bcnn_gemm(0, 0, batch_size, src_size, dst_size, 1,
 			dst.grad_data, dst_size, layer->weight, src_size, 1, src.grad_data, src_size);
+
+	if (layer->quantize && src.grad_data) {
+		for (i = 0; i < batch_size * src_size; ++i) {
+			src.grad_data[i] = src.grad_data[i] * ((fabs(src.data[i]) <= 1.0f) ? 1.0f : 0.0f);
+		}
+	}
 
 	return BCNN_SUCCESS;
 }

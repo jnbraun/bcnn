@@ -23,6 +23,7 @@
 
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
+#include <bh/bh_timer.h>
 
 #include "bcnn/bcnn.h"
 
@@ -137,10 +138,10 @@ static int _bcnn_backward_bias(float *bias_diff, float *diff, int batch_size, in
 
 
 int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int pad,
-	int batch_norm, bcnn_weights_init init, bcnn_activation activation, char *id)
+	int batch_norm, bcnn_weights_init init, bcnn_activation activation, int quantize, char *id)
 {
 	int nb_connections = net->nb_connections + 1;
-	int i, sz;
+	int i, sz, k, l;
 	bcnn_connection conn = { 0 };
 	float std_init = 0.0f;
 	bcnn_gauss_gen g = { 0 };
@@ -162,6 +163,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 	conn.layer->stride = stride;
 	conn.layer->size = size;
 	conn.layer->pad = pad;
+	conn.layer->quantize = quantize;
 	conn.layer->bias_size = n;
 	conn.layer->weights_size = conn.src_node.c * n * size * size;
 
@@ -185,7 +187,6 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 	
 	/*for (i = 0; i < conn.layer->weights_size; ++i)
 		conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);*/
-
 	conn.dst_node.w = (conn.src_node.w + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
 	conn.dst_node.h = (conn.src_node.h + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
 	conn.dst_node.c = n;
@@ -195,6 +196,14 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 	sz = conn.dst_node.b * conn.dst_node.w * conn.dst_node.h * n;
 	conn.dst_node.data = (float *)calloc(sz, sizeof(float));
 	conn.dst_node.grad_data = (float *)calloc(sz, sizeof(float));
+
+	if (conn.layer->quantize == 1) {
+		bh_assert((conn.src_node.c % BITS_IN_UINT32 == 0), "Number of channels in input must be a multiple of 32", BCNN_INVALID_PARAMETER);
+		k = conn.layer->size * conn.layer->size * conn.src_node.c;
+		l = conn.dst_node.w * conn.dst_node.h;
+		conn.layer->binary_workspace = (uint32_t *)calloc(l * k / (sizeof(float) * 8), sizeof(float));
+		conn.layer->binary_weight = (uint32_t *)calloc(conn.layer->weights_size / BITS_IN_UINT32, sizeof(uint32_t));
+	}
 
 	if (net->learner.optimizer == ADAM) {
 		conn.layer->adam_m = (float *)calloc(conn.layer->weights_size, sizeof(float));
@@ -309,14 +318,24 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 
 int bcnn_forward_conv_layer_cpu(bcnn_connection *conn)
 {
-	int i, m, n, k, sz;
+	int i, j, m, n, k, sz;
 	float *a = NULL, *b = NULL, *c = NULL;
 	bcnn_layer *layer = conn->layer;
 	bcnn_node src = conn->src_node;
 	bcnn_node dst = conn->dst_node;
 	int batch_size = src.b;
+
 	sz = bcnn_node_size(&dst);
-	bcnn_fill_f32(sz, 0.0f, dst.data);
+
+	//bcnn_fill_f32(sz, 0.0f, dst.data);
+	memset(dst.data, 0, sz * sizeof(float));
+
+	// Binarize weights
+	if (layer->quantize) {
+		for (i = 0; i < layer->weights_size; ++i) {
+			layer->weight[i] = (layer->weight[i] > 0) ? 1.0f : -1.0f;
+		}
+	}
 
 	m = layer->num;
 	k = layer->size * layer->size * src.c;
@@ -331,10 +350,48 @@ int bcnn_forward_conv_layer_cpu(bcnn_connection *conn)
 	for (i = 0; i < batch_size; ++i) {
 		_bcnn_im2col(src.data, src.c, src.h, src.w,
 			layer->size, layer->pad, layer->stride, b);
-		bcnn_gemm(0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
+		// Binarize inputs here (after padding)
+		if (layer->quantize) {
+			for (j = 0; j < k * n; ++j)
+				b[j] = (b[j] > 0) ? 1.0f : -1.0f;
+			if (conn->state == 0) { // inference phase
+				//bh_timer_start(&t);
+				// xnor / popcnt gemm
+				get_binary_col_unrolled(b, layer->binary_workspace, k, n);
+				get_binary_row(a, layer->binary_weight, m * k);
+				bcnn_xnor_gemm(0, 0, m, n, k / BITS_IN_UINT32, 1.0f,
+					layer->binary_weight, k / BITS_IN_UINT32,
+					layer->binary_workspace, n,
+					1.0f,
+					c,  n);
+				
+				//bcnn_gemm(0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
+				//bh_timer_stop(&t);
+				//tconv += bh_timer_get_msec(&t);
+				// Mapping to obtain similar range than xnor / popcnt gemm
+				/*for (j = 0; j < n * m; ++j) {
+					c[j] = (c[j] + k) / 2;
+				}*/
+				
+			}
+			else { // training phase
+				bcnn_gemm(0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
+				// Mapping to obtain similar range output than xnor gemm
+				for (j = 0; j < n * m; ++j) {
+					c[j] = (c[j] + k) / 2;
+				}
+			}
+		}
+		else
+			bcnn_gemm(0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
+
 		c += n * m;
 		src.data += sz;
 	}
+
+	/*if (conn->state == 0 && layer->quantize) {
+		fprintf(stderr, "[TIME] conv %lf\n", tconv);
+	}*/
 
 	_bcnn_add_bias(dst.data, layer->bias, batch_size, layer->num, dst.w * dst.h);
 
@@ -357,7 +414,7 @@ int bcnn_backward_conv_layer_cpu(bcnn_connection *conn)
 	int m = layer->num;
 	int n = layer->size * layer->size * src.c;
 	int k = dst.w * dst.h;
-	float *a = NULL, *b = NULL, *c = NULL, *psrc = NULL;
+	float *a = NULL, *b = NULL, *c = NULL;
 
 	bcnn_backward_activation_cpu(dst.data, dst.grad_data,
 		dst.w * dst.h * dst.c * batch_size,
@@ -382,6 +439,12 @@ int bcnn_backward_conv_layer_cpu(bcnn_connection *conn)
 			bcnn_gemm(1, 0, n, k, m, 1, a, n, b, k, 0, c, k);
 			_bcnn_col2im(layer->conv_workspace, src.c, src.h, src.w,
 				layer->size, layer->pad, layer->stride, src.grad_data + i * sz);
+		}
+	}
+
+	if (layer->quantize && src.grad_data) {
+		for (i = 0; i < batch_size * sz; ++i) {
+			src.grad_data[i] = src.grad_data[i] * ((fabs(src.data[i]) <= 1.0f) ? 1.0f : 0.0f);
 		}
 	}
 

@@ -155,7 +155,7 @@ void bcnn_cuda_axpby(int n, float a, float *x, float b, float *y)
 	bcnn_cuda_axpy(n, a, x, 1, y, 1);
 }
 
-__global__ void _bcnn_add_scalar_kernel(int n, float a, float* y)
+__global__ void _bcnn_add_scalar_kernel(int n, float a, float *y)
 {
 	int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
     if (i < n)
@@ -167,5 +167,105 @@ void bcnn_cuda_add_scalar(int n, float a, float* y)
 {
 	_bcnn_add_scalar_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, a, y);
 }
+
+
+__global__ void _bcnn_vsum_kernel(int n, float *x, float *sum)
+{
+	int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
+    if (i < n)
+		*sum += x[i];
+}
+
+void bcnn_cuda_vsum(int n, float *x, float *sum)
+{
+	_bcnn_vsum_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, sum);
+}
+
+
+__global__ void _mean_variance_forward_kernel(float *x, int b, int c, int wxh, float *mean, float *var)
+{
+	float scale = 1.0f / (b * wxh);
+    int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x, j, k, ind;
+    if (i >= c)
+		return;
+
+    mean[i] = 0;
+    for (j = 0; j < b; ++j){
+        for (k = 0; k < wxh; ++k){
+            ind = j *c * wxh + i * wxh + k;
+            mean[i] += x[ind];
+			var[i] += x[ind] * x[ind];
+        }
+    }
+	mean[i] *= scale;
+	var[i] = var[i] * scale - mean[i] * mean[i];
+}
+
+
+void bcnn_cuda_mean_variance_forward(float *x, int b, int c, int wxh, float *mean, float *var)
+{
+	_mean_variance_forward_kernel<<<bcnn_cuda_gridsize(c), BCNN_CUDA_THREADS>>>(x, b, c, wxh, mean, var);
+}
+
+
+__global__ void _norm_forward_kernel(float *x, float *mean, float *variance, int b, int c, int wxh)
+{
+	int ind = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
+    int j = (ind / wxh) % c;
+
+	if (ind >= b * c * wxh)
+		return;   
+    
+	x[ind] = (x[ind] - mean[j]) / (sqrt(variance[j] + 0.000001f));
+}
+
+void bcnn_cuda_norm_forward(float *x, float *mean, float *variance, int b, int c, int wxh)
+{
+	_norm_forward_kernel<<<bcnn_cuda_gridsize(b * c * wxh), BCNN_CUDA_THREADS>>>(x, mean, variance, b, c, wxh);
+}
+
+
+__global__ void _norm_backward_kernel(float *x, float *mean, float *var, float *mean_diff, float *var_diff, int b, int c, int wxh, float *grad)
+{
+	int ind = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
+    int j = (ind / wxh) % c;
+
+	if (ind >= b * c * wxh)
+		return;   
+    
+	grad[ind] = grad[ind] * 1.0f / (sqrtf(var[j] + 0.00001f)) + var_diff[j] * 2.0f * (x[ind] - mean[j]) / (wxh * b) + mean_diff[j] / (wxh * b);
+}
+
+void bcnn_cuda_norm_backward(float *x, float *mean, float *var, float *mean_diff, float *var_diff, int b, int c, int wxh, float *grad)
+{
+	_norm_backward_kernel<<<bcnn_cuda_gridsize(b * c * wxh), BCNN_CUDA_THREADS>>>(x, mean, var, mean_diff, var_diff, b, c, wxh, grad);
+}
+
+
+__global__ void _mean_variance_backward_kernel(float *x, float *grad, float *mean, float *var, int b, int c, int wxh, float *mean_diff, float *var_diff)
+{
+    int i = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x, j, k, ind;
+    
+	if (i >= c)
+		return;
+
+    mean_diff[i] = 0;
+	var_diff[i] = 0;
+    for (j = 0; j < b; ++j) {
+        for (k = 0; k < wxh; ++k) {
+            ind = j * c * wxh + i * wxh + k;
+            mean_diff[i] += grad[ind];
+			var_diff[i] += grad[ind] * (x[ind] - mean[i]);
+        }
+    }
+    mean_diff[i] *= (-1.0f / sqrt (var[i] + 0.00001f));
+	var_diff[i] *= -0.5f / (var[i] * sqrtf(var[i]) + 0.00001f);
+}
+
+void bcnn_cuda_mean_variance_backward(float *x, float *grad, float *mean, float *var, int b, int c, int wxh, float *mean_diff, float *var_diff)
+{
+    _mean_variance_backward_kernel<<<bcnn_cuda_gridsize(c), BCNN_CUDA_THREADS>>>(x, grad, mean, var, b, c, wxh, mean_diff, var_diff);
+}
+
 
 #endif

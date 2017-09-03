@@ -704,6 +704,87 @@ int bcnn_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
 }
 
 
+// From https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetNaive
+static uint32_t portable_popcnt(uint32_t x)
+{
+	x = x - ((x >> 1) & (uint32_t)~(uint32_t)0/3);                          
+	x = (x & (uint32_t)~(uint32_t)0/15*3) + ((x >> 2) & (uint32_t)~(uint32_t)0/15*3);      
+	x = (x + (x >> 4)) & (uint32_t)~(uint32_t)0/255*15;                      
+	return (uint32_t)(x * ((uint32_t)~(uint32_t)0/255)) >> (sizeof(uint32_t) - 1) * 8; 
+}
+
+#ifdef _MSC_VER
+#  include <intrin.h>
+#  include <nmmintrin.h>
+#  define __builtin_popcount _mm_popcnt_u32
+#else
+# define __builtin_popcount portable_popcnt
+#endif
+
+int bcnn_bitgemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
+	uint32_t *A, int lda,
+	uint32_t *B, int ldb,
+	float BETA,
+	float *C, int ldc)
+{
+	int m,k,n;
+  
+	for (m = 0; m < M; ++m) {
+		for (k = 0; k < K; k++) {
+			uint32_t A_PART = A[m * lda + k];
+			for (n = 0; n < N; ++n) {
+#ifdef _MSC_VER
+				C[m*ldc+n] += _mm_popcnt_u32(~(A_PART ^ B[k*ldb+n]));
+#else
+				C[m * ldc + n] += portable_popcnt(~(A_PART ^ B[k*ldb+n]));
+#endif
+			}
+		}
+	}
+	
+	return 0;
+}
+
+void bcnn_xnor_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
+                        uint32_t *A, int lda,
+                        uint32_t *B, int ldb,
+						float BETA,
+                        float *C, int ldc)
+{
+  int m,k,n;
+  uint32_t A_PART[6];
+  int popc[6];
+  for (m = 0; m < M; ++m) {
+    for (k = 0; k < ((K / 6) * 6); k+=6) {
+      A_PART[0] = A[m*lda+k];
+      A_PART[1] = A[m*lda+k+1];
+      A_PART[2] = A[m*lda+k+2];
+      A_PART[3] = A[m*lda+k+3];
+      A_PART[4] = A[m*lda+k+4];
+      A_PART[5] = A[m*lda+k+5];
+      for (n = 0; n < N; ++n) {
+        popc[0] = __builtin_popcount(~(A_PART[0] ^ B[(k+0)*ldb+n]));
+        popc[1] = __builtin_popcount(~(A_PART[1] ^ B[(k+1)*ldb+n]));
+        popc[2] = __builtin_popcount(~(A_PART[2] ^ B[(k+2)*ldb+n]));
+        popc[3] = __builtin_popcount(~(A_PART[3] ^ B[(k+3)*ldb+n]));
+        popc[4] = __builtin_popcount(~(A_PART[4] ^ B[(k+4)*ldb+n]));
+        popc[5] = __builtin_popcount(~(A_PART[5] ^ B[(k+5)*ldb+n]));
+        C[m*ldc+n] += popc[0] + popc[1] + popc[2] + popc[3] + popc[4] + popc[5];
+      }
+    }
+
+    for (k=(K / 6) * 6; k < K; ++k) {
+      A_PART[0] = A[m*lda+k];
+      for (n = 0; n < N; ++n) {
+        C[m * ldc + n] += __builtin_popcount(~(A_PART[0] ^ B[k * ldb + n]));
+      }
+    }
+  }
+}
+
+
+
+
 float bcnn_l2_distance(float *x, float *y, int n)
 {
 	float dist = 0.0f;
@@ -760,6 +841,173 @@ float bcnn_l2_distance(float *x, float *y, int n)
 #endif
 	return dist; 
 }
+
+float bcnn_sqrdiff_vs(float *x, float a, int n)
+{
+	float dist = 0.0f;
+	int i;
+#ifndef BCNN_USE_SSE2
+	for (i = 0; i < n; ++i)
+		dist += (x[i] - a) * (x[i] - a);
+#else
+	int data_is_aligned = bh_is_aligned32(x);
+	__m128 vx0, vx1, vdiff0, vdiff1;
+	__m128 vdist = _mm_set1_ps(0.0f);
+	__m128 areg = _mm_set1_ps(a);
+	float dist4f[4] = { 0.0f };
+	int nd, nm;
+
+	nd = n / 8 * 8;
+	nm = n % 8;
+	if (data_is_aligned) {
+		for (i = 0; i < nd; i += 8) {
+			vx0 = _mm_load_ps(x);
+			vx1 = _mm_load_ps(x + 4);
+			vdiff0 = _mm_sub_ps(vx0, areg);
+			vdiff0 = _mm_mul_ps(vdiff0, vdiff0);
+			vdiff1 = _mm_sub_ps(vx1, areg);
+			vdiff1 = _mm_mul_ps(vdiff1, vdiff1);
+			vdist = _mm_add_ps(vdist, vdiff0);
+			vdist = _mm_add_ps(vdist, vdiff1);
+			x += 8;
+		}
+		_mm_store_ps(dist4f, vdist);
+	}
+	else {
+		for (i = 0; i < nd; i += 8) {
+			vx0 = _mm_loadu_ps(x);
+			vx1 = _mm_loadu_ps(x + 4);
+			vdiff0 = _mm_sub_ps(vx0, areg);
+			vdiff0 = _mm_mul_ps(vdiff0, vdiff0);
+			vdiff1 = _mm_sub_ps(vx1, areg);
+			vdiff1 = _mm_mul_ps(vdiff1, vdiff1);
+			vdist = _mm_add_ps(vdist, vdiff0);
+			vdist = _mm_add_ps(vdist, vdiff1);
+			x += 8;
+		}
+		_mm_storeu_ps(dist4f, vdist);
+	}
+	dist += dist4f[0] + dist4f[1] + dist4f[2] + dist4f[3];
+	for (i = 0; i < nm; ++i)
+		dist += (x[i] - a) * (x[i] - a);
+#endif
+
+	return dist; 
+}
+
+float bcnn_shiftdot(int n, float *x, float a, float *y, float b)
+{
+#ifndef BCNN_USE_SSE2
+	int i;
+	float dot = 0;
+	for (i = 0; i < n; ++i) 
+		dot += (x[i] - a) * (y[i] - b);
+	return dot;
+#else
+	int i, nd, nm;
+	float sum = 0;
+	float sum_res[4];
+	__m128 sum_r = _mm_setzero_ps();
+	__m128 r0, r1, r2, r3;
+	__m128 areg = _mm_set1_ps(a);
+	__m128 breg = _mm_set1_ps(b);
+
+	nd = n / 8 * 8;
+	nm = n % 8;
+	for (i = 0; i < nd; i += 8) {
+		r0 = _mm_loadu_ps(x);
+		r1 = _mm_loadu_ps(y);
+		r2 = _mm_loadu_ps(x + 4);
+		r3 = _mm_loadu_ps(y + 4);
+		r0 = _mm_sub_ps(r0, areg);
+		r1 = _mm_sub_ps(r1, breg);
+		r2 = _mm_sub_ps(r2, areg);
+		r3 = _mm_sub_ps(r3, breg);
+		r0 = _mm_mul_ps(r0, r1);
+		r2 = _mm_mul_ps(r2, r3);
+		sum_r = _mm_add_ps(sum_r, r0);
+		sum_r = _mm_add_ps(sum_r, r2);
+		x += 8;
+		y += 8;
+	}
+	_mm_storeu_ps(sum_res, sum_r);
+    sum += sum_res[0] + sum_res[1] + sum_res[2] + sum_res[3];
+	for (i = 0; i < nm; ++i)
+		sum += (x[i] - a) * (y[i] - b);
+	return sum;
+#endif
+}
+
+
+int bcnn_varnorm(int n, float *a, float c, float *y)
+{	
+#ifndef BCNN_USE_SSE2
+	int i;
+	for (i = 0; i < n; ++i) {
+		y[i] *= c / (a[i] * sqrtf(a[i]) + 0.00001f);
+	}
+#else
+	int i, nd, nm;
+	__m128 r0, r1, reg0, reg1;
+	__m128 creg = _mm_set1_ps(c);
+	__m128 epsreg = _mm_set1_ps(0.00001f);
+
+	nd = n / 8 * 8;
+	nm = n % 8;
+	for (i = 0; i < nd; i += 8) {
+		reg0 = _mm_loadu_ps(y);
+		reg1 = _mm_loadu_ps(y + 4);
+		r0 = _mm_loadu_ps(a);
+		r1 = _mm_loadu_ps(a + 4);
+		r0 = _mm_mul_ps(reg0, _mm_div_ps(creg, _mm_add_ps(_mm_mul_ps(r0, _mm_sqrt_ps(r0)), epsreg)));
+		r1 = _mm_mul_ps(reg1, _mm_div_ps(creg, _mm_add_ps(_mm_mul_ps(r1, _mm_sqrt_ps(r1)), epsreg)));
+		_mm_storeu_ps(y, r0);
+		_mm_storeu_ps(y + 4, r1);
+		a += 8;
+		y += 8;
+	}
+	for (i = 0; i < nm; ++i) {
+		y[i] *= c / (a[i] * sqrtf(a[i]) + 0.00001f);
+	}
+#endif
+	return 0;
+}
+
+
+int bcnn_varmean(int n, float *m, float a, float *var)
+{	
+#ifndef BCNN_USE_SSE2
+	int i;
+	for (i = 0; i < n; ++i) {
+		var[i] = var[i] * a - m[i] * m[i];
+	}
+#else
+	int i, nd, nm;
+	__m128 r0, r1, reg0, reg1;
+	__m128 areg = _mm_set1_ps(a);
+	
+
+	nd = n / 8 * 8;
+	nm = n % 8;
+	for (i = 0; i < nd; i += 8) {
+		reg0 = _mm_loadu_ps(var);
+		reg1 = _mm_loadu_ps(var + 4);
+		r0 = _mm_loadu_ps(m);
+		r1 = _mm_loadu_ps(m + 4);
+		r0 = _mm_sub_ps(_mm_mul_ps(reg0, areg), _mm_mul_ps(r0, r0));
+		r1 = _mm_sub_ps(_mm_mul_ps(reg1, areg), _mm_mul_ps(r1, r1));
+		_mm_storeu_ps(var, r0);
+		_mm_storeu_ps(var + 4, r1);
+		m += 8;
+		var += 8;
+	}
+	for (i = 0; i < nm; ++i) {
+		var[i] = var[i] * a - m[i] * m[i];
+	}
+#endif
+	return 0;
+}
+
 
 
 

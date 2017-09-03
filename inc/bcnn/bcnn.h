@@ -54,6 +54,8 @@ extern "C" {
 #include <emmintrin.h> // SSE2
 #endif
 
+#include "bh/bh_error.h"
+
 #if defined(__GNUC__) || (defined(_MSC_VER) && (_MSC_VER >= 1600))
 #include <stdint.h>
 #else
@@ -75,6 +77,12 @@ typedef unsigned __int32  uint32_t;
 typedef signed __int64    int64_t;
 typedef unsigned __int64  uint64_t;
 #endif
+
+/*typedef struct bcnn_context {
+	bh_logctx *log_hdl;
+} bcnn_context;*/
+
+//typedef struct bcnn_context *bcnn_context_handle;
 
 /**
 * \brief Enum of error codes.
@@ -320,6 +328,7 @@ typedef struct {
 	int				size;
 	int				stride;
 	int				pad;
+	int				quantize;
 	bcnn_layer_type			type;
 	bcnn_activation			activation;
 	bcnn_loss_metric		cost_type;
@@ -386,6 +395,8 @@ typedef struct {
 	float				*adam_m_gpu;	/**< Adam optimizer: first moment gradient */
 	float				*adam_v_gpu;	/**< Adam optimizer: second moment gradient */
 #endif
+	unsigned int		*binary_weight;
+	unsigned int		*binary_workspace;
 #ifdef BCNN_USE_CUDA
 #ifdef BCNN_USE_CUDNN
 	cudnnTensorDescriptor_t			src_tensor_desc;
@@ -440,6 +451,15 @@ typedef struct {
 	char			**finetune_id;
 } bcnn_net;
 
+/* Define for binarized layers */
+#define BITS_IN_CHAR 8
+#define BITS_IN_UINT32 (sizeof(uint32_t) * BITS_IN_CHAR)
+#define BIT_SET(var, pos, val) var |= (val << pos)
+
+/* Start / Stop component */
+//bcnn_status bcnn_start(bcnn_context_handle *ctx, bh_loglvl log_lvl, FILE *out_log);
+
+//bcnn_status bcnn_stop(bcnn_context_handle *ctx);
 
 int bcnn_net_add_connection(bcnn_net *net, bcnn_connection conn);
 
@@ -486,8 +506,21 @@ int bcnn_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
 	float *B, int ldb,
 	float BETA,
 	float *C, int ldc);
+int bcnn_bitgemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
+	uint32_t *A, int lda,
+	uint32_t *B, int ldb,
+	float BETA,
+	float *C, int ldc);
+void bcnn_xnor_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
+                        uint32_t *A, int lda,
+                        uint32_t *B, int ldb,
+						float BETA,
+                        float *C, int ldc);
 float bcnn_l2_distance(float *x, float *y, int n);
-
+float bcnn_sqrdiff_vs(float *x, float a, int n);
+float bcnn_shiftdot(int n, float *x, float a, float *y, float b);
+int bcnn_varnorm(int n, float *a, float c, float *y);
+int bcnn_varmean(int n, float *m, float a, float *var);
 
 int bcnn_init_workload(bcnn_net *net);
 int bcnn_free_workload(bcnn_net *net);
@@ -498,7 +531,7 @@ int bcnn_realloc(bcnn_net *net, int nb_layers);
 
 /* Conv layer */
 int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int pad,
-	int batch_norm, bcnn_weights_init init, bcnn_activation activation, char *id);
+	int batch_norm, bcnn_weights_init init, bcnn_activation activation, int quantize, char *id);
 int bcnn_forward_conv_layer(bcnn_connection *conn);
 int bcnn_backward_conv_layer(bcnn_connection *conn);
 
@@ -514,7 +547,7 @@ int bcnn_forward_batchnorm_layer(bcnn_connection *conn);
 int bcnn_backward_batchnorm_layer(bcnn_connection *conn);
 
 /* Full-connected layer */
-int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation, char *id);
+int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation, int quantize, char *id);
 int bcnn_forward_fullc_layer(bcnn_connection *conn);
 int bcnn_backward_fullc_layer(bcnn_connection *conn);
 
@@ -571,6 +604,10 @@ int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
 int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *data_stream);
 int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter);
 unsigned int _read_int(char *v);
+
+void get_binary_row(float *row, uint32_t *bin_row, int size);
+void get_binary_col(float *col, uint32_t *bin_col, int n, int k);
+void get_binary_col_unrolled(float *col, uint32_t *bin_col, int n, int k);
 
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter);
 
@@ -652,6 +689,11 @@ void bcnn_cuda_vadd(int n, float *a, float *b, float *y);
 void bcnn_cuda_vsub(int n, float *a, float *b, float *y);
 void bcnn_cuda_vmul(int n, float *a, float *b, float *y);
 void bcnn_cuda_vdiv(int n, float *a, float *b, float *y);
+
+void bcnn_cuda_mean_variance_forward(float *x, int b, int c, int wxh, float *mean, float *var);
+void bcnn_cuda_norm_forward(float *x, float *mean, float *variance, int b, int c, int wxh);
+void bcnn_cuda_mean_variance_backward(float *x, float *grad, float *mean, float *var, int b, int c, int wxh, float *mean_diff, float *var_diff);
+void bcnn_cuda_norm_backward(float *x, float *mean, float *var, float *mean_diff, float *var_diff, int b, int c, int wxh, float *grad);
 
 void bcnn_im2col_gpu(float *im,
 	int channels, int height, int width,

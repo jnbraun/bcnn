@@ -29,27 +29,39 @@
 #include "bcnn/bcnn.h"
 
 
-int create_network(bcnn_net *net)
+int create_network(bcnn_net *net, int binarize)
 {
 	net->input_node.w = 28; net->input_node.h = 28; net->input_node.c = 1;
 	net->input_node.b = 16;
+	net->learner.optimizer = SGD;
 	net->learner.learning_rate = 0.003f;
 	net->learner.gamma = 0.00002f;
 	net->learner.decay = 0.0005f;
 	net->learner.momentum = 0.9f;
 	net->learner.policy = SIGMOID;
 	net->learner.step = 40000;
+	net->learner.beta1 = 0.9f;
+	net->learner.beta2 = 0.999f;
 	net->max_batches = 50000;
 
-	bcnn_add_convolutional_layer(net, 12, 3, 1, 1, 0, XAVIER, RELU, "conv1");
+	bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
 	bcnn_add_maxpool_layer(net, 2, 2, "pool1");
 
-	bcnn_add_convolutional_layer(net, 12, 3, 1, 1, 0, XAVIER, RELU, "conv2");
+	if (binarize)
+		bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 1, "conv2");
+	else
+		bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "conv2");
+	bcnn_add_batchnorm_layer(net, "bn2");
 	bcnn_add_maxpool_layer(net, 2, 2, "pool2");
 
-	bcnn_add_fullc_layer(net, 256, XAVIER, RELU, "fc1");
+	if (binarize)
+		bcnn_add_fullc_layer(net, 256, XAVIER, RELU, 0, "fc1");
+	else
+		bcnn_add_fullc_layer(net, 256, XAVIER, RELU, 0, "fc1");
+	bcnn_add_batchnorm_layer(net, "bn3");
 
-	bcnn_add_fullc_layer(net, 10, XAVIER, RELU, "fc2");
+	bcnn_add_fullc_layer(net, 10, XAVIER, RELU, 0, "fc2");
 
 	bcnn_add_softmax_layer(net, "softmax");
 	bcnn_add_cost_layer(net, COST_ERROR, 1.0f);
@@ -73,7 +85,6 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
 	float *out = NULL;
 	float err = 0.0f, error_batch = 0.0f;
 	FILE *f = NULL;
-	int save_batch = net->input_node.b;
 	bcnn_iterator data_mnist = { 0 };
 	int nb = net->nb_connections;
 	int output_size = net->connections[nb - 2].dst_node.w *
@@ -129,7 +140,7 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
 {
 	float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
 	int i = 0;
-	bh_timer t = { 0 };
+	bh_timer t = { 0 }, tp = { 0 };
 	bcnn_iterator data_mnist = { 0 };
 
 	if (bcnn_init_mnist_iterator(&data_mnist, train_img, train_label) != 0)
@@ -144,9 +155,12 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
 
 		if (i % eval_period == 0 && i > 0) {
 			bh_timer_stop(&t);
+			bh_timer_start(&tp);
 			predict_mnist(net, test_img, test_label, &error_valid, 10000, "pred_mnist.txt");
-			fprintf(stderr, "iter= %d train-error= %f test-error= %f training-time= %lf sec\n", i,
-				sum_error / (eval_period * net->input_node.b), error_valid, bh_timer_get_msec(&t) / 1000);
+			bh_timer_stop(&tp);
+			fprintf(stderr, "iter= %d train-error= %f test-error= %f training-time= %lf sec inference-time= %lf sec\n", i,
+				sum_error / (eval_period * net->input_node.b), error_valid,
+				bh_timer_get_msec(&t) / 1000, bh_timer_get_msec(&tp) / 1000);
 			fflush(stderr);
 			bh_timer_start(&t);
 			sum_error = 0;
@@ -163,17 +177,20 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
 }
 
 
-int run(char *train_img, char *train_label, char *test_img, char *test_label)
+int run(char *train_img, char *train_label, char *test_img, char *test_label, int do_binarize)
 {
 	float error_train = 0.0f, error_test = 0.0f;
 	bcnn_net *net = NULL;
+	//bcnn_context_handle hdl = NULL;
 	
+	//bcnn_start(&hdl, BH_LOG_DEBUG, stderr);
 	bcnn_init_net(&net);
 	bh_info("Create Network...");
-	create_network(net);
+	//bh_log(hdl->log_hdl, BH_LOG_INFO, "Create Network");
+	create_network(net, do_binarize);
 
 	bh_info("Start training...");
-	if (train_mnist(net, train_img, train_label, test_img, test_label, 500000, 2300, &error_train) != 0)
+	if (train_mnist(net, train_img, train_label, test_img, test_label, 100000, 1000, &error_train) != 0)
 		bh_error("Can not perform training", -1);
 	
 	bh_info("Start prediction...");
@@ -182,16 +199,18 @@ int run(char *train_img, char *train_label, char *test_img, char *test_label)
 
 	bcnn_end_net(&net);
 
+	//bcnn_stop(&hdl);
+
 	return 0;
 }
 
 
 int main(int argc, char **argv)
 {
-	if (argc < 2) {
-		fprintf(stderr, "Usage: %s <train_img> <train_label> <test_img> <test_label>\n", argv[0]);
+	if (argc < 6) {
+		fprintf(stderr, "Usage: %s <train_img> <train_label> <test_img> <test_label> <is_binarized>\n", argv[0]);
 		return -1;
 	}
-	run(argv[1], argv[2], argv[3], argv[4]);
+	run(argv[1], argv[2], argv[3], argv[4], atoi(argv[5]));
 	return 0;
 }

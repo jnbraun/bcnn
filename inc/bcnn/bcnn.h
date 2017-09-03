@@ -506,7 +506,7 @@ int bcnn_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
 	float *B, int ldb,
 	float BETA,
 	float *C, int ldc);
-void bcnn_xnor_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
+int bcnn_xnor_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
                         uint32_t *A, int lda,
                         uint32_t *B, int ldb,
 						float BETA,

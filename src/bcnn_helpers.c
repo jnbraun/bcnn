@@ -51,6 +51,108 @@ float bcnn_rng_gaussian(bcnn_gauss_gen *g)
 	}
 }
 
+void get_binary_row(float *row, uint32_t *bin_row, int size)
+{
+	int i, j;
+	uint32_t rvalue, sign;
+    for (i = 0; i < size; i += BITS_IN_UINT32) {
+		rvalue=0;
+		for (j = 0;j < BITS_IN_UINT32; ++j) {
+			sign = (row[i+j]>=0);
+			rvalue |= (sign << j);
+		}
+		bin_row[i / BITS_IN_UINT32] = rvalue;
+	}
+}
+
+void get_binary_col(float *col, uint32_t *bin_col, int n, int k)
+{           
+    int x, y, b;
+	uint32_t rvalue, sign;
+	for (y = 0; y < (n / BITS_IN_UINT32); y++) {
+		for (x = 0; x < k; ++x) {          
+			rvalue=0;    
+			for (b=0; b < BITS_IN_UINT32; ++b){
+				sign = (col[(y * BITS_IN_UINT32 + b) * k + x]>=0); 
+				rvalue |= (sign << b);
+			}
+			bin_col[y * k + x] = rvalue;
+		}
+	}    
+}
+
+void get_binary_col_unrolled(float* col, uint32_t * b_col, int n, int k)
+{        
+	int y, b, x;
+    float *col_0, *col_1, *col_2, *col_3;
+	uint32_t *y_col_pt = NULL, *pnter = NULL;
+	//register uint32_t rvalue0,rvalue1, rvalue2, rvalue3;
+	/*register uint32_t sign0, sign1, sign2, sign3, sign4, sign5, sign6, sign7,
+          sign8, sign9, sign10, sign11, sign12, sign13, sign14, sign15;*/
+
+	for (y = 0; y < (n / BITS_IN_UINT32); y++) {
+      y_col_pt = &b_col[y * k];
+      for (x = 0; x < k; x += 4) {          
+        register uint32_t rvalue0 = 0, rvalue1 = 0, rvalue2 = 0, rvalue3 = 0;
+           
+        for(b=0; b<BITS_IN_UINT32; b+=4) {
+          register uint32_t sign0, sign1, sign2, sign3, sign4, sign5, sign6, sign7,
+          sign8, sign9, sign10, sign11, sign12, sign13, sign14, sign15;
+
+          col_0 = &col[(y*BITS_IN_UINT32+b)*k + x];
+          col_1 = &col[(y*BITS_IN_UINT32+b+1)*k + x];
+          col_2 = &col[(y*BITS_IN_UINT32+b+2)*k + x];
+          col_3 = &col[(y*BITS_IN_UINT32+b+3)*k + x];
+
+          sign0 = (*col_0>=0);          
+          sign1 = (*col_1>=0);          
+          sign2 = (*col_2>=0);          
+          sign3 = (*col_3>=0);          
+         
+          BIT_SET(rvalue0, b, sign0);
+          BIT_SET(rvalue0, (b+1), sign1);
+          BIT_SET(rvalue0, (b+2), sign2);
+          BIT_SET(rvalue0, (b+3), sign3);
+
+          sign4 = (*(col_0+1)>=0);          
+          sign5 = (*(col_1+1)>=0);          
+          sign6 = (*(col_2+1)>=0);          
+          sign7 = (*(col_3+1)>=0);          
+         
+          BIT_SET(rvalue1, b, sign4);
+          BIT_SET(rvalue1, (b+1), sign5);
+          BIT_SET(rvalue1, (b+2), sign6);
+          BIT_SET(rvalue1, (b+3), sign7);
+
+          sign8 = (*(col_0+2)>=0);          
+          sign9 = (*(col_1+2)>=0);          
+          sign10 = (*(col_2+2)>=0);          
+          sign11 = (*(col_3+2)>=0);          
+         
+          BIT_SET(rvalue2, b, sign8);
+          BIT_SET(rvalue2, (b+1), sign9);
+          BIT_SET(rvalue2, (b+2), sign10);
+          BIT_SET(rvalue2, (b+3), sign11);
+
+          sign12 = (*(col_0+3)>=0);          
+          sign13 = (*(col_1+3)>=0);          
+          sign14 = (*(col_2+3)>=0);          
+          sign15 = (*(col_3+3)>=0);          
+         
+          BIT_SET(rvalue3, b, sign12);
+          BIT_SET(rvalue3, (b+1), sign13);
+          BIT_SET(rvalue3, (b+2), sign14);
+          BIT_SET(rvalue3, (b+3), sign15);
+        }
+        pnter = &y_col_pt[x];
+        *pnter = rvalue0;   
+        *(pnter+1) = rvalue1;        
+        *(pnter+2) = rvalue2;        
+        *(pnter+3) = rvalue3;        
+      }
+    }     
+}
+
 
 #ifdef BCNN_USE_CUDA
 #ifdef BCNN_USE_CUDNN

@@ -60,12 +60,12 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
 
 	f_lst = fopen(list, "rt");
 	if (f_lst == NULL) {
-		fprintf(stderr, "[ERROR] Can not open %s\n", f_lst);
+		fprintf(stderr, "[ERROR] Can not open %s\n", list);
 		return -1;
 	}
 	f_outlst = fopen(out_pack, "wt");
 	if (f_outlst == NULL) {
-		fprintf(stderr, "[ERROR] Can not open %s\n", f_outlst);
+		fprintf(stderr, "[ERROR] Can not open %s\n", out_pack);
 		return -1;
 	}
 
@@ -260,7 +260,7 @@ int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter)
 {
 	char tmp[16];
 	unsigned char l;
-	unsigned int n_img = 0, n_labels = 0, width = 0, height = 0;
+	unsigned int n_img = 0, n_labels = 0;
 	size_t n = 0;
 	
 	if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0)
@@ -300,10 +300,6 @@ int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
 {
 	FILE *f_bin = NULL, *f_lst = NULL;
 	char *line = NULL;
-	char **tok = NULL;
-	int n_tok = 0;
-	unsigned char *img = NULL;
-	int n = 0, label_width = 0;
 	bcnn_label_type type;
 
 	iter->type = ITER_BIN;
@@ -346,7 +342,6 @@ int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
 int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
 {
 	unsigned char l;
-	unsigned int n_img = 0, n_labels = 0, width = 0, height = 0;
 	size_t n = 0;
 	int i, buf_sz = 0, label_width, type;
 	float lf;
@@ -411,7 +406,7 @@ int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input
 
 	f_list = fopen(path_input, "rb");
 	if (f_list == NULL) {
-		fprintf(stderr, "[ERROR] Can not open file %s\n", f_list);
+		fprintf(stderr, "[ERROR] Can not open file %s\n", path_input);
 		return BCNN_INVALID_PARAMETER;
 	}
 
@@ -447,7 +442,6 @@ int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
 	char *line = NULL;
 	char **tok = NULL;
 	int i, n_tok = 0, tmp_x, tmp_y;
-	size_t n = 0;
 	int out_w = net->connections[net->nb_connections - 2].dst_node.w;
 	int	out_h = net->connections[net->nb_connections - 2].dst_node.h;
 	int	out_c = net->connections[net->nb_connections - 2].dst_node.c;
@@ -607,12 +601,12 @@ int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *path_lab
 	iter->type = ITER_MNIST;
 	f_img = fopen(path_img, "rb");
 	if (f_img == NULL) {
-		fprintf(stderr, "[ERROR] Cound not open file %s\n", f_img);
+		fprintf(stderr, "[ERROR] Cound not open file %s\n", path_img);
 		return -1;
 	}
 	f_label = fopen(path_label, "rb");
 	if (f_label == NULL) {
-		fprintf(stderr, "[ERROR] Cound not open file %s\n", f_label);
+		fprintf(stderr, "[ERROR] Cound not open file %s\n", path_label);
 		return -1;
 	}
 

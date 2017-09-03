@@ -30,7 +30,6 @@
 int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id)
 {
 	int nb_connections = net->nb_connections + 1;
-	int sz;
 	bcnn_connection conn = { 0 };
 	char type_name[256];
 
@@ -50,7 +49,6 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id)
 	conn.dst_node.c = conn.src_node.c;
 	conn.dst_node.b = conn.src_node.b;
 	conn.layer->activation = type;
-	sz = bcnn_node_size(&conn.src_node);
 
 	conn.dst_node.data = conn.src_node.data;
 	conn.dst_node.grad_data = conn.src_node.grad_data;
@@ -69,6 +67,7 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id)
 	case LRELU:		sprintf(type_name, "Leaky-Relu");	break;
 	case ABS:		sprintf(type_name, "AbsVal");		break;
 	case CLAMP:		sprintf(type_name, "Clamp");		break;
+	default:		sprintf(type_name, "None");			break;
 	}
 
 	fprintf(stderr, "[Activation] input_shape= %dx%dx%d type= %s output_shape= %dx%dx%d\n",
@@ -113,6 +112,8 @@ int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a)
 	case CLAMP:
 		for (i = 0; i < sz; ++i)
 			x[i] = bh_clamp(x[i], 0, 1);
+		break;
+	default:
 		break;
 	}
 	return BCNN_SUCCESS;
@@ -164,6 +165,8 @@ int bcnn_backward_activation_cpu(float *x, float *dx, int sz, bcnn_activation a)
 	case CLAMP:
 		for (i = 0; i < sz; ++i)
 			dx[i] *= ((float)(x[i] > 0.0f && x[i] < 1.0f));
+		break;
+	default:
 		break;
 	}
 	return 0;

@@ -721,7 +721,7 @@ static uint32_t portable_popcnt(uint32_t x)
 # define __builtin_popcount portable_popcnt
 #endif
 
-int bcnn_bitgemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
+int bcnn_xnor_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
 	uint32_t *A, int lda,
 	uint32_t *B, int ldb,
 	float BETA,
@@ -744,45 +744,6 @@ int bcnn_bitgemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
 	
 	return 0;
 }
-
-void bcnn_xnor_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
-                        uint32_t *A, int lda,
-                        uint32_t *B, int ldb,
-						float BETA,
-                        float *C, int ldc)
-{
-  int m,k,n;
-  uint32_t A_PART[6];
-  int popc[6];
-  for (m = 0; m < M; ++m) {
-    for (k = 0; k < ((K / 6) * 6); k+=6) {
-      A_PART[0] = A[m*lda+k];
-      A_PART[1] = A[m*lda+k+1];
-      A_PART[2] = A[m*lda+k+2];
-      A_PART[3] = A[m*lda+k+3];
-      A_PART[4] = A[m*lda+k+4];
-      A_PART[5] = A[m*lda+k+5];
-      for (n = 0; n < N; ++n) {
-        popc[0] = __builtin_popcount(~(A_PART[0] ^ B[(k+0)*ldb+n]));
-        popc[1] = __builtin_popcount(~(A_PART[1] ^ B[(k+1)*ldb+n]));
-        popc[2] = __builtin_popcount(~(A_PART[2] ^ B[(k+2)*ldb+n]));
-        popc[3] = __builtin_popcount(~(A_PART[3] ^ B[(k+3)*ldb+n]));
-        popc[4] = __builtin_popcount(~(A_PART[4] ^ B[(k+4)*ldb+n]));
-        popc[5] = __builtin_popcount(~(A_PART[5] ^ B[(k+5)*ldb+n]));
-        C[m*ldc+n] += popc[0] + popc[1] + popc[2] + popc[3] + popc[4] + popc[5];
-      }
-    }
-
-    for (k=(K / 6) * 6; k < K; ++k) {
-      A_PART[0] = A[m*lda+k];
-      for (n = 0; n < N; ++n) {
-        C[m * ldc + n] += __builtin_popcount(~(A_PART[0] ^ B[k * ldb + n]));
-      }
-    }
-  }
-}
-
-
 
 
 float bcnn_l2_distance(float *x, float *y, int n)

@@ -16,7 +16,7 @@ At the current state, it can run on CPU and Nvidia's GPU. CuDNNv5 is now support
 No external dependency (only requires bip (image processing library) and bh (helpers library) already included).
 
 ### GPU build: 
-Requires CUDA libraries (cudart, cublas) and a GPU with compute capability 2.0 at least.
+Requires CUDA libraries (cudart, cublas, curand) and a GPU with compute capability 2.0 at least.
 
 ## Build:
 - On linux systems: clone the repository and simply type: 

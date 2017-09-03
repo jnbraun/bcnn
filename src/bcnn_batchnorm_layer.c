@@ -64,10 +64,10 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
 	conn.layer->bn_shift = (float *)calloc(conn.dst_node.c, sizeof(float));
 	conn.layer->mean = (float *)calloc(conn.dst_node.c, sizeof(float));
 	conn.layer->variance = (float *)calloc(conn.dst_node.c, sizeof(float));
-    conn.layer->global_mean = (float *)calloc(conn.dst_node.c, sizeof(float));
-    conn.layer->global_variance = (float *)calloc(conn.dst_node.c, sizeof(float));
+    	conn.layer->global_mean = (float *)calloc(conn.dst_node.c, sizeof(float));
+    	conn.layer->global_variance = (float *)calloc(conn.dst_node.c, sizeof(float));
 	conn.layer->diff_mean = (float *)calloc(conn.dst_node.c, sizeof(float));
-    conn.layer->diff_variance = (float *)calloc(conn.dst_node.c, sizeof(float));
+    	conn.layer->diff_variance = (float *)calloc(conn.dst_node.c, sizeof(float));
 	conn.layer->x_norm = (float *)calloc(sz, sizeof(float));
 	conn.layer->bn_workspace = (float *)calloc(sz, sizeof(float));
 	conn.layer->bn_scale_diff = (float *)calloc(conn.dst_node.c, sizeof(float));
@@ -126,20 +126,21 @@ static void _mean_variance_forward(float *x, int b, int c, int wxh, float *mean,
 			var[i] += bcnn_dot(wxh, x + k, x + k);
         }
         //mean[i] *= scale;
-		//var[i] = var[i] * scale - mean[i] * mean[i];
+        //var[i] = var[i] * scale - mean[i] * mean[i];
     }
 	bcnn_scal(c, scale, mean);
 	bcnn_varmean(c, mean, scale, var);
 }
 
-static void _norm_forward(float *x, float *mean, float *variance, int b, int c, int spatial_sz)
+static void _norm_forward(float *x, float *mean, float *variance, int b, int c, int wxh)
 {
-    int k, j, i, index;
+    int k, j, i, ind;
+
     for (k = 0; k < b; ++k) {
         for (j = 0; j < c; ++j) {
-            for (i = 0; i < spatial_sz; ++i) {
-                index = k * c * spatial_sz + j * spatial_sz + i;
-                x[index] = (x[index] - mean[j]) / (sqrtf(variance[j]) + 0.000001f);
+            for (i = 0; i < wxh; ++i) {
+                ind = k * c * wxh + j * wxh + i;
+                x[ind] = (x[ind] - mean[j]) / (sqrtf(variance[j]) + 0.000001f);
             }
         }
     }

@@ -38,17 +38,13 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 	char *line = NULL, *curr_layer = NULL;
 	char **tok = NULL;
 	int nb_lines = 0, nb_layers = 0;
-	int w = 0, h = 0, c = 0, stride = 1, pad = 0, n_filts = 1, batch_norm = 0, input_size = 0, size = 3, outputs = 0;
+	int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0;
 	bcnn_activation a = NONE;
 	bcnn_weights_init init = XAVIER;
 	bcnn_loss_metric cost = COST_SSE;
-	float scale = 1.0f, rate = 1.0f;
-	int input_shape[3] = { 0 };
+	float rate = 1.0f;
 	int n_tok;
-	int concat_index = 0;
-	int nb_connections;
 	char *layer_id = NULL;
-	char *finetune_id = NULL;
 
 	file = fopen(config_file, "rt");
 	if (file == 0) {
@@ -71,7 +67,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 				}
 				if (strcmp(curr_layer, "{conv}") == 0 ||
 					strcmp(curr_layer, "{convolutional}") == 0) {
-					bcnn_add_convolutional_layer(net, n_filts, size, stride, pad, 0, init, a, layer_id);
+					bcnn_add_convolutional_layer(net, n_filts, size, stride, pad, 0, init, a, 0, layer_id);
 				}
 				else if (strcmp(curr_layer, "{deconv}") == 0 ||
 					strcmp(curr_layer, "{deconvolutional}") == 0) {
@@ -89,7 +85,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 					strcmp(curr_layer, "{fullconnected}") == 0 ||
 					strcmp(curr_layer, "{fc}") == 0 ||
 					strcmp(curr_layer, "{ip}") == 0) {
-					bcnn_add_fullc_layer(net, outputs, init, a, layer_id);
+					bcnn_add_fullc_layer(net, outputs, init, a, 0, layer_id);
 				}
 				else if (strcmp(curr_layer, "{softmax}") == 0) {
 					bcnn_add_softmax_layer(net, layer_id);
@@ -138,8 +134,6 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 			else if (strcmp(tok[0], "source_test") == 0) bh_fill_option(&param->test_input, tok[1]);
 			else if (strcmp(tok[0], "label_test") == 0) bh_fill_option(&param->path_test_label, tok[1]);
 			else if (strcmp(tok[0], "dropout_rate") == 0 || strcmp(tok[0], "rate") == 0) rate = (float)atof(tok[1]);
-			else if (strcmp(tok[0], "with") == 0) concat_index = atoi(tok[1]);
-			else if (strcmp(tok[0], "batch_norm") == 0) batch_norm = atoi(tok[1]);
 			else if (strcmp(tok[0], "filters") == 0) n_filts = atoi(tok[1]);
 			else if (strcmp(tok[0], "size") == 0) size = atoi(tok[1]);
 			else if (strcmp(tok[0], "stride") == 0) stride = atoi(tok[1]);
@@ -198,7 +192,6 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 		bh_error("Error in config file: last layer must be a cost layer", BCNN_INVALID_PARAMETER);
 	bh_free(curr_layer);
 	fclose(file);
-	nb_connections = net->nb_connections;
 
 	param->eval_period = (param->eval_period > 0 ? param->eval_period : 100);
 
@@ -262,7 +255,6 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error, int dump_pr
 	float err = 0.0f, error_batch = 0.0f;
 	FILE *f = NULL;
 	int batch_size = net->input_node.b;
-	unsigned char *img_pred = NULL;
 	char out_pred_name[128] = { 0 };
 	bcnn_iterator iter_data = { 0 };
 	int out_w = net->connections[net->nb_connections - 2].dst_node.w;
@@ -274,11 +266,8 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error, int dump_pr
 		return -1;
 
 	if (dump_pred) {
-		if (net->prediction_type == HEATMAP_REGRESSION ||
-			net->prediction_type == SEGMENTATION) {
-			img_pred = (unsigned char *)calloc(out_w * out_h, sizeof(unsigned char));
-		}
-		else {
+		if (net->prediction_type != HEATMAP_REGRESSION &&
+				net->prediction_type != SEGMENTATION) {
 			f = fopen(param->pred_out, "wt");
 			if (f == NULL) {
 				fprintf(stderr, "[ERROR] bcnn_predict: Can't open file %s", param->pred_out);

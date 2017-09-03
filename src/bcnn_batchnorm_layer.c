@@ -229,16 +229,16 @@ static void _mean_variance_backward(float *x, float *grad, float *mean, float *v
 
 static void _normalize_backward(float *x, float *mean, float *var, float *mean_delta, float *var_diff, int b, int c, int wxh, float *grad)
 {
-    int i, j, k, ind;
+	int i, j, k, ind;
 
-    for (j = 0; j < b; ++j) {
-        for (i = 0; i < c; ++i) {
-            for (k = 0; k < wxh; ++k) {
-                ind = j * c * wxh + i * wxh + k;
-                grad[ind] = grad[ind] * 1.0f / (sqrtf(var[i] + 0.00001f)) + var_diff[i] * 2.0f * (x[ind] - mean[i]) / (wxh * b) + mean_delta[i] / (wxh * b);
-            }
-        }
-    }
+	for (j = 0; j < b; ++j) {
+		for (i = 0; i < c; ++i) {
+			for (k = 0; k < wxh; ++k) {
+				ind = j * c * wxh + i * wxh + k;
+				grad[ind] = grad[ind] * 1.0f / (sqrtf(var[i] + 0.00001f)) + var_diff[i] * 2.0f * (x[ind] - mean[i]) / (wxh * b) + mean_delta[i] / (wxh * b);
+			}
+		}
+	}
 }
 
 int bcnn_backward_batchnorm_layer_cpu(bcnn_connection *conn)
@@ -250,8 +250,8 @@ int bcnn_backward_batchnorm_layer_cpu(bcnn_connection *conn)
 	int sz = dst.w * dst.h * dst.c;
 	
 	if (!conn->state) {
-        layer->mean = layer->global_mean;
-        layer->variance = layer->global_variance;
+		layer->mean = layer->global_mean;
+		layer->variance = layer->global_variance;
 	}
 
 	_backward_bias(layer->bias_diff, dst.grad_data, batch_size, dst.c, dst.w * dst.h);

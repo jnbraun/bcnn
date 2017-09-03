@@ -31,7 +31,6 @@ int bcnn_add_softmax_layer(bcnn_net *net, char *id)
 {
 	int nb_connections = net->nb_connections + 1;
 	int sz;
-	float std_init = 0.0f;
 	bcnn_connection conn = { 0 };
 
 	if (id != NULL)
@@ -71,7 +70,6 @@ int bcnn_forward_softmax_layer_cpu(bcnn_connection *conn)
 	int src_size = conn->src_node.w * conn->src_node.h * conn->src_node.c;
 	float vmax = -FLT_MAX;
 	float sum = 0.0f;
-	bcnn_layer *layer = conn->layer;
 	bcnn_node src = conn->src_node;
 	bcnn_node dst = conn->dst_node;
 

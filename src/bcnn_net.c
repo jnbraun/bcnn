@@ -239,8 +239,6 @@ int bcnn_compile_net(bcnn_net *net, char *phase)
 int bcnn_forward(bcnn_net *net)
 {
 	 int i;
-	 int n = net->nb_connections;
-	 int k = (net->connections[n - 1].layer->type == COST ? (n - 2) : (n - 1));
 	 int output_size = 0;
 	 bcnn_connection conn = { 0 };
 
@@ -525,15 +523,12 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 {
 	int i, j, sz = net->input_node.w * net->input_node.h * net->input_node.c, n, offset;
 	int nb = net->nb_connections;
-	int end_node = (net->connections[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
 	int w, h, c;
-	char *line = NULL;
-	unsigned char *img = NULL, *img_tmp = NULL;
+	unsigned char *img_tmp = NULL;
 	float *x = net->input_node.data;
 	float *y = net->connections[nb - 1].label;
 	float x_scale, y_scale;
-	char **tok = NULL;
-	int n_tok = 0, x_pos, y_pos;
+	int x_pos, y_pos;
 	int use_buffer_img = (net->task == TRAIN && net->state != 0 &&
 		(net->data_aug.range_shift_x != 0 || net->data_aug.range_shift_y != 0 ||
 		net->data_aug.rotation_range != 0));
@@ -802,9 +797,9 @@ int bcnn_load_model(bcnn_net *net, char *filename)
 			layer->type == DECONVOLUTIONAL ||
 			layer->type == FULL_CONNECTED) && is_ft == 0) {
 			nb_read = fread(layer->bias, sizeof(float), layer->bias_size, fp);
-			fprintf(stderr, "layer= %d nbread_bias= %d bias_size_expected= %d\n", i, nb_read, layer->bias_size);
+			fprintf(stderr, "layer= %d nbread_bias= %lu bias_size_expected= %d\n", i, (unsigned long)nb_read, layer->bias_size);
 			nb_read = fread(layer->weight, sizeof(float), layer->weights_size, fp);
-			fprintf(stderr, "layer= %d nbread_weight= %d weight_size_expected= %d\n", i, nb_read, layer->weights_size);
+			fprintf(stderr, "layer= %d nbread_weight= %lu weight_size_expected= %d\n", i, (unsigned long)nb_read, layer->weights_size);
 #ifdef BCNN_USE_CUDA
 			bcnn_cuda_memcpy_host2dev(layer->weight_gpu, layer->weight, layer->weights_size);
 			bcnn_cuda_memcpy_host2dev(layer->bias_gpu, layer->bias, layer->bias_size);
@@ -829,9 +824,6 @@ int bcnn_visualize_network(bcnn_net *net)
 	char name[256];
 	FILE *ftmp = NULL;
 	int nb = net->nb_connections;
-	int output_size = net->connections[nb - 2].dst_node.w * 
-		net->connections[nb - 2].dst_node.h *
-		net->connections[nb - 2].dst_node.c;
 		
 	for (j = 0; j < net->nb_connections; ++j) {
 		if (net->connections[j].layer->type == CONVOLUTIONAL) {
@@ -935,6 +927,8 @@ int bcnn_free_layer(bcnn_layer **layer)
 	bh_free(p_layer->rand);
 	bh_free(p_layer->adam_m);
 	bh_free(p_layer->adam_v);
+	bh_free(p_layer->binary_weight);
+	bh_free(p_layer->binary_workspace);
 #ifdef BCNN_USE_CUDA
 	if (p_layer->indexes_gpu)          bcnn_cuda_free(p_layer->indexes_gpu);
 	if (p_layer->weight_gpu)          bcnn_cuda_free(p_layer->weight_gpu);

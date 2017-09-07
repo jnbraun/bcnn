@@ -30,7 +30,7 @@
 int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
 {
 	int nb_connections = net->nb_connections + 1;
-	int i, sz;
+	int sz;
 	bcnn_connection conn = { 0 };
 
 	bh_assert(nb_connections >= 2,
@@ -54,14 +54,6 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
 
 	conn.dst_node.data = (float *)calloc(sz, sizeof(float));
 	conn.dst_node.grad_data = (float *)calloc(sz, sizeof(float));
-	conn.layer->bias_size = conn.dst_node.c;
-	conn.layer->bias = (float *)calloc(conn.layer->bias_size, sizeof(float));
-	conn.layer->bias_diff = (float *)calloc(conn.layer->bias_size, sizeof(float));
-	conn.layer->bn_scale = (float *)calloc(conn.dst_node.c, sizeof(float));
-	for (i = 0; i < conn.dst_node.c; ++i) {
-        conn.layer->bn_scale[i] = 1;
-    }
-	conn.layer->bn_shift = (float *)calloc(conn.dst_node.c, sizeof(float));
 	conn.layer->mean = (float *)calloc(conn.dst_node.c, sizeof(float));
 	conn.layer->variance = (float *)calloc(conn.dst_node.c, sizeof(float));
     	conn.layer->global_mean = (float *)calloc(conn.dst_node.c, sizeof(float));
@@ -70,19 +62,9 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
     	conn.layer->diff_variance = (float *)calloc(conn.dst_node.c, sizeof(float));
 	conn.layer->x_norm = (float *)calloc(sz, sizeof(float));
 	conn.layer->bn_workspace = (float *)calloc(sz, sizeof(float));
-	conn.layer->bn_scale_diff = (float *)calloc(conn.dst_node.c, sizeof(float));
-	conn.layer->bn_shift_diff = (float *)calloc(conn.dst_node.c, sizeof(float));
-	conn.layer->batch_sum_multiplier = (float *)calloc(conn.dst_node.b, sizeof(float));
-	conn.layer->spatial_sum_multiplier = (float *)calloc(conn.dst_node.w * conn.dst_node.h,
-		sizeof(float));
-	conn.layer->spatial_stats = (float *)calloc(conn.dst_node.b * conn.dst_node.c, sizeof(float));
-	bcnn_fill_f32(conn.dst_node.b, 1.0f, conn.layer->batch_sum_multiplier);
-	bcnn_fill_f32(conn.dst_node.w * conn.dst_node.h, 1.0f, conn.layer->spatial_sum_multiplier);
 #ifdef BCNN_USE_CUDA
 	conn.dst_node.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.data, sz);
 	conn.dst_node.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.grad_data, sz);
-	conn.layer->bias_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias, conn.layer->bias_size);
-	conn.layer->bias_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias_diff, conn.layer->bias_size);
 	conn.layer->mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->mean, conn.dst_node.c);
     conn.layer->variance_gpu = bcnn_cuda_memcpy_f32(conn.layer->variance, conn.dst_node.c);
     conn.layer->global_mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->global_mean, conn.dst_node.c);
@@ -90,14 +72,6 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
 	conn.layer->diff_mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->diff_mean, conn.dst_node.c);
     conn.layer->diff_variance_gpu = bcnn_cuda_memcpy_f32(conn.layer->diff_variance, conn.dst_node.c);
 	conn.layer->x_norm_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.data, sz);
-	conn.layer->bn_scale_gpu = bcnn_cuda_memcpy_f32(conn.layer->bn_scale, conn.dst_node.c);
-	conn.layer->bn_scale_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bn_scale_diff, conn.dst_node.c);
-	conn.layer->bn_shift_gpu = bcnn_cuda_memcpy_f32(conn.layer->bn_shift, conn.dst_node.c);
-	conn.layer->bn_shift_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bn_shift_diff, conn.dst_node.c);
-	conn.layer->batch_sum_multiplier_gpu = bcnn_cuda_memcpy_f32(conn.layer->batch_sum_multiplier, conn.dst_node.b);
-	conn.layer->spatial_sum_multiplier_gpu = bcnn_cuda_memcpy_f32(conn.layer->spatial_sum_multiplier,
-		conn.dst_node.w * conn.dst_node.h);
-	conn.layer->spatial_stats_gpu = bcnn_cuda_memcpy_f32(conn.layer->spatial_stats, conn.dst_node.b * conn.dst_node.c);
 	conn.layer->bn_workspace_gpu = bcnn_cuda_memcpy_f32(conn.layer->bn_workspace, sz);
 #endif
 	net->nb_connections = nb_connections;
@@ -148,20 +122,6 @@ static void _norm_forward(float *x, float *mean, float *variance, int b, int c, 
 }
 
 
-static void add_bias(float *output, float *biases, int b, int n, int size)
-{
-    int i, j, k;
-
-    for (k = 0; k < b; ++k) {
-        for (i = 0; i < n; ++i) {
-            for (j = 0; j < size; ++j) {
-                output[(k * n + i) * size + j] += biases[i];
-            }
-        }
-    }
-}
-
-
 int bcnn_forward_batchnorm_layer_cpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
@@ -189,23 +149,7 @@ int bcnn_forward_batchnorm_layer_cpu(bcnn_connection *conn)
 		_norm_forward(dst.data, layer->global_mean, layer->global_variance, batch_size, dst.c, dst.h * dst.w);  
 	}
 
-	add_bias(dst.data, layer->bias, batch_size, dst.c, dst.h * dst.w);
-
 	return BCNN_SUCCESS;
-}
-
-static int _backward_bias(float *bias_diff, float *diff, int b, int n, int size)
-{
-    int i, k;
-	float *p = NULL;
-
-    for (k = 0; k < b; ++k) {
-        for (i = 0; i < n; ++i) {
-			p = diff + size * (i + k * n);
-			bcnn_vsum(size, p, &bias_diff[i]);
-        }
-    }
-	return 0;
 }
 
 static void _mean_variance_backward(float *x, float *grad, float *mean, float *var, int b, int c, int wxh, float *mean_diff, float *var_diff)
@@ -254,7 +198,6 @@ int bcnn_backward_batchnorm_layer_cpu(bcnn_connection *conn)
 		layer->variance = layer->global_variance;
 	}
 
-	_backward_bias(layer->bias_diff, dst.grad_data, batch_size, dst.c, dst.w * dst.h);
 	_mean_variance_backward(layer->bn_workspace, dst.grad_data, layer->mean, layer->variance, batch_size, dst.c, dst.w * dst.h, layer->diff_mean, layer->diff_variance);
 	_normalize_backward(layer->bn_workspace, layer->mean, layer->variance, layer->diff_mean, layer->diff_variance, batch_size, dst.c, dst.w * dst.h, dst.grad_data);
 

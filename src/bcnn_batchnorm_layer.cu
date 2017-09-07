@@ -52,8 +52,6 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_connection *conn)
 		bcnn_cuda_norm_forward(dst.data_gpu, layer->global_mean_gpu, layer->global_variance_gpu, batch_size, dst.c, dst.h * dst.w);  
 	}
 
-	bcnn_forward_bias_gpu(dst.data_gpu, layer->bias_gpu, batch_size, dst.c, dst.h * dst.w);
-
 	return BCNN_SUCCESS;
 }
 
@@ -71,7 +69,6 @@ int bcnn_backward_batchnorm_layer_gpu(bcnn_connection *conn)
         layer->variance_gpu = layer->global_variance_gpu;
 	}
 
-	bcnn_backward_bias_gpu(layer->bias_diff_gpu, dst.grad_data_gpu, src.b, dst.c, dst.w * dst.h);
 	bcnn_cuda_mean_variance_backward(layer->bn_workspace_gpu, dst.grad_data_gpu, layer->mean_gpu,
 		layer->variance_gpu, src.b, dst.c, dst.w * dst.h, layer->diff_mean_gpu, layer->diff_variance_gpu);
 	bcnn_cuda_norm_backward(layer->bn_workspace_gpu, layer->mean_gpu, layer->variance_gpu, layer->diff_mean_gpu, layer->diff_variance_gpu, src.b,

@@ -356,38 +356,29 @@ static float bcnn_update_learning_rate(bcnn_net *net)
 }
 
 
-int bcnn_apply_update_to_layer(bcnn_connection *conn, int batch_size, float learning_rate, float momentum, float decay)
+int bcnn_sgd_optimizer(bcnn_connection *conn, int batch_size, float learning_rate, float momentum, float decay)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node dst = conn->dst_node;
 
 #ifdef BCNN_USE_CUDA
-	bcnn_cuda_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff_gpu, 1, layer->bias_gpu, 1);
-	bcnn_cuda_scal(layer->bias_size, momentum, layer->bias_diff_gpu, 1);
-
-	bcnn_cuda_axpy(layer->weights_size, decay * batch_size, layer->weight_gpu, 1, layer->weight_diff_gpu, 1);
-	bcnn_cuda_axpy(layer->weights_size, -learning_rate / batch_size, layer->weight_diff_gpu, 1, layer->weight_gpu, 1);
-	bcnn_cuda_scal(layer->weights_size, momentum, layer->weight_diff_gpu, 1);
-
-	if (layer->bn_scale_diff_gpu && layer->bn_scale_gpu && layer->bn_shift_gpu && layer->bn_shift_diff_gpu) {
-		bcnn_cuda_axpy(dst.c, -learning_rate / batch_size, layer->bn_scale_diff_gpu, 1, layer->bn_scale_gpu, 1);
-		bcnn_cuda_scal(dst.c, momentum, layer->bn_scale_diff_gpu, 1);
-		bcnn_cuda_axpy(dst.c, -learning_rate / batch_size, layer->bn_shift_diff_gpu, 1, layer->bn_shift_gpu, 1);
-		bcnn_cuda_scal(dst.c, momentum, layer->bn_shift_diff_gpu, 1);
+	if (layer->bias_gpu && layer->bias_diff_gpu) {
+		bcnn_cuda_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff_gpu, 1, layer->bias_gpu, 1);
+		bcnn_cuda_scal(layer->bias_size, momentum, layer->bias_diff_gpu, 1);
+	}
+	if (layer->weight_gpu && layer->weight_diff_gpu) {
+		bcnn_cuda_axpy(layer->weights_size, decay * batch_size, layer->weight_gpu, 1, layer->weight_diff_gpu, 1);
+		bcnn_cuda_axpy(layer->weights_size, -learning_rate / batch_size, layer->weight_diff_gpu, 1, layer->weight_gpu, 1);
+		bcnn_cuda_scal(layer->weights_size, momentum, layer->weight_diff_gpu, 1);
 	}
 #else
-	bcnn_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff, layer->bias);
-	bcnn_scal(layer->bias_size, momentum, layer->bias_diff);
-
-	bcnn_axpy(layer->weights_size, decay * batch_size, layer->weight, layer->weight_diff);
-	bcnn_axpy(layer->weights_size, -learning_rate / batch_size, layer->weight_diff, layer->weight);
-	bcnn_scal(layer->weights_size, momentum, layer->weight_diff);
-
-	if (layer->bn_scale_diff && layer->bn_scale && layer->bn_shift && layer->bn_shift_diff) {
-		bcnn_axpy(dst.c, -learning_rate / batch_size, layer->bn_scale_diff, layer->bn_scale);
-		bcnn_scal(dst.c, momentum, layer->bn_scale_diff);
-		bcnn_axpy(dst.c, -learning_rate / batch_size, layer->bn_shift_diff, layer->bn_shift);
-		bcnn_scal(dst.c, momentum, layer->bn_shift_diff);
+	if (layer->bias && layer->bias_diff) {
+		bcnn_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff, layer->bias);
+		bcnn_scal(layer->bias_size, momentum, layer->bias_diff);
+	}
+	if (layer->weight && layer->weight_diff) {
+		bcnn_axpy(layer->weights_size, decay * batch_size, layer->weight, layer->weight_diff);
+		bcnn_axpy(layer->weights_size, -learning_rate / batch_size, layer->weight_diff, layer->weight);
+		bcnn_scal(layer->weights_size, momentum, layer->weight_diff);
 	}
 #endif
 	return 0;
@@ -397,51 +388,41 @@ int bcnn_apply_update_to_layer(bcnn_connection *conn, int batch_size, float lear
 int bcnn_adam_optimizer(bcnn_connection *conn, int iter, int batch_size, float beta1, float beta2, float learning_rate, float momentum, float decay)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node dst = conn->dst_node;
 	float mu_correction = sqrtf(1.0f - powf(beta2, (float)iter + 1)) / (1.0f - powf(beta1, (float)iter + 1));
 
 #ifdef BCNN_USE_CUDA
-	bcnn_cuda_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff_gpu, 1, layer->bias_gpu, 1);
-	bcnn_cuda_scal(layer->bias_size, momentum, layer->bias_diff_gpu, 1);
-
-	if (layer->bn_scale_diff_gpu && layer->bn_scale_gpu && layer->bn_shift_gpu && layer->bn_shift_diff_gpu) {
-		bcnn_cuda_axpy(dst.c, -learning_rate / batch_size, layer->bn_scale_diff_gpu, 1, layer->bn_scale_gpu, 1);
-		bcnn_cuda_scal(dst.c, momentum, layer->bn_scale_diff_gpu, 1);
-		bcnn_cuda_axpy(dst.c, -learning_rate / batch_size, layer->bn_shift_diff_gpu, 1, layer->bn_shift_gpu, 1);
-		bcnn_cuda_scal(dst.c, momentum, layer->bn_shift_diff_gpu, 1);
+	if (layer->bias_gpu && layer->bias_diff_gpu) {
+		bcnn_cuda_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff_gpu, 1, layer->bias_gpu, 1);
+		bcnn_cuda_scal(layer->bias_size, momentum, layer->bias_diff_gpu, 1);
 	}
-
-	bcnn_cuda_axpy(layer->weights_size, decay * batch_size, layer->weight_gpu, 1, layer->weight_diff_gpu, 1);
-	bcnn_cuda_axpby(layer->weights_size, 1.0f - beta1, layer->weight_diff_gpu, beta1, layer->adam_m_gpu);
-	bcnn_cuda_vmul(layer->weights_size, layer->weight_diff_gpu, layer->weight_diff_gpu, layer->weight_diff_gpu);
-	bcnn_cuda_axpby(layer->weights_size, 1.0f - beta2, layer->weight_diff_gpu, beta2, layer->adam_v_gpu);
-	bcnn_cuda_pow(layer->weights_size, layer->adam_v_gpu, 0.5f, layer->weight_diff_gpu);
-	bcnn_cuda_add_scalar(layer->weights_size, 0.0000001f, layer->weight_diff_gpu);
-	bcnn_cuda_vdiv(layer->weights_size, layer->adam_m_gpu, layer->weight_diff_gpu, layer->weight_diff_gpu);
-	bcnn_cuda_axpy(layer->weights_size, -learning_rate / batch_size * mu_correction, layer->weight_diff_gpu, 1, layer->weight_gpu, 1);
-	bcnn_cuda_fill_f32(layer->weights_size, 0.0f, layer->weight_diff_gpu, 1);
+	if (layer->weight_gpu && layer->weight_diff_gpu) {
+		bcnn_cuda_axpy(layer->weights_size, decay * batch_size, layer->weight_gpu, 1, layer->weight_diff_gpu, 1);
+		bcnn_cuda_axpby(layer->weights_size, 1.0f - beta1, layer->weight_diff_gpu, beta1, layer->adam_m_gpu);
+		bcnn_cuda_vmul(layer->weights_size, layer->weight_diff_gpu, layer->weight_diff_gpu, layer->weight_diff_gpu);
+		bcnn_cuda_axpby(layer->weights_size, 1.0f - beta2, layer->weight_diff_gpu, beta2, layer->adam_v_gpu);
+		bcnn_cuda_pow(layer->weights_size, layer->adam_v_gpu, 0.5f, layer->weight_diff_gpu);
+		bcnn_cuda_add_scalar(layer->weights_size, 0.0000001f, layer->weight_diff_gpu);
+		bcnn_cuda_vdiv(layer->weights_size, layer->adam_m_gpu, layer->weight_diff_gpu, layer->weight_diff_gpu);
+		bcnn_cuda_axpy(layer->weights_size, -learning_rate / batch_size * mu_correction, layer->weight_diff_gpu, 1, layer->weight_gpu, 1);
+		bcnn_cuda_fill_f32(layer->weights_size, 0.0f, layer->weight_diff_gpu, 1);
+	}
 #else
-	bcnn_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff, layer->bias);
-	bcnn_scal(layer->bias_size, momentum, layer->bias_diff);
-
-	if (layer->bn_scale_diff && layer->bn_scale && layer->bn_shift && layer->bn_shift_diff) {
-		bcnn_axpy(dst.c, -learning_rate / batch_size, layer->bn_scale_diff, layer->bn_scale);
-		bcnn_scal(dst.c, momentum, layer->bn_scale_diff);
-		bcnn_axpy(dst.c, -learning_rate / batch_size, layer->bn_shift_diff, layer->bn_shift);
-		bcnn_scal(dst.c, momentum, layer->bn_shift_diff);
+	if (layer->bias && layer->bias_diff) {
+		bcnn_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff, layer->bias);
+		bcnn_scal(layer->bias_size, momentum, layer->bias_diff);
 	}
 
-	bcnn_axpy(layer->weights_size, decay * batch_size, layer->weight, layer->weight_diff);
-	bcnn_axpby(layer->weights_size, 1.0f - beta1, layer->weight_diff, beta1, layer->adam_m);
-	bcnn_vmul(layer->weights_size, layer->weight_diff, layer->weight_diff, layer->weight_diff);
-	bcnn_axpby(layer->weights_size, 1.0f - beta2, layer->weight_diff, beta2, layer->adam_v);
-
-	bcnn_pow(layer->weights_size, layer->adam_v, 0.5f, layer->weight_diff);
-	bcnn_add_scalar(layer->weights_size, 0.0000001f, layer->weight_diff);
-	bcnn_vdiv(layer->weights_size, layer->adam_m, layer->weight_diff, layer->weight_diff);
-
-	bcnn_axpy(layer->weights_size, -learning_rate / batch_size * mu_correction, layer->weight_diff, layer->weight);
-	memset(layer->weight_diff, 0, layer->weights_size * sizeof(float));
+	if (layer->weight && layer->weight_diff) {
+		bcnn_axpy(layer->weights_size, decay * batch_size, layer->weight, layer->weight_diff);
+		bcnn_axpby(layer->weights_size, 1.0f - beta1, layer->weight_diff, beta1, layer->adam_m);
+		bcnn_vmul(layer->weights_size, layer->weight_diff, layer->weight_diff, layer->weight_diff);
+		bcnn_axpby(layer->weights_size, 1.0f - beta2, layer->weight_diff, beta2, layer->adam_v);
+		bcnn_pow(layer->weights_size, layer->adam_v, 0.5f, layer->weight_diff);
+		bcnn_add_scalar(layer->weights_size, 0.0000001f, layer->weight_diff);
+		bcnn_vdiv(layer->weights_size, layer->adam_m, layer->weight_diff, layer->weight_diff);	
+		bcnn_axpy(layer->weights_size, -learning_rate / batch_size * mu_correction, layer->weight_diff, layer->weight);
+		memset(layer->weight_diff, 0, layer->weights_size * sizeof(float));
+	}
 #endif
 	return 0;
 }
@@ -458,9 +439,8 @@ int bcnn_update(bcnn_net *net)
 			type = net->connections[i].layer->type;
 			if ((type == CONVOLUTIONAL || 
 				type == DECONVOLUTIONAL || 
-				type == FULL_CONNECTED ||
-				type == BATCHNORM)) {
-				bcnn_apply_update_to_layer(&net->connections[i],
+				type == FULL_CONNECTED)) {
+				bcnn_sgd_optimizer(&net->connections[i],
 						net->input_node.b, lr, net->learner.momentum, net->learner.decay);
 			}
 		}
@@ -470,8 +450,7 @@ int bcnn_update(bcnn_net *net)
 			type = net->connections[i].layer->type;
 			if ((type == CONVOLUTIONAL || 
 				type == DECONVOLUTIONAL || 
-				type == FULL_CONNECTED ||
-				type == BATCHNORM)) {
+				type == FULL_CONNECTED)) {
 				bcnn_adam_optimizer(&net->connections[i], net->seen, net->input_node.b, net->learner.beta1, net->learner.beta2,
 					lr, net->learner.momentum, net->learner.decay);
 			}
@@ -916,14 +895,11 @@ int bcnn_free_layer(bcnn_layer **layer)
 	bh_free(p_layer->diff_variance);
 	bh_free(p_layer->global_variance);
 	bh_free(p_layer->x_norm);
-	bh_free(p_layer->bn_scale);
-	bh_free(p_layer->bn_scale_diff);
+	/*bh_free(p_layer->bn_scale);
+	bh_free(p_layer->bn_scale_diff);*/
 	bh_free(p_layer->bn_workspace);
-	bh_free(p_layer->spatial_stats);
-	bh_free(p_layer->bn_shift);
-	bh_free(p_layer->bn_shift_diff);
-	bh_free(p_layer->spatial_sum_multiplier);
-	bh_free(p_layer->batch_sum_multiplier);
+	/*bh_free(p_layer->bn_shift);
+	bh_free(p_layer->bn_shift_diff);*/
 	bh_free(p_layer->rand);
 	bh_free(p_layer->adam_m);
 	bh_free(p_layer->adam_v);
@@ -943,14 +919,11 @@ int bcnn_free_layer(bcnn_layer **layer)
 	if (p_layer->diff_variance_gpu)	bcnn_cuda_free(p_layer->diff_variance_gpu);
 	if (p_layer->global_variance_gpu)	bcnn_cuda_free(p_layer->global_variance_gpu);
 	if (p_layer->x_norm_gpu)			bcnn_cuda_free(p_layer->x_norm_gpu);
-	if (p_layer->bn_scale_gpu)		bcnn_cuda_free(p_layer->bn_scale_gpu);
-	if (p_layer->bn_scale_diff_gpu)	bcnn_cuda_free(p_layer->bn_scale_diff_gpu);
-	if (p_layer->spatial_sum_multiplier_gpu)	bcnn_cuda_free(p_layer->spatial_sum_multiplier_gpu);
-	if (p_layer->batch_sum_multiplier_gpu)	bcnn_cuda_free(p_layer->batch_sum_multiplier_gpu);
+	/*if (p_layer->bn_scale_gpu)		bcnn_cuda_free(p_layer->bn_scale_gpu);
+	if (p_layer->bn_scale_diff_gpu)	bcnn_cuda_free(p_layer->bn_scale_diff_gpu);*/
 	if (p_layer->bn_workspace_gpu)	bcnn_cuda_free(p_layer->bn_workspace_gpu);
-	if (p_layer->spatial_stats_gpu)	bcnn_cuda_free(p_layer->spatial_stats_gpu);
-	if (p_layer->bn_shift_gpu)	bcnn_cuda_free(p_layer->bn_shift_gpu);
-	if (p_layer->bn_shift_diff_gpu)	bcnn_cuda_free(p_layer->bn_shift_diff_gpu);
+	/*if (p_layer->bn_shift_gpu)	bcnn_cuda_free(p_layer->bn_shift_gpu);
+	if (p_layer->bn_shift_diff_gpu)	bcnn_cuda_free(p_layer->bn_shift_diff_gpu);*/
 	if (p_layer->rand_gpu)             bcnn_cuda_free(p_layer->rand_gpu);
 	if (p_layer->adam_m_gpu)             bcnn_cuda_free(p_layer->adam_m_gpu);
 	if (p_layer->adam_v_gpu)             bcnn_cuda_free(p_layer->adam_v_gpu);

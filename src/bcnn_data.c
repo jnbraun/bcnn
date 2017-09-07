@@ -468,7 +468,7 @@ int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
 	// Label
 	if (net->prediction_type != SEGMENTATION) {
 		for (i = 0; i < iter->label_width; ++i) {
-			iter->label_float[i] = atof(tok[i + 1]);
+			iter->label_float[i] = (float)atof(tok[i + 1]);
 		}
 	}
 	else {

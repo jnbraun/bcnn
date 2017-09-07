@@ -324,40 +324,39 @@ typedef struct {
 * \brief Structure defining a generic layer.
 */
 typedef struct {
-	int				num;
-	int				size;
-	int				stride;
-	int				pad;
-	int				quantize;
-	bcnn_layer_type			type;
-	bcnn_activation			activation;
-	bcnn_loss_metric		cost_type;
+	int					num;
+	int					size;
+	int					stride;
+	int					pad;
+	int					quantize;
+	bcnn_layer_type		type;
+	bcnn_activation		activation;
+	bcnn_loss_metric	cost_type;
 	float				dropout_rate;
 	float				scale;
-	int				concat_index;
-	int				weights_size;
+	int					concat_index;
+	int					weights_size;
 	float				*weight;
 	float				*weight_diff;
 #ifdef BCNN_USE_CUDA
 	float				*weight_gpu;
 	float				*weight_diff_gpu;
 #endif
-	int				bias_size;
+	int					bias_size;
 	float				*bias;
 	float				*bias_diff;
 #ifdef BCNN_USE_CUDA
 	float				*bias_gpu;
 	float				*bias_diff_gpu;
 #endif
-	int				*indexes;
+	int					*indexes;
 	float				*conv_workspace;
 	float				*rand;
 #ifdef BCNN_USE_CUDA
-	int				*indexes_gpu;
+	int					*indexes_gpu;
 	float				*conv_workspace_gpu;
 	float				*rand_gpu;
 #endif
-	float				*spatial_stats;
 	float				*bn_workspace;
 	float				*mean;
 	float				*variance;
@@ -365,13 +364,7 @@ typedef struct {
 	float				*global_variance;
 	float				*diff_mean;
 	float				*diff_variance;
-	float				*bn_scale;
-	float				*bn_scale_diff;
-	float				*bn_shift;
-	float				*bn_shift_diff;
 	float				*x_norm;
-	float				*spatial_sum_multiplier;
-	float				*batch_sum_multiplier;
 #ifdef BCNN_USE_CUDA
 	float				*mean_gpu;
 	float				*variance_gpu;
@@ -379,15 +372,8 @@ typedef struct {
 	float				*global_variance_gpu;
 	float				*diff_mean_gpu;
 	float				*diff_variance_gpu;
-	float				*bn_scale_gpu;
-	float				*bn_scale_diff_gpu;
-	float				*bn_shift_gpu;
-	float				*bn_shift_diff_gpu;
 	float				*bn_workspace_gpu;
-	float				*spatial_stats_gpu;
 	float				*x_norm_gpu;
-	float				*spatial_sum_multiplier_gpu;
-	float				*batch_sum_multiplier_gpu;
 #endif
 	float				*adam_m;		/**< Adam optimizer: first moment gradient */
 	float				*adam_v;		/**< Adam optimizer: second moment gradient */
@@ -399,20 +385,20 @@ typedef struct {
 	unsigned int		*binary_workspace;
 #ifdef BCNN_USE_CUDA
 #ifdef BCNN_USE_CUDNN
-	cudnnTensorDescriptor_t			src_tensor_desc;
-	cudnnTensorDescriptor_t			dst_tensor_desc;
-	cudnnTensorDescriptor_t			src_tensor_desc_diff;
-	cudnnTensorDescriptor_t			dst_tensor_desc_diff;
-	cudnnFilterDescriptor_t			filter_desc;
-	cudnnFilterDescriptor_t			filter_desc_diff;
-	cudnnTensorDescriptor_t			bias_desc;
-	cudnnTensorDescriptor_t			bias_desc_diff;
+	cudnnTensorDescriptor_t				src_tensor_desc;
+	cudnnTensorDescriptor_t				dst_tensor_desc;
+	cudnnTensorDescriptor_t				src_tensor_desc_diff;
+	cudnnTensorDescriptor_t				dst_tensor_desc_diff;
+	cudnnFilterDescriptor_t				filter_desc;
+	cudnnFilterDescriptor_t				filter_desc_diff;
+	cudnnTensorDescriptor_t				bias_desc;
+	cudnnTensorDescriptor_t				bias_desc_diff;
 	cudnnConvolutionDescriptor_t		conv_desc;
-	cudnnPoolingDescriptor_t		pooling_desc;
-	cudnnConvolutionFwdAlgo_t		fwd_algo;
+	cudnnPoolingDescriptor_t			pooling_desc;
+	cudnnConvolutionFwdAlgo_t			fwd_algo;
 	cudnnConvolutionBwdDataAlgo_t		bwd_data_algo;
 	cudnnConvolutionBwdFilterAlgo_t 	bwd_filter_algo;
-	size_t					workspace_size;
+	size_t								workspace_size;
 #endif
 #endif
 } bcnn_layer;
@@ -575,7 +561,7 @@ int bcnn_backward_cost_layer(bcnn_connection *conn);
 
 /* Core network routines */
 int bcnn_update(bcnn_net *net);
-int bcnn_apply_update_to_layer(bcnn_connection *conn, int batch_size, float learning_rate, float momentum, float decay);
+int bcnn_sgd_optimizer(bcnn_connection *conn, int batch_size, float learning_rate, float momentum, float decay);
 int bcnn_visualize_network(bcnn_net *net);
 int bcnn_forward(bcnn_net *net);
 int bcnn_backward(bcnn_net *net);

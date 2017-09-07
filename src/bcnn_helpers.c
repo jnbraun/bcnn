@@ -45,7 +45,7 @@ float bcnn_rng_gaussian(bcnn_gauss_gen *g)
 		}
 		while (s >= 1.0f || s == 0.0f);
 		g->state = 1;
-		m = sqrt(-2.0f * log(s) / s);
+		m = sqrtf(-2.0f * logf(s) / s);
 		g->r = v2 * m;
 		return v1 * m;
 	}

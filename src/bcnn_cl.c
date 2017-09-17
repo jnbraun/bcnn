@@ -257,9 +257,9 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error, int dump_pr
 	int batch_size = net->input_node.b;
 	char out_pred_name[128] = { 0 };
 	bcnn_iterator iter_data = { 0 };
-	int out_w = net->connections[net->nb_connections - 2].dst_node.w;
-	int out_h = net->connections[net->nb_connections - 2].dst_node.h;
-	int out_c = net->connections[net->nb_connections - 2].dst_node.c;
+	int out_w = net->connections[net->nb_connections - 2].dst_tensor.w;
+	int out_h = net->connections[net->nb_connections - 2].dst_tensor.h;
+	int out_c = net->connections[net->nb_connections - 2].dst_tensor.c;
 	int output_size = out_w * out_h * out_c;
 
 	if (bcnn_init_iterator(net, &iter_data, param->test_input, param->path_test_label, param->data_format) != 0)

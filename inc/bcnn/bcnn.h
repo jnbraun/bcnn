@@ -113,23 +113,12 @@ typedef enum {
 } bcnn_target;
 
 
-typedef struct {
-	FILE *f_img;
-	FILE *f_label;
-	int n_samples;
-	int	width;
-	int height;
-	int n_iter;
-	unsigned char *img;
-	int label;
-} bcnn_mnist_iter;
-
-
 typedef enum {
 	ITER_BIN,
 	ITER_LIST,
 	ITER_CSV,
-	ITER_MNIST
+	ITER_MNIST,
+	ITER_CIFAR10
 } bcnn_iterator_type;
 
 
@@ -231,9 +220,9 @@ typedef struct {
 	float			power;
 	float			beta1;					/**< Parameter for Adam optimizer */
 	float			beta2;					/**< Parameter for Adam optimizer */
-	int			step;
-	bcnn_optimizer		optimizer;				/**< Optimization method */
-	bcnn_lr_policy		policy;					/**< Learning rate policy */
+	int				step;
+	bcnn_optimizer	optimizer;				/**< Optimization method */
+	bcnn_lr_policy	policy;					/**< Learning rate policy */
 } bcnn_learner;
 
 
@@ -274,6 +263,13 @@ typedef enum {
 	XAVIER,				/**< Xavier weight init */
 	MSRA				/**< MSRA weight init */
 } bcnn_weights_init;
+
+
+typedef enum {
+	L2,
+	HUBER
+} bcnn_loss;
+
 
 /**
  * \brief Enum of available loss metrics.
@@ -318,7 +314,7 @@ typedef struct {
 	float	*data_gpu;
 	float	*grad_data_gpu;
 #endif
-} bcnn_node;
+} bcnn_tensor;
 
 /**
 * \brief Structure defining a generic layer.
@@ -331,7 +327,7 @@ typedef struct {
 	int					quantize;
 	bcnn_layer_type		type;
 	bcnn_activation		activation;
-	bcnn_loss_metric	cost_type;
+	bcnn_loss_metric	loss_metric;
 	float				dropout_rate;
 	float				scale;
 	int					concat_index;
@@ -365,6 +361,8 @@ typedef struct {
 	float				*diff_mean;
 	float				*diff_variance;
 	float				*x_norm;
+	float				*bn_scale;
+	float				*bn_scale_diff;
 #ifdef BCNN_USE_CUDA
 	float				*mean_gpu;
 	float				*variance_gpu;
@@ -374,6 +372,8 @@ typedef struct {
 	float				*diff_variance_gpu;
 	float				*bn_workspace_gpu;
 	float				*x_norm_gpu;
+	float				*bn_scale_gpu;
+	float				*bn_scale_diff_gpu;
 #endif
 	float				*adam_m;		/**< Adam optimizer: first moment gradient */
 	float				*adam_v;		/**< Adam optimizer: second moment gradient */
@@ -408,8 +408,8 @@ typedef struct {
 */
 typedef struct {
 	int			state; // 1: train / 0: predict
-	bcnn_node		src_node;
-	bcnn_node		dst_node;
+	bcnn_tensor		src_tensor;
+	bcnn_tensor		dst_tensor;
 	bcnn_layer		*layer;
 	float			*label;
 	char			*id;
@@ -432,7 +432,7 @@ typedef struct {
 	bcnn_data_augment   	data_aug;		/**< Parameters for online data augmentation */
 	bcnn_task		task;
 	int			state;
-	bcnn_node		input_node;
+	bcnn_tensor		input_node;
 	int			nb_finetune;
 	char			**finetune_id;
 } bcnn_net;
@@ -442,14 +442,9 @@ typedef struct {
 #define BITS_IN_UINT32 (sizeof(uint32_t) * BITS_IN_CHAR)
 #define BIT_SET(var, pos, val) var |= (val << pos)
 
-/* Start / Stop component */
-//bcnn_status bcnn_start(bcnn_context_handle *ctx, bh_loglvl log_lvl, FILE *out_log);
-
-//bcnn_status bcnn_stop(bcnn_context_handle *ctx);
-
 int bcnn_net_add_connection(bcnn_net *net, bcnn_connection conn);
 
-int bcnn_node_size(bcnn_node *node);
+int bcnn_get_tensor_size(bcnn_tensor *tensor);
 
 int bcnn_init_net(bcnn_net **net);
 int bcnn_end_net(bcnn_net **net);
@@ -458,14 +453,15 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val);
 
 int bcnn_compile_net(bcnn_net *net, char *phase);
 
-int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *path_label);
-int bcnn_free_mnist_iterator(bcnn_iterator *iter);
+//int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *path_label);
+//int bcnn_free_mnist_iterator(bcnn_iterator *iter);
 
 int bcnn_init_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input, char *path_label, char *type);
+int bcnn_advance_iterator(bcnn_net *net, bcnn_iterator *iter);
 int bcnn_free_iterator(bcnn_iterator *iter);
 
-int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input);
-int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter);
+//int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input);
+//int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter);
 
 /* Load / Write model */
 int bcnn_load_model(bcnn_net *net, char *filename);
@@ -555,7 +551,7 @@ int bcnn_forward_dropout_layer(bcnn_connection *conn);
 int bcnn_backward_dropout_layer(bcnn_connection *conn);
 
 /* Cost layer */
-int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric cost_type, float scale);
+int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric loss_metric, float scale);
 int bcnn_forward_cost_layer(bcnn_connection *conn);
 int bcnn_backward_cost_layer(bcnn_connection *conn);
 
@@ -582,8 +578,8 @@ int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, i
 	int *x_shift, int *y_shift);
 int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth, bcnn_data_augment *param,
 	unsigned char *buffer);
-int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *data_stream);
-int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter);
+//int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *data_stream);
+//int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter);
 unsigned int _read_int(char *v);
 
 void get_binary_row(float *row, uint32_t *bin_row, int size);

@@ -90,8 +90,9 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
 	int output_size = net->connections[nb - 2].dst_tensor.w *
 		net->connections[nb - 2].dst_tensor.h * net->connections[nb - 2].dst_tensor.c;
 
-	bcnn_init_mnist_iterator(&data_mnist, test_img, test_label);
-
+	//bcnn_init_mnist_iterator(&data_mnist, test_img, test_label);
+	bcnn_init_iterator(net, &data_mnist, test_img, test_label, "mnist");
+	
 	f = fopen(pred_out, "wt");
 	if (f == NULL) {
 		fprintf(stderr, "[ERROR] Could not open file %s", pred_out);
@@ -143,7 +144,7 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
 	bh_timer t = { 0 }, tp = { 0 };
 	bcnn_iterator data_mnist = { 0 };
 
-	if (bcnn_init_mnist_iterator(&data_mnist, train_img, train_label) != 0)
+	if (bcnn_init_iterator(net, &data_mnist, train_img, train_label, "mnist") != 0)
 		return -1;
 
 	bcnn_compile_net(net, "train");

@@ -1,6 +1,6 @@
 # config
-CUDA=0
-CUDNN=0
+CUDA=1
+CUDNN=1
 USE_SSE2=1
 CUDA_PATH=/usr/local/cuda
 CUDNN_PATH=/usr/local/cuda
@@ -14,7 +14,8 @@ LDFLAGS=-lm -lrt
 CFLAGS=-Wall -Wfatal-errors 
 DELIVERY_BIN=bin/bcnn-cl
 DELIVERY_LIB=lib/libbcnn.a
-DELIVERY_EXAMPLE=bin/examples/mnist-example
+DELIVERY_MNIST_EXAMPLE=bin/examples/mnist-example
+DELIVERY_CIFAR10_EXAMPLE=bin/examples/cifar10-example
 
 ifeq ($(DEBUG), 1) 
 OPTS=-O0 -g
@@ -53,8 +54,10 @@ OBJ_CUDA = $(patsubst src/%.cu, build/%_gpu.o, $(SRC_CUDA))
 CL_OBJ = build/bcnn_cl.o
 SRC_PACK = tools/pack_img/pack_img.c
 PACK_OBJ = build/tools/pack_img.o
-SRC_MNISTEXAMPLE = examples/mnist/mnist_example.c
-OBJ_MNISTEXAMPLE = build/examples/mnist_example.o
+SRC_MNIST_EXAMPLE = examples/mnist/mnist_example.c
+OBJ_MNIST_EXAMPLE = build/examples/mnist_example.o
+SRC_CIFAR10_EXAMPLE = examples/cifar10/cifar10_example.c
+OBJ_CIFAR10_EXAMPLE = build/examples/cifar10_example.o
 
 ALL_OBJ = $(OBJ)
 ifeq ($(CUDA), 1)
@@ -62,7 +65,7 @@ ALL_OBJ += $(OBJ_CUDA)
 endif
 ALL_DEP = $(filter-out build/bcnn_cl.o, $(ALL_OBJ)) $(LIB_DEP)
 
-all: clean $(DELIVERY_LIB) $(DELIVERY_BIN) $(DELIVERY_EXAMPLE)
+all: clean $(DELIVERY_LIB) $(DELIVERY_BIN) $(DELIVERY_MNIST_EXAMPLE) $(DELIVERY_CIFAR10_EXAMPLE)
 
 $(BIP_PATH)/libbip.a: 
 	cd $(BIP_PATH); make; cd ../
@@ -90,16 +93,25 @@ $(PACK_OBJ): $(SRC_PACK)
 pack-img: $(PACK_OBJ) $(ALL_DEP)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o %.a, $^) $(LDFLAGS)
 	
-$(OBJ_MNISTEXAMPLE): $(SRC_MNISTEXAMPLE)
+$(OBJ_MNIST_EXAMPLE): $(SRC_MNIST_EXAMPLE)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(DELIVERY_EXAMPLE): $(OBJ_MNISTEXAMPLE) $(ALL_DEP)
+$(DELIVERY_MNIST_EXAMPLE): $(OBJ_MNIST_EXAMPLE) $(ALL_DEP)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -o $@ $(filter %.o %.a, $^) $(LDFLAGS)
+	
+$(OBJ_CIFAR10_EXAMPLE): $(SRC_CIFAR10_EXAMPLE)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(DELIVERY_CIFAR10_EXAMPLE): $(OBJ_CIFAR10_EXAMPLE) $(ALL_DEP)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o %.a, $^) $(LDFLAGS)
 
 .PHONY: clean
 
 clean:
-	rm -rf $(OBJ) $(OBJ_CUDA) $(DELIVERY_BIN) $(BIP_PATH)/libbip.a $(DELIVERY_LIB) $(PACK_OBJ) pack-img $(OBJ_MNISTEXAMPLE) $(DELIVERY_EXAMPLE)
+	rm -rf $(OBJ) $(OBJ_CUDA) $(DELIVERY_BIN) $(BIP_PATH)/libbip.a $(DELIVERY_LIB) $(PACK_OBJ) pack-img
+	rm -rf $(OBJ_MNIST_EXAMPLE) $(DELIVERY_MNIST_EXAMPLE) $(OBJ_CIFAR10_EXAMPLE) $(DELIVERY_CIFAR10_EXAMPLE)
 	cd $(BIP_PATH); make clean; cd ../

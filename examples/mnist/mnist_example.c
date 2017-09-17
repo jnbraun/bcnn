@@ -87,8 +87,8 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
 	FILE *f = NULL;
 	bcnn_iterator data_mnist = { 0 };
 	int nb = net->nb_connections;
-	int output_size = net->connections[nb - 2].dst_node.w *
-		net->connections[nb - 2].dst_node.h * net->connections[nb - 2].dst_node.c;
+	int output_size = net->connections[nb - 2].dst_tensor.w *
+		net->connections[nb - 2].dst_tensor.h * net->connections[nb - 2].dst_tensor.c;
 
 	bcnn_init_mnist_iterator(&data_mnist, test_img, test_label);
 

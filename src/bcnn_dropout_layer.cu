@@ -35,8 +35,8 @@ __global__ void _bcnn_dropout_layer_kernel(float *input, int size, float *rand, 
 int bcnn_forward_dropout_layer_gpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	int size = bcnn_node_size(&src);
+	bcnn_tensor src = conn->src_tensor;
+	int size = bcnn_get_tensor_size(&src);
 	
 	if (!conn->state) // state != train
 		return BCNN_SUCCESS;
@@ -52,8 +52,8 @@ int bcnn_forward_dropout_layer_gpu(bcnn_connection *conn)
 int bcnn_backward_dropout_layer_gpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	int size = bcnn_node_size(&src);
+	bcnn_tensor src = conn->src_tensor;
+	int size = bcnn_get_tensor_size(&src);
 
 	if (!src.grad_data_gpu)
 		return BCNN_SUCCESS;

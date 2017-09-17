@@ -41,20 +41,20 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id)
 	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
 	conn.layer->type = ACTIVATION;
 	if (nb_connections > 1)
-		conn.src_node = net->connections[nb_connections - 2].dst_node;
+		conn.src_tensor = net->connections[nb_connections - 2].dst_tensor;
 	else
-		conn.src_node = net->input_node;
-	conn.dst_node.w = conn.src_node.w;
-	conn.dst_node.h = conn.src_node.h;
-	conn.dst_node.c = conn.src_node.c;
-	conn.dst_node.b = conn.src_node.b;
+		conn.src_tensor = net->input_node;
+	conn.dst_tensor.w = conn.src_tensor.w;
+	conn.dst_tensor.h = conn.src_tensor.h;
+	conn.dst_tensor.c = conn.src_tensor.c;
+	conn.dst_tensor.b = conn.src_tensor.b;
 	conn.layer->activation = type;
 
-	conn.dst_node.data = conn.src_node.data;
-	conn.dst_node.grad_data = conn.src_node.grad_data;
+	conn.dst_tensor.data = conn.src_tensor.data;
+	conn.dst_tensor.grad_data = conn.src_tensor.grad_data;
 #ifdef BCNN_USE_CUDA
-	conn.dst_node.data_gpu = conn.src_node.data_gpu;
-	conn.dst_node.grad_data_gpu = conn.src_node.grad_data_gpu;
+	conn.dst_tensor.data_gpu = conn.src_tensor.data_gpu;
+	conn.dst_tensor.grad_data_gpu = conn.src_tensor.grad_data_gpu;
 #endif
 	net->nb_connections = nb_connections;
 	bcnn_net_add_connection(net, conn);
@@ -71,8 +71,8 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id)
 	}
 
 	fprintf(stderr, "[Activation] input_shape= %dx%dx%d type= %s output_shape= %dx%dx%d\n",
-		conn.src_node.w, conn.src_node.h, conn.src_node.c, type_name,
-		conn.dst_node.w, conn.dst_node.h, conn.dst_node.c);
+		conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, type_name,
+		conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
 
 	return BCNN_SUCCESS;
 }
@@ -122,9 +122,9 @@ int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a)
 int bcnn_forward_activation_layer_cpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
-	int sz = bcnn_node_size(&dst);
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
+	int sz = bcnn_get_tensor_size(&dst);
 
 	dst.data = src.data;
 	bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
@@ -175,9 +175,9 @@ int bcnn_backward_activation_cpu(float *x, float *dx, int sz, bcnn_activation a)
 int bcnn_backward_activation_layer_cpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
-	int sz = bcnn_node_size(&dst);
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
+	int sz = bcnn_get_tensor_size(&dst);
 	
 	bcnn_backward_activation_cpu(dst.data, dst.grad_data, sz, layer->activation);
 	src.grad_data = dst.grad_data;

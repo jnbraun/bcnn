@@ -184,8 +184,8 @@ int bcnn_backward_bias_gpu(float *bias_diff, float *diff, int batch, int n, int 
 int bcnn_forward_conv_layer_gpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 	int batch_size = dst.b;
 	int sz;
 #ifdef BCNN_USE_CUDNN
@@ -237,8 +237,8 @@ int bcnn_forward_conv_layer_gpu(bcnn_connection *conn)
 int bcnn_backward_conv_layer_gpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 	int i, sz = src.w * src.h * src.c;
 	int w_sz = layer->size * layer->size * src.c;
 	int out_spatial_dim = dst.w * dst.h;
@@ -313,8 +313,8 @@ int bcnn_backward_conv_layer_gpu(bcnn_connection *conn)
 int bcnn_forward_deconv_layer_gpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 	int i, m, n, k, sz;
 	int batch_size = dst.b;
 
@@ -342,8 +342,8 @@ int bcnn_forward_deconv_layer_gpu(bcnn_connection *conn)
 int bcnn_backward_deconv_layer_gpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 	int i, sz = src.w * src.h * src.c;
 	int m = src.c;
 	int n = layer->size * layer->size * dst.c;

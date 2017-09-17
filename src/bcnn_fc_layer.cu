@@ -27,13 +27,13 @@
 
 int bcnn_forward_fullc_layer_gpu(bcnn_connection *conn)
 {
-	int i, batch_size = conn->dst_node.b;
-	int src_size = conn->src_node.w * conn->src_node.h * conn->src_node.c;
-	int dst_size = conn->dst_node.w * conn->dst_node.h * conn->dst_node.c;
-	int sz = dst_size * conn->dst_node.b;
+	int i, batch_size = conn->dst_tensor.b;
+	int src_size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c;
+	int dst_size = conn->dst_tensor.w * conn->dst_tensor.h * conn->dst_tensor.c;
+	int sz = dst_size * conn->dst_tensor.b;
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 
 	bcnn_cuda_fill_f32(dst_size * batch_size, 0.0f, dst.data_gpu, 1);
 
@@ -52,13 +52,13 @@ int bcnn_forward_fullc_layer_gpu(bcnn_connection *conn)
 
 int bcnn_backward_fullc_layer_gpu(bcnn_connection *conn)
 {
-	int i, batch_size = conn->dst_node.b;
-	int src_size = conn->src_node.w * conn->src_node.h * conn->src_node.c;
-	int dst_size = conn->dst_node.w * conn->dst_node.h * conn->dst_node.c;
-	int sz = dst_size * conn->dst_node.b;
+	int i, batch_size = conn->dst_tensor.b;
+	int src_size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c;
+	int dst_size = conn->dst_tensor.w * conn->dst_tensor.h * conn->dst_tensor.c;
+	int sz = dst_size * conn->dst_tensor.b;
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 
 	bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu, sz, layer->activation);
 

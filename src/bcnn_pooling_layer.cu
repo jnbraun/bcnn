@@ -68,15 +68,15 @@ __global__ void _bcnn_forward_maxpool_layer_kernel(int n, int in_h, int in_w, in
 int bcnn_forward_maxpool_layer_gpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 /*#ifdef BCNN_USE_CUDNN
 	float zero = 0.0f, one = 1.0f;
 	bcnn_cudnn_check(cudnnPoolingForward(bcnn_cudnn_handle(), layer->pooling_desc,
         &one, layer->src_tensor_desc, src.data_gpu, &zero,
         layer->dst_tensor_desc, dst.data_gpu));
 #else*/
-	int sz = bcnn_node_size(&dst);
+	int sz = bcnn_get_tensor_size(&dst);
 
 	_bcnn_forward_maxpool_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(sz,
 		src.w, src.h, src.c, layer->stride, layer->size, src.data_gpu, dst.data_gpu, layer->indexes_gpu);
@@ -127,15 +127,15 @@ __global__ void _bcnn_backward_maxpool_layer_kernel(int n, int in_h, int in_w, i
 int bcnn_backward_maxpool_layer_gpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 /*#ifdef BCNN_USE_CUDNN
 	float zero = 0.0f, one = 1.0f;
 	bcnn_cudnn_check(cudnnPoolingBackward(bcnn_cudnn_handle(), layer->pooling_desc,
         &one, layer->dst_tensor_desc, dst.data_gpu, layer->dst_tensor_desc, dst.grad_data_gpu,
         layer->src_tensor_desc, src.data_gpu, &zero, layer->src_tensor_desc, src.grad_data_gpu));
 #else*/
-	int sz = bcnn_node_size(&src);
+	int sz = bcnn_get_tensor_size(&src);
 
 	_bcnn_backward_maxpool_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(sz,
 		src.w, src.h, src.c, layer->stride, layer->size, dst.grad_data_gpu, src.grad_data_gpu, layer->indexes_gpu);

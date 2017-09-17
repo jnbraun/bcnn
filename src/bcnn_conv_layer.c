@@ -155,9 +155,9 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
 	conn.layer->type = CONVOLUTIONAL;
 	if (nb_connections > 1)
-		conn.src_node = net->connections[nb_connections - 2].dst_node;
+		conn.src_tensor = net->connections[nb_connections - 2].dst_tensor;
 	else
-		conn.src_node = net->input_node;
+		conn.src_tensor = net->input_node;
 
 	conn.layer->num = n;
 	conn.layer->stride = stride;
@@ -165,7 +165,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 	conn.layer->pad = pad;
 	conn.layer->quantize = quantize;
 	conn.layer->bias_size = n;
-	conn.layer->weights_size = conn.src_node.c * n * size * size;
+	conn.layer->weights_size = conn.src_tensor.c * n * size * size;
 
 	conn.layer->weight = (float *)calloc(conn.layer->weights_size, sizeof(float));
 	conn.layer->weight_diff = (float *)calloc(conn.layer->weights_size, sizeof(float));
@@ -174,12 +174,12 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 
 	switch (init) {
 	case XAVIER:
-		std_init = (float)sqrt(3.0f / (size * size * conn.src_node.c));
+		std_init = (float)sqrt(3.0f / (size * size * conn.src_tensor.c));
 		for (i = 0; i < conn.layer->weights_size; ++i)
 			conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);
 		break;
 	case MSRA:
-		std_init = (float)sqrt(2.0f / (size * size * conn.src_node.c));
+		std_init = (float)sqrt(2.0f / (size * size * conn.src_tensor.c));
 		for (i = 0; i < conn.layer->weights_size; ++i)
 			conn.layer->weight[i] = std_init * bcnn_rng_gaussian(&g);
 		break;
@@ -187,20 +187,20 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 	
 	/*for (i = 0; i < conn.layer->weights_size; ++i)
 		conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);*/
-	conn.dst_node.w = (conn.src_node.w + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
-	conn.dst_node.h = (conn.src_node.h + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
-	conn.dst_node.c = n;
-	conn.dst_node.b = conn.src_node.b;
-	sz = conn.dst_node.w * conn.dst_node.h * conn.src_node.c * size * size;
+	conn.dst_tensor.w = (conn.src_tensor.w + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
+	conn.dst_tensor.h = (conn.src_tensor.h + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
+	conn.dst_tensor.c = n;
+	conn.dst_tensor.b = conn.src_tensor.b;
+	sz = conn.dst_tensor.w * conn.dst_tensor.h * conn.src_tensor.c * size * size;
 	conn.layer->conv_workspace = (float *)calloc(sz, sizeof(float));
-	sz = conn.dst_node.b * conn.dst_node.w * conn.dst_node.h * n;
-	conn.dst_node.data = (float *)calloc(sz, sizeof(float));
-	conn.dst_node.grad_data = (float *)calloc(sz, sizeof(float));
+	sz = conn.dst_tensor.b * conn.dst_tensor.w * conn.dst_tensor.h * n;
+	conn.dst_tensor.data = (float *)calloc(sz, sizeof(float));
+	conn.dst_tensor.grad_data = (float *)calloc(sz, sizeof(float));
 
 	if (conn.layer->quantize == 1) {
-		bh_assert((conn.src_node.c % BITS_IN_UINT32 == 0), "Number of channels in input must be a multiple of 32", BCNN_INVALID_PARAMETER);
-		k = conn.layer->size * conn.layer->size * conn.src_node.c;
-		l = conn.dst_node.w * conn.dst_node.h;
+		bh_assert((conn.src_tensor.c % BITS_IN_UINT32 == 0), "Number of channels in input must be a multiple of 32", BCNN_INVALID_PARAMETER);
+		k = conn.layer->size * conn.layer->size * conn.src_tensor.c;
+		l = conn.dst_tensor.w * conn.dst_tensor.h;
 		conn.layer->binary_workspace = (uint32_t *)calloc(l * k / (sizeof(float) * 8), sizeof(float));
 		conn.layer->binary_weight = (uint32_t *)calloc(conn.layer->weights_size / BITS_IN_UINT32, sizeof(uint32_t));
 	}
@@ -216,9 +216,9 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 	conn.layer->bias_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias, conn.layer->bias_size);
 	conn.layer->bias_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias_diff, conn.layer->bias_size);
 
-	sz = conn.dst_node.b * conn.dst_node.w * conn.dst_node.h * n;
-	conn.dst_node.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.data, sz);
-	conn.dst_node.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.grad_data, sz);
+	sz = conn.dst_tensor.b * conn.dst_tensor.w * conn.dst_tensor.h * n;
+	conn.dst_tensor.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.data, sz);
+	conn.dst_tensor.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.grad_data, sz);
 	if (net->learner.optimizer == ADAM) {
 		conn.layer->adam_m_gpu = bcnn_cuda_memcpy_f32(conn.layer->adam_m, conn.layer->weights_size);
 		conn.layer->adam_v_gpu = bcnn_cuda_memcpy_f32(conn.layer->adam_v, conn.layer->weights_size);
@@ -234,21 +234,21 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 	bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->bias_desc_diff));
     bcnn_cudnn_check(cudnnCreateConvolutionDescriptor(&conn.layer->conv_desc));  
     bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->src_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		conn.dst_node.b, conn.src_node.c, conn.src_node.h, conn.src_node.w)); 
+		conn.dst_tensor.b, conn.src_tensor.c, conn.src_tensor.h, conn.src_tensor.w)); 
     bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		conn.dst_node.b, conn.dst_node.c, conn.dst_node.h, conn.dst_node.w));
+		conn.dst_tensor.b, conn.dst_tensor.c, conn.dst_tensor.h, conn.dst_tensor.w));
 	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->src_tensor_desc_diff, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		conn.dst_node.b, conn.src_node.c, conn.src_node.h, conn.src_node.w)); 
+		conn.dst_tensor.b, conn.src_tensor.c, conn.src_tensor.h, conn.src_tensor.w)); 
     bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->dst_tensor_desc_diff, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		conn.dst_node.b, conn.dst_node.c, conn.dst_node.h, conn.dst_node.w)); 
+		conn.dst_tensor.b, conn.dst_tensor.c, conn.dst_tensor.h, conn.dst_tensor.w)); 
     bcnn_cudnn_check(cudnnSetFilter4dDescriptor(conn.layer->filter_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-		conn.layer->num, conn.src_node.c, conn.layer->size, conn.layer->size));
+		conn.layer->num, conn.src_tensor.c, conn.layer->size, conn.layer->size));
 	bcnn_cudnn_check(cudnnSetFilter4dDescriptor(conn.layer->filter_desc_diff, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-		conn.layer->num, conn.src_node.c, conn.layer->size, conn.layer->size));
+		conn.layer->num, conn.src_tensor.c, conn.layer->size, conn.layer->size));
 	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		1, conn.dst_node.c, 1, 1));
+		1, conn.dst_tensor.c, 1, 1));
 	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->bias_desc_diff, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		1, conn.dst_node.c, 1, 1));
+		1, conn.dst_tensor.c, 1, 1));
     bcnn_cudnn_check(cudnnSetConvolution2dDescriptor(conn.layer->conv_desc, conn.layer->pad, conn.layer->pad, conn.layer->stride, conn.layer->stride, 1, 1, CUDNN_CROSS_CORRELATION));
     bcnn_cudnn_check(cudnnGetConvolutionForwardAlgorithm(bcnn_cudnn_handle(),
             conn.layer->src_tensor_desc,
@@ -300,7 +300,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
     conn.layer->workspace_size = bh_max(conn.layer->workspace_size, cudnn_wrk_sz);
 	conn.layer->conv_workspace_gpu = bcnn_cuda_malloc_f32(conn.layer->workspace_size);
 #else
-	sz = conn.dst_node.w * conn.dst_node.h * conn.src_node.c * size * size;
+	sz = conn.dst_tensor.w * conn.dst_tensor.h * conn.src_tensor.c * size * size;
 	conn.layer->conv_workspace_gpu = bcnn_cuda_memcpy_f32(conn.layer->conv_workspace, sz);
 #endif
 #endif
@@ -309,8 +309,8 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 	bcnn_net_add_connection(net, conn);
 
 	fprintf(stderr, "[Convolutional] input_shape= %dx%dx%d nb_filters= %d kernel_size= %d stride= %d padding= %d output_shape= %dx%dx%d\n",
-		conn.src_node.w, conn.src_node.h, conn.src_node.c, n, size, stride, pad,
-		conn.dst_node.w, conn.dst_node.h, conn.dst_node.c);
+		conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, n, size, stride, pad,
+		conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
 
 	return 0;
 }
@@ -321,11 +321,11 @@ int bcnn_forward_conv_layer_cpu(bcnn_connection *conn)
 	int i, j, m, n, k, sz;
 	float *a = NULL, *b = NULL, *c = NULL;
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 	int batch_size = src.b;
 
-	sz = bcnn_node_size(&dst);
+	sz = bcnn_get_tensor_size(&dst);
 
 	//bcnn_fill_f32(sz, 0.0f, dst.data);
 	memset(dst.data, 0, sz * sizeof(float));
@@ -407,8 +407,8 @@ int bcnn_forward_conv_layer_cpu(bcnn_connection *conn)
 int bcnn_backward_conv_layer_cpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 	int batch_size = src.b;
 	int i, sz = src.w * src.h * src.c;
 	int m = layer->num;
@@ -486,15 +486,15 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, i
 	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
 	conn.layer->type = DECONVOLUTIONAL;
 	if (nb_connections > 1)
-		conn.src_node = net->connections[nb_connections - 2].dst_node;
+		conn.src_tensor = net->connections[nb_connections - 2].dst_tensor;
 	else
-		conn.src_node = net->input_node;
+		conn.src_tensor = net->input_node;
 	conn.layer->num = n;
 	conn.layer->stride = stride;
 	conn.layer->size = size;
 	conn.layer->pad = pad;
 	conn.layer->bias_size = n;
-	conn.layer->weights_size = conn.src_node.c * n * size * size;
+	conn.layer->weights_size = conn.src_tensor.c * n * size * size;
 
 	conn.layer->weight = (float *)calloc(conn.layer->weights_size, sizeof(float));
 	conn.layer->weight_diff = (float *)calloc(conn.layer->weights_size, sizeof(float));
@@ -503,12 +503,12 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, i
 
 	switch (init) {
 	case XAVIER:
-		std_init = (float)sqrt(3.0f / (size * size * conn.src_node.c));
+		std_init = (float)sqrt(3.0f / (size * size * conn.src_tensor.c));
 		for (i = 0; i < conn.layer->weights_size; ++i)
 			conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);
 		break;
 	case MSRA:
-		std_init = (float)sqrt(2.0f / (size * size * conn.src_node.c));
+		std_init = (float)sqrt(2.0f / (size * size * conn.src_tensor.c));
 		for (i = 0; i < conn.layer->weights_size; ++i)
 			conn.layer->weight[i] = std_init * bcnn_rng_gaussian(&g);
 		break;
@@ -517,16 +517,16 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, i
 	/*for (i = 0; i < conn.layer->weights_size; ++i)
 		conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);*/
 
-	conn.dst_node.w = conn.layer->stride * (conn.src_node.w - 1) + conn.layer->size - 2 * conn.layer->pad;
-	conn.dst_node.h = conn.layer->stride * (conn.src_node.h - 1) + conn.layer->size - 2 * conn.layer->pad;
-	conn.dst_node.c = n;
-	conn.dst_node.b = conn.src_node.b;
+	conn.dst_tensor.w = conn.layer->stride * (conn.src_tensor.w - 1) + conn.layer->size - 2 * conn.layer->pad;
+	conn.dst_tensor.h = conn.layer->stride * (conn.src_tensor.h - 1) + conn.layer->size - 2 * conn.layer->pad;
+	conn.dst_tensor.c = n;
+	conn.dst_tensor.b = conn.src_tensor.b;
 
-	sz = conn.dst_node.w * conn.dst_node.h * conn.src_node.c * size * size;
+	sz = conn.dst_tensor.w * conn.dst_tensor.h * conn.src_tensor.c * size * size;
 	conn.layer->conv_workspace = (float *)calloc(sz, sizeof(float));
-	sz = conn.dst_node.b * conn.dst_node.w * conn.dst_node.h * n;
-	conn.dst_node.data = (float *)calloc(sz, sizeof(float));
-	conn.dst_node.grad_data = (float *)calloc(sz, sizeof(float));
+	sz = conn.dst_tensor.b * conn.dst_tensor.w * conn.dst_tensor.h * n;
+	conn.dst_tensor.data = (float *)calloc(sz, sizeof(float));
+	conn.dst_tensor.grad_data = (float *)calloc(sz, sizeof(float));
 	if (net->learner.optimizer == ADAM) {
 		conn.layer->adam_m = (float *)calloc(conn.layer->weights_size, sizeof(float));
 		conn.layer->adam_v = (float *)calloc(conn.layer->weights_size, sizeof(float));
@@ -537,10 +537,10 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, i
 	conn.layer->weight_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->weight_diff, conn.layer->weights_size);
 	conn.layer->bias_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias, conn.layer->bias_size);
 	conn.layer->bias_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias_diff, conn.layer->bias_size);
-	sz = conn.dst_node.b * conn.dst_node.w * conn.dst_node.h * n;
-	conn.dst_node.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.data, sz);
-	conn.dst_node.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.grad_data, sz);
-	sz = conn.dst_node.w * conn.dst_node.h * conn.src_node.c * size * size;
+	sz = conn.dst_tensor.b * conn.dst_tensor.w * conn.dst_tensor.h * n;
+	conn.dst_tensor.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.data, sz);
+	conn.dst_tensor.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.grad_data, sz);
+	sz = conn.dst_tensor.w * conn.dst_tensor.h * conn.src_tensor.c * size * size;
 	conn.layer->conv_workspace_gpu = bcnn_cuda_memcpy_f32(conn.layer->conv_workspace, sz);
 	if (net->learner.optimizer == ADAM) {
 		conn.layer->adam_m_gpu = bcnn_cuda_memcpy_f32(conn.layer->adam_m, conn.layer->weights_size);
@@ -552,8 +552,8 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, i
 	bcnn_net_add_connection(net, conn);
 
 	fprintf(stderr, "[Deconvolutional] input_shape= %dx%dx%d nb_filters= %d kernel_size= %d stride= %d output_shape= %dx%dx%d\n",
-		conn.src_node.w, conn.src_node.h, conn.src_node.c, n, size, stride,
-		conn.dst_node.w, conn.dst_node.h, conn.dst_node.c);
+		conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, n, size, stride,
+		conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
 
 	return BCNN_SUCCESS;
 }
@@ -562,8 +562,8 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, i
 int bcnn_forward_deconv_layer_cpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 	int batch_size = src.b;
 	int i, m, n, k, sz;
 
@@ -593,8 +593,8 @@ int bcnn_forward_deconv_layer_cpu(bcnn_connection *conn)
 int bcnn_backward_deconv_layer_cpu(bcnn_connection *conn)
 {
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 	int batch_size = src.b;
 	int i, sz = src.w * src.h * src.c;
 	int m = src.c;

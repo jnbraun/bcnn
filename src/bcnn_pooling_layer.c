@@ -36,26 +36,26 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *id)
 	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
 	conn.layer->type = MAXPOOL;
 	if (nb_connections > 1)
-		conn.src_node = net->connections[nb_connections - 2].dst_node;
+		conn.src_tensor = net->connections[nb_connections - 2].dst_tensor;
 	else
-		conn.src_node = net->input_node;
+		conn.src_tensor = net->input_node;
 
-	conn.dst_node.w = (conn.src_node.w - 1) / stride + 1;
-	conn.dst_node.h = (conn.src_node.h - 1) / stride + 1;
-	conn.dst_node.c = conn.src_node.c;
-	conn.dst_node.b = conn.src_node.b;
+	conn.dst_tensor.w = (conn.src_tensor.w - 1) / stride + 1;
+	conn.dst_tensor.h = (conn.src_tensor.h - 1) / stride + 1;
+	conn.dst_tensor.c = conn.src_tensor.c;
+	conn.dst_tensor.b = conn.src_tensor.b;
 	
 	conn.layer->size = size;
 	conn.layer->stride = stride;
 
-	sz = bcnn_node_size(&conn.dst_node);
+	sz = bcnn_get_tensor_size(&conn.dst_tensor);
 	conn.layer->indexes = (int *)calloc(sz, sizeof(int));
-	conn.dst_node.data = (float *)calloc(sz, sizeof(float));
-	conn.dst_node.grad_data = (float *)calloc(sz, sizeof(float));
+	conn.dst_tensor.data = (float *)calloc(sz, sizeof(float));
+	conn.dst_tensor.grad_data = (float *)calloc(sz, sizeof(float));
 #ifdef BCNN_USE_CUDA
 	conn.layer->indexes_gpu = bcnn_cuda_malloc_i32(sz);
-	conn.dst_node.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.data, sz);
-	conn.dst_node.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_node.grad_data, sz);
+	conn.dst_tensor.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.data, sz);
+	conn.dst_tensor.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.grad_data, sz);
 #ifdef BCNN_USE_CUDNN
 	bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->src_tensor_desc));
 	bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->dst_tensor_desc));
@@ -70,17 +70,17 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *id)
 											conn.layer->stride,
 											conn.layer->stride));
 	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->src_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		conn.src_node.b, conn.src_node.c, conn.src_node.h, conn.src_node.w)); 
+		conn.src_tensor.b, conn.src_tensor.c, conn.src_tensor.h, conn.src_tensor.w)); 
 	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-		conn.dst_node.b, conn.dst_node.c, conn.dst_node.h, conn.dst_node.w)); 
+		conn.dst_tensor.b, conn.dst_tensor.c, conn.dst_tensor.h, conn.dst_tensor.w)); 
 #endif
 #endif
 	net->nb_connections = nb_connections;
 	bcnn_net_add_connection(net, conn);
 
 	fprintf(stderr, "[Maxpool] input_shape= %dx%dx%d size= %d stride= %d ouput_shape= %dx%dx%d\n",
-		conn.src_node.w, conn.src_node.h, conn.src_node.c, size, stride,
-		conn.dst_node.w, conn.dst_node.h, conn.dst_node.c);
+		conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, size, stride,
+		conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
 	return 0;
 }
 
@@ -90,8 +90,8 @@ int bcnn_forward_maxpool_layer_cpu(bcnn_connection *conn)
 	int b, i, j, k, m, n, dst_index, valid, src_index, cur_w, cur_h, max_i;
 	float max_f = -FLT_MAX, val;
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
 	int batch_size = dst.b;
 	int offset_pool = (-layer->size - 1) / 2 + 1;
 	int offset0, offset1, offset2;
@@ -143,9 +143,9 @@ int bcnn_backward_maxpool_layer_cpu(bcnn_connection *conn)
 {
 	int i, index;
 	bcnn_layer *layer = conn->layer;
-	bcnn_node src = conn->src_node;
-	bcnn_node dst = conn->dst_node;
-	int sz = bcnn_node_size(&dst);
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
+	int sz = bcnn_get_tensor_size(&dst);
 
 	for (i = 0; i < sz; ++i) {
 		index = layer->indexes[i];

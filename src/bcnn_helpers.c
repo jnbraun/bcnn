@@ -25,9 +25,9 @@
 
 #include "bcnn/bcnn.h"
 
-int bcnn_node_size(bcnn_node *node)
+int bcnn_get_tensor_size(bcnn_tensor *tensor)
 {
-	return node->w * node->h * node->c * node->b;
+	return tensor->w * tensor->h * tensor->c * tensor->b;
 }
 
 float bcnn_rng_gaussian(bcnn_gauss_gen *g)

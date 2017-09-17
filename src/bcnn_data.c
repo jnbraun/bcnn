@@ -29,22 +29,6 @@
 #include "bcnn/bcnn.h"
 
 
-unsigned char *_pack_char(unsigned char *buffer, char val)
-{
-    buffer[0] = val;
-    return buffer + 1;
-}
-
-unsigned char *_pack_int(unsigned char *buffer, int val)
-{
-	buffer[0] = val >> 24;
-    buffer[1] = val >> 16;
-    buffer[2] = val >> 8;
-    buffer[3] = val;
-    return buffer + 4;
-}
-
-
 int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_pack)
 {
 	FILE *f_lst = NULL, *f_out = NULL, *f_outlst = NULL;
@@ -133,6 +117,45 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
 		fclose(f_outlst);
 
 	return BCNN_SUCCESS;
+}
+
+
+int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_to_bgr, 
+	float mean_r, float mean_g, float mean_b, float *dst)
+{
+	int x, y, k;
+	float m = 0.0f;
+	
+	if (swap_to_bgr) {
+		for (k = 0; k < c; ++k){
+			switch (k) {
+			case 0:
+				m = mean_r;
+				break;
+			case 1:
+				m = mean_g;
+				break;
+			case 2:
+				m = mean_b;
+				break;
+			}
+			for (y = 0; y < h; ++y){
+				for (x = 0; x < w; ++x){
+					dst[w * (h * (2 - k) + y) + x] = ((float)src[c * (x + w * y) + k] / 255.0f - m) * 2.0f;
+				}
+			}
+		}
+	}
+	else {
+		for (k = 0; k < c; ++k){
+			for (y = 0; y < h; ++y){
+				for (x = 0; x < w; ++x){
+					dst[w * (h * k + y) + x] = ((float)src[c * (x + w * y) + k] / 255.0f - 0.5f) * 2.0f;
+				}
+			}
+		}
+	}
+	return 0;
 }
 
 
@@ -256,7 +279,7 @@ unsigned int _read_int(char *v)
 	return ret;
 }
 
-int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter)
+static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter)
 {
 	char tmp[16];
 	unsigned char l;
@@ -296,7 +319,7 @@ int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter)
 	return BCNN_SUCCESS;
 }
 
-int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
+static int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
 {
 	FILE *f_bin = NULL, *f_lst = NULL;
 	char *line = NULL;
@@ -339,7 +362,7 @@ int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
 	return BCNN_SUCCESS;
 }
 
-int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
+static int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
 {
 	unsigned char l;
 	size_t n = 0;
@@ -389,8 +412,79 @@ int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
 	return BCNN_SUCCESS;
 }
 
+/* Handles cifar10 binary format */
+static int bcnn_init_cifar10_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
+{
+	FILE *f_bin = NULL;
 
-int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
+	iter->type = ITER_CIFAR10;
+
+	f_bin = fopen(path_input, "rb");
+	if (f_bin == NULL) {
+		fprintf(stderr, "[ERROR] Can not open file %s\n", path_input);
+		return BCNN_INVALID_PARAMETER;
+	}
+
+	iter->n_samples = 0; // not used
+	iter->label_width = 1;
+
+	iter->input_uchar = (unsigned char *)calloc(iter->input_width * iter->input_height, sizeof(unsigned char));
+	iter->label_int = (int *)calloc(1, sizeof(int));
+	iter->input_width = 32;
+	iter->input_height = 32;
+	iter->input_depth = 3;
+	iter->input_uchar = (unsigned char *)calloc(iter->input_width * iter->input_height * iter->input_depth,
+		sizeof(unsigned char));
+	iter->f_input = f_bin;
+
+	return BCNN_SUCCESS;
+}
+
+static int bcnn_cifar10_iter(bcnn_net *net, bcnn_iterator *iter)
+{
+	unsigned char l;
+	unsigned int n_img = 0, n_labels = 0;
+	size_t n = 0;
+	int x, y, k, i, rand_skip = /*(int)(10.0f * (float)rand() / RAND_MAX) + 1*/0;
+	char tmp[3072];
+
+	if (net->state == TRAIN) {
+		for (i = 0; i < rand_skip; ++i) {
+			if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0)
+				rewind(iter->f_input);
+			else
+				fseek(iter->f_input, -1, SEEK_CUR);
+			fseek(iter->f_input, iter->input_width * iter->input_height * iter->input_depth + 1, SEEK_CUR);
+		}
+	}
+	if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0)
+			rewind(iter->f_input);
+	else
+		fseek(iter->f_input, -1, SEEK_CUR);
+
+	// Read label
+	n = fread((char *)&l, 1, sizeof(char), iter->f_input);
+	iter->label_int[0] = (int)l;
+	// Read img
+	n = fread(tmp, 1, iter->input_width * iter->input_height * iter->input_depth, iter->f_input);
+	// Swap depth <-> spatial dim arrangement
+
+	for (k = 0; k < iter->input_depth; ++k) {
+		for (y = 0; y < iter->input_height; ++y) {
+			for (x = 0; x < iter->input_width; ++x) {
+				iter->input_uchar[(x + iter->input_width * y) * iter->input_depth + k] =
+					tmp[iter->input_width * (iter->input_height * k + y) + x];
+			}
+		}
+	}
+	bip_write_image("test00.png", iter->input_uchar, iter->input_width, iter->input_height, iter->input_depth, 
+		iter->input_width * iter->input_depth);
+
+	return BCNN_SUCCESS;
+}
+
+
+static int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
 {
 	int i;
 	FILE *f_list = NULL;
@@ -398,9 +492,9 @@ int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input
 	char **tok = NULL;
 	int n_tok = 0;
 	unsigned char *img = NULL;
-	int out_w = net->connections[net->nb_connections - 2].dst_node.w;
-	int	out_h = net->connections[net->nb_connections - 2].dst_node.h;
-	int	out_c = net->connections[net->nb_connections - 2].dst_node.c;
+	int out_w = net->connections[net->nb_connections - 2].dst_tensor.w;
+	int	out_h = net->connections[net->nb_connections - 2].dst_tensor.h;
+	int	out_c = net->connections[net->nb_connections - 2].dst_tensor.c;
 
 	iter->type = ITER_LIST;
 
@@ -437,14 +531,14 @@ int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input
 }
 
 
-int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
+static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
 {
 	char *line = NULL;
 	char **tok = NULL;
 	int i, n_tok = 0, tmp_x, tmp_y;
-	int out_w = net->connections[net->nb_connections - 2].dst_node.w;
-	int	out_h = net->connections[net->nb_connections - 2].dst_node.h;
-	int	out_c = net->connections[net->nb_connections - 2].dst_node.c;
+	int out_w = net->connections[net->nb_connections - 2].dst_tensor.w;
+	int	out_h = net->connections[net->nb_connections - 2].dst_tensor.h;
+	int	out_c = net->connections[net->nb_connections - 2].dst_tensor.c;
 	unsigned char *img = NULL;
 	//nb_lines_skipped = (int)((float)rand() / RAND_MAX * net->input_node.b);
 	//bh_fskipline(f, nb_lines_skipped);
@@ -504,7 +598,7 @@ int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
 	int brightness = 0;
 
 	if (param->range_shift_x || param->range_shift_y) {
-		memset(buffer, 0, sz);
+		memset(buffer, 128, sz);
 		if (param->use_precomputed) {
 			x_ul = param->shift_x;
 			y_ul = param->shift_y;
@@ -542,7 +636,7 @@ int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
 			theta = bip_deg2rad((float)(rand() - RAND_MAX / 2) / RAND_MAX  * param->rotation_range);
 			param->rotation = theta;
 		}
-		memset(buffer, 0, sz);
+		memset(buffer, 128, sz);
 		bip_rotate_image(img, width, height, width * depth,
 			buffer, width, height, width * depth, depth, theta, width / 2, height / 2, BILINEAR);
 		memcpy(img, buffer, width * height * depth * sizeof(unsigned char));
@@ -592,7 +686,7 @@ int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
 }
 
 
-int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *path_label)
+static int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *path_label)
 {
 	FILE *f_img = NULL, *f_label = NULL;
 	char tmp[16] = { 0 };
@@ -644,11 +738,34 @@ int bcnn_init_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input, cha
 	else if (strcmp(type, "list") == 0) {
 		return bcnn_init_list_iterator(net, iter, path_input);
 	}
+	else if (strcmp(type, "cifar10") == 0) {
+		return bcnn_init_cifar10_iterator(net, iter, path_input);
+	}
 	else if (strcmp(type, "csv") == 0) {
 		
 	}
 	
 	return BCNN_SUCCESS;
+}
+
+int bcnn_advance_iterator(bcnn_net *net, bcnn_iterator *iter)
+{
+	switch (iter->type) {
+	case ITER_MNIST:
+		bcnn_mnist_next_iter(net, iter);
+		break;
+	case ITER_CIFAR10:
+		bcnn_cifar10_iter(net, iter);
+		break;
+	case ITER_BIN:
+		bcnn_bin_iter(net, iter);
+		break;
+	case ITER_LIST:
+		bcnn_list_iter(net, iter);
+		break;
+	default: break;
+	}
+	return 0;
 }
 
 int bcnn_free_iterator(bcnn_iterator *iter)

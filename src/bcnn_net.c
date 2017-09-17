@@ -50,13 +50,13 @@ int bcnn_end_net(bcnn_net **net)
 	return BCNN_SUCCESS;
 }
 
-int bcnn_free_node(bcnn_node *node)
+int bcnn_free_tensor(bcnn_tensor *tensor)
 {
-	bh_free(node->data);
-	bh_free(node->grad_data);
+	bh_free(tensor->data);
+	bh_free(tensor->grad_data);
 #ifdef BCNN_USE_CUDA
-	bcnn_cuda_free(node->data_gpu);
-	bcnn_cuda_free(node->grad_data_gpu);
+	bcnn_cuda_free(tensor->data_gpu);
+	bcnn_cuda_free(tensor->grad_data_gpu);
 #endif
 	return BCNN_SUCCESS;
 }
@@ -65,7 +65,7 @@ int bcnn_free_connection(bcnn_connection *conn)
 {
 	if (conn->layer->type != ACTIVATION && 
 		conn->layer->type != DROPOUT) {
-		bcnn_free_node(&conn->dst_node);
+		bcnn_free_tensor(&conn->dst_tensor);
 	}
 	bh_free(conn->id);
 	bcnn_free_layer(&conn->layer);
@@ -168,10 +168,10 @@ int bcnn_net_add_connection(bcnn_net *net, bcnn_connection conn)
 int bcnn_init_workload(bcnn_net *net)
 {
 	int i;
-	int sz = bcnn_node_size(&net->input_node);
+	int sz = bcnn_get_tensor_size(&net->input_node);
 	int n = net->nb_connections;
 	int k = (net->connections[n - 1].layer->type == COST ? (n - 2) : (n - 1));
-	int output_size = bcnn_node_size(&net->connections[k].dst_node);
+	int output_size = bcnn_get_tensor_size(&net->connections[k].dst_tensor);
 
 	net->input_node.data = (float *)calloc(sz, sizeof(float));
 	for (i = 0; i < n; ++i) {
@@ -180,8 +180,8 @@ int bcnn_init_workload(bcnn_net *net)
 		}
 	}
 	net->input_node.grad_data = NULL;
-	net->connections[0].src_node.data = net->input_node.data;
-	net->connections[0].src_node.grad_data = net->input_node.grad_data;
+	net->connections[0].src_tensor.data = net->input_node.data;
+	net->connections[0].src_tensor.grad_data = net->input_node.grad_data;
 #ifdef BCNN_USE_CUDA
 	net->input_node.data_gpu = bcnn_cuda_malloc_f32(sz);
 	for (i = 0; i < n; ++i) {
@@ -190,8 +190,8 @@ int bcnn_init_workload(bcnn_net *net)
 		}
 	}
 	net->input_node.grad_data_gpu = NULL;
-	net->connections[0].src_node.data_gpu = net->input_node.data_gpu;
-	net->connections[0].src_node.grad_data_gpu = net->input_node.grad_data_gpu;
+	net->connections[0].src_tensor.data_gpu = net->input_node.data_gpu;
+	net->connections[0].src_tensor.grad_data_gpu = net->input_node.grad_data_gpu;
 #endif
 
 	return BCNN_SUCCESS;
@@ -245,13 +245,13 @@ int bcnn_forward(bcnn_net *net)
 
 	 for (i = 0; i < net->nb_connections; ++i) {
 		conn = net->connections[i];
-		output_size = bcnn_node_size(&conn.dst_node);
+		output_size = bcnn_get_tensor_size(&conn.dst_tensor);
 #ifdef BCNN_USE_CUDA
-		if (conn.dst_node.grad_data_gpu != NULL)
-			bcnn_cuda_fill_f32(output_size, 0.0f, conn.dst_node.grad_data_gpu, 1);
+		if (conn.dst_tensor.grad_data_gpu != NULL)
+			bcnn_cuda_fill_f32(output_size, 0.0f, conn.dst_tensor.grad_data_gpu, 1);
 #else
-		if (conn.dst_node.grad_data != NULL)
-			memset(conn.dst_node.grad_data, 0, output_size * sizeof(float));
+		if (conn.dst_tensor.grad_data != NULL)
+			memset(conn.dst_tensor.grad_data, 0, output_size * sizeof(float));
 #endif
 		switch (conn.layer->type) {
 		case CONVOLUTIONAL:
@@ -333,171 +333,6 @@ int bcnn_backward(bcnn_net *net)
 }
 
 
-static float bcnn_update_learning_rate(bcnn_net *net)
-{
-    int iter = net->seen / net->input_node.b;
-
-    switch (net->learner.policy) {
-        case CONSTANT:
-            return net->learner.learning_rate;
-        case STEP:
-            return net->learner.learning_rate * (float)pow(net->learner.scale, iter / net->learner.step);
-		case INV:
-			return net->learner.learning_rate * (float)pow(1.0f + net->learner.gamma * iter, -net->learner.power);
-        case EXP:
-            return net->learner.learning_rate * (float)pow(net->learner.gamma, iter);
-        case POLY:
-            return net->learner.learning_rate * (float)pow(1 - (float)iter / net->max_batches, net->learner.power);
-        case SIGMOID:
-            return net->learner.learning_rate * (1.0f / (1.0f + (float)exp(net->learner.gamma * (iter - net->learner.step))));
-        default:
-            return net->learner.learning_rate;
-    }
-}
-
-
-int bcnn_sgd_optimizer(bcnn_connection *conn, int batch_size, float learning_rate, float momentum, float decay)
-{
-	bcnn_layer *layer = conn->layer;
-
-#ifdef BCNN_USE_CUDA
-	if (layer->bias_gpu && layer->bias_diff_gpu) {
-		bcnn_cuda_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff_gpu, 1, layer->bias_gpu, 1);
-		bcnn_cuda_scal(layer->bias_size, momentum, layer->bias_diff_gpu, 1);
-	}
-	if (layer->weight_gpu && layer->weight_diff_gpu) {
-		bcnn_cuda_axpy(layer->weights_size, decay * batch_size, layer->weight_gpu, 1, layer->weight_diff_gpu, 1);
-		bcnn_cuda_axpy(layer->weights_size, -learning_rate / batch_size, layer->weight_diff_gpu, 1, layer->weight_gpu, 1);
-		bcnn_cuda_scal(layer->weights_size, momentum, layer->weight_diff_gpu, 1);
-	}
-#else
-	if (layer->bias && layer->bias_diff) {
-		bcnn_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff, layer->bias);
-		bcnn_scal(layer->bias_size, momentum, layer->bias_diff);
-	}
-	if (layer->weight && layer->weight_diff) {
-		bcnn_axpy(layer->weights_size, decay * batch_size, layer->weight, layer->weight_diff);
-		bcnn_axpy(layer->weights_size, -learning_rate / batch_size, layer->weight_diff, layer->weight);
-		bcnn_scal(layer->weights_size, momentum, layer->weight_diff);
-	}
-#endif
-	return 0;
-}
-
-
-int bcnn_adam_optimizer(bcnn_connection *conn, int iter, int batch_size, float beta1, float beta2, float learning_rate, float momentum, float decay)
-{
-	bcnn_layer *layer = conn->layer;
-	float mu_correction = sqrtf(1.0f - powf(beta2, (float)iter + 1)) / (1.0f - powf(beta1, (float)iter + 1));
-
-#ifdef BCNN_USE_CUDA
-	if (layer->bias_gpu && layer->bias_diff_gpu) {
-		bcnn_cuda_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff_gpu, 1, layer->bias_gpu, 1);
-		bcnn_cuda_scal(layer->bias_size, momentum, layer->bias_diff_gpu, 1);
-	}
-	if (layer->weight_gpu && layer->weight_diff_gpu) {
-		bcnn_cuda_axpy(layer->weights_size, decay * batch_size, layer->weight_gpu, 1, layer->weight_diff_gpu, 1);
-		bcnn_cuda_axpby(layer->weights_size, 1.0f - beta1, layer->weight_diff_gpu, beta1, layer->adam_m_gpu);
-		bcnn_cuda_vmul(layer->weights_size, layer->weight_diff_gpu, layer->weight_diff_gpu, layer->weight_diff_gpu);
-		bcnn_cuda_axpby(layer->weights_size, 1.0f - beta2, layer->weight_diff_gpu, beta2, layer->adam_v_gpu);
-		bcnn_cuda_pow(layer->weights_size, layer->adam_v_gpu, 0.5f, layer->weight_diff_gpu);
-		bcnn_cuda_add_scalar(layer->weights_size, 0.0000001f, layer->weight_diff_gpu);
-		bcnn_cuda_vdiv(layer->weights_size, layer->adam_m_gpu, layer->weight_diff_gpu, layer->weight_diff_gpu);
-		bcnn_cuda_axpy(layer->weights_size, -learning_rate / batch_size * mu_correction, layer->weight_diff_gpu, 1, layer->weight_gpu, 1);
-		bcnn_cuda_fill_f32(layer->weights_size, 0.0f, layer->weight_diff_gpu, 1);
-	}
-#else
-	if (layer->bias && layer->bias_diff) {
-		bcnn_axpy(layer->bias_size, -learning_rate / batch_size, layer->bias_diff, layer->bias);
-		bcnn_scal(layer->bias_size, momentum, layer->bias_diff);
-	}
-
-	if (layer->weight && layer->weight_diff) {
-		bcnn_axpy(layer->weights_size, decay * batch_size, layer->weight, layer->weight_diff);
-		bcnn_axpby(layer->weights_size, 1.0f - beta1, layer->weight_diff, beta1, layer->adam_m);
-		bcnn_vmul(layer->weights_size, layer->weight_diff, layer->weight_diff, layer->weight_diff);
-		bcnn_axpby(layer->weights_size, 1.0f - beta2, layer->weight_diff, beta2, layer->adam_v);
-		bcnn_pow(layer->weights_size, layer->adam_v, 0.5f, layer->weight_diff);
-		bcnn_add_scalar(layer->weights_size, 0.0000001f, layer->weight_diff);
-		bcnn_vdiv(layer->weights_size, layer->adam_m, layer->weight_diff, layer->weight_diff);	
-		bcnn_axpy(layer->weights_size, -learning_rate / batch_size * mu_correction, layer->weight_diff, layer->weight);
-		memset(layer->weight_diff, 0, layer->weights_size * sizeof(float));
-	}
-#endif
-	return 0;
-}
-
-
-int bcnn_update(bcnn_net *net)
-{
-    int i;
-    float lr = bcnn_update_learning_rate(net);
-	bcnn_layer_type	type;
-
-	if (net->learner.optimizer == SGD) {
-		for (i = 0; i < net->nb_connections; ++i) {
-			type = net->connections[i].layer->type;
-			if ((type == CONVOLUTIONAL || 
-				type == DECONVOLUTIONAL || 
-				type == FULL_CONNECTED)) {
-				bcnn_sgd_optimizer(&net->connections[i],
-						net->input_node.b, lr, net->learner.momentum, net->learner.decay);
-			}
-		}
-	}
-	else if (net->learner.optimizer == ADAM) {
-		for (i = 0; i < net->nb_connections; ++i) {
-			type = net->connections[i].layer->type;
-			if ((type == CONVOLUTIONAL || 
-				type == DECONVOLUTIONAL || 
-				type == FULL_CONNECTED)) {
-				bcnn_adam_optimizer(&net->connections[i], net->seen, net->input_node.b, net->learner.beta1, net->learner.beta2,
-					lr, net->learner.momentum, net->learner.decay);
-			}
-		}
-	}
-	return BCNN_SUCCESS;
-}
-
-int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_to_bgr, 
-	float mean_r, float mean_g, float mean_b, float *dst)
-{
-	int x, y, k;
-	float m = 0.0f;
-	
-	if (swap_to_bgr) {
-		for (k = 0; k < c; ++k){
-			switch (k) {
-			case 0:
-				m = mean_r;
-				break;
-			case 1:
-				m = mean_g;
-				break;
-			case 2:
-				m = mean_b;
-				break;
-			}
-			for (y = 0; y < h; ++y){
-				for (x = 0; x < w; ++x){
-					dst[w * (h * (2 - k) + y) + x] = ((float)src[c * (x + w * y) + k] / 255.0f - m) * 2.0f;
-				}
-			}
-		}
-	}
-	else {
-		for (k = 0; k < c; ++k){
-			for (y = 0; y < h; ++y){
-				for (x = 0; x < w; ++x){
-					dst[w * (h * k + y) + x] = ((float)src[c * (x + w * y) + k] / 255.0f - 0.5f) * 2.0f;
-				}
-			}
-		}
-	}
-	return 0;
-}
-
-
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 {
 	int i, j, sz = net->input_node.w * net->input_node.h * net->input_node.c, n, offset;
@@ -512,10 +347,10 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 		(net->data_aug.range_shift_x != 0 || net->data_aug.range_shift_y != 0 ||
 		net->data_aug.rotation_range != 0));
 	bcnn_data_augment *param = &(net->data_aug);
-	int input_size = bcnn_node_size(&net->input_node);
-	int output_size = net->connections[nb - 2].dst_node.w * 
-		net->connections[nb - 2].dst_node.h *
-		net->connections[nb - 2].dst_node.c;
+	int input_size = bcnn_get_tensor_size(&net->input_node);
+	int output_size = net->connections[nb - 2].dst_tensor.w * 
+		net->connections[nb - 2].dst_tensor.h *
+		net->connections[nb - 2].dst_tensor.c;
 
 	memset(x, 0, sz * net->input_node.b * sizeof(float));
 	if (net->task != PREDICT)
@@ -524,12 +359,14 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 	if (use_buffer_img)
 		img_tmp = (unsigned char *)calloc(sz, sizeof(unsigned char));
 	
-	if (iter->type == ITER_MNIST) {
+	if (iter->type == ITER_MNIST || iter->type == ITER_CIFAR10) {
 		for (i = 0; i < net->input_node.b; ++i) {
-			bcnn_mnist_next_iter(net, iter);
+			//bcnn_mnist_next_iter(net, iter);
+			bcnn_advance_iterator(net, iter);
 			// Data augmentation
 			if (net->task == TRAIN && net->state)
 				bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
+			bip_write_image("test.png", iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c);
 			bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
 				param->mean_r, param->mean_g, param->mean_b, x);
 			x += sz;
@@ -542,7 +379,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 	}
 	else if (iter->type == ITER_BIN) {
 		for (i = 0; i < net->input_node.b; ++i) {
-			bcnn_bin_iter(net, iter);
+			//bcnn_bin_iter(net, iter);
+			bcnn_advance_iterator(net, iter);
 			// Data augmentation
 			if (net->task == TRAIN && net->state)
 				bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
@@ -564,9 +402,9 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 					break;
 				case HEATMAP_REGRESSION:
 					// Load truth
-					w = net->connections[net->nb_connections - 2].dst_node.w;
-					h = net->connections[net->nb_connections - 2].dst_node.h;
-					c = net->connections[net->nb_connections - 2].dst_node.c;
+					w = net->connections[net->nb_connections - 2].dst_tensor.w;
+					h = net->connections[net->nb_connections - 2].dst_tensor.h;
+					c = net->connections[net->nb_connections - 2].dst_tensor.c;
 					x_scale = (float)w / (float)net->input_node.w;
 					y_scale = (float)h / (float)net->input_node.h;
 					for (j = 0; j < iter->label_width; j += 2) {
@@ -599,7 +437,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 	}
 	else if (iter->type == ITER_LIST || iter->type == ITER_CSV) {
 		for (i = 0; i < net->input_node.b; ++i) {
-			bcnn_list_iter(net, iter);
+			//bcnn_list_iter(net, iter);
+			bcnn_advance_iterator(net, iter);
 			// Online data augmentation
 			if (net->task == TRAIN && net->state)
 				bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
@@ -621,9 +460,9 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 					break;
 				case HEATMAP_REGRESSION:
 					// Load truth
-					w = net->connections[net->nb_connections - 2].dst_node.w;
-					h = net->connections[net->nb_connections - 2].dst_node.h;
-					c = net->connections[net->nb_connections - 2].dst_node.c;
+					w = net->connections[net->nb_connections - 2].dst_tensor.w;
+					h = net->connections[net->nb_connections - 2].dst_tensor.h;
+					c = net->connections[net->nb_connections - 2].dst_tensor.c;
 					x_scale = (float)w / (float)net->input_node.w;
 					y_scale = (float)h / (float)net->input_node.h;
 					for (j = 0; j < iter->label_width; j += 2) {
@@ -666,7 +505,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 	bcnn_cuda_memcpy_host2dev(net->input_node.data_gpu, net->input_node.data, input_size);
 	if (net->task != PREDICT)
 		bcnn_cuda_memcpy_host2dev(net->connections[nb - 1].label_gpu, net->connections[nb - 1].label, output_size
-		* net->connections[nb - 1].src_node.b);
+		* net->connections[nb - 1].src_tensor.b);
 #endif
 	return BCNN_SUCCESS;
 }
@@ -682,7 +521,7 @@ int bcnn_train_on_batch(bcnn_net *net, bcnn_iterator *iter, float *loss)
 	bcnn_backward(net);
 	// Update network weight
 	bcnn_update(net);
-	*loss = net->connections[net->nb_connections - 1].dst_node.data[0];
+	*loss = net->connections[net->nb_connections - 1].dst_tensor.data[0];
 	
 	return BCNN_SUCCESS;
 }
@@ -691,18 +530,18 @@ int bcnn_predict_on_batch(bcnn_net *net, bcnn_iterator *iter, float **pred, floa
 {
 	int nb = net->nb_connections;
 	int en = (net->connections[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
-	int output_size = bcnn_node_size(&net->connections[en].dst_node);
+	int output_size = bcnn_get_tensor_size(&net->connections[en].dst_tensor);
 
 	bcnn_iter_batch(net, iter);
 
 	bcnn_forward(net);
 
 #ifdef BCNN_USE_CUDA
-	bcnn_cuda_memcpy_dev2host(net->connections[en].dst_node.data_gpu, net->connections[en].dst_node.data,
+	bcnn_cuda_memcpy_dev2host(net->connections[en].dst_tensor.data_gpu, net->connections[en].dst_tensor.data,
 		output_size);
 #endif
-	(*pred) = net->connections[en].dst_node.data;
-	*error = *(net->connections[nb - 1].dst_node.data);
+	(*pred) = net->connections[en].dst_tensor.data;
+	*error = *(net->connections[nb - 1].dst_tensor.data);
 
 	return BCNN_SUCCESS;
 }
@@ -806,46 +645,46 @@ int bcnn_visualize_network(bcnn_net *net)
 		
 	for (j = 0; j < net->nb_connections; ++j) {
 		if (net->connections[j].layer->type == CONVOLUTIONAL) {
-			w = net->connections[j].dst_node.w;
-			h = net->connections[j].dst_node.h;
-			c = net->connections[j].dst_node.c;
+			w = net->connections[j].dst_tensor.w;
+			h = net->connections[j].dst_tensor.h;
+			c = net->connections[j].dst_tensor.c;
 			sz = w * h * c;
 #ifdef BCNN_USE_CUDA
-			bcnn_cuda_memcpy_dev2host(net->connections[j].dst_node.data_gpu,
-					net->connections[j].dst_node.data, sz * net->input_node.b);
+			bcnn_cuda_memcpy_dev2host(net->connections[j].dst_tensor.data_gpu,
+					net->connections[j].dst_tensor.data, sz * net->input_node.b);
 #endif
 			for (i = 0; i < net->input_node.b / 8; ++i) {	
 				layer = net->connections[j].layer;
-				for (k = 0; k < net->connections[j].dst_node.c / 16; ++k) {
+				for (k = 0; k < net->connections[j].dst_tensor.c / 16; ++k) {
 					sprintf(name, "sample%d_layer%d_fmap%d.png", i, j, k);
-					bip_write_float_image_norm(name, net->connections[j].dst_node.data +
+					bip_write_float_image_norm(name, net->connections[j].dst_tensor.data +
 						i * sz + k * w * h, w, h, 1, w * sizeof(float));
 				}
 			}
 		}
 		else if (net->connections[j].layer->type == FULL_CONNECTED || 
 			net->connections[j].layer->type == SOFTMAX) {
-			w = net->connections[j].dst_node.w;
-			h = net->connections[j].dst_node.h;
-			c = net->connections[j].dst_node.c;
+			w = net->connections[j].dst_tensor.w;
+			h = net->connections[j].dst_tensor.h;
+			c = net->connections[j].dst_tensor.c;
 			sz = w * h * c;
 #ifdef BCNN_USE_CUDA
-			bcnn_cuda_memcpy_dev2host(net->connections[j].dst_node.data_gpu,
-					net->connections[j].dst_node.data, sz * net->input_node.b);
+			bcnn_cuda_memcpy_dev2host(net->connections[j].dst_tensor.data_gpu,
+					net->connections[j].dst_tensor.data, sz * net->input_node.b);
 #endif
 			sprintf(name, "ip_%d.txt", j);
 			ftmp = fopen(name, "wt");
 			for (i = 0; i < net->input_node.b; ++i) {
 				layer = net->connections[j].layer;
 				for (k = 0; k < sz; ++k) {
-					fprintf(ftmp, "%f ", net->connections[j].dst_node.data[i * sz + k]);
+					fprintf(ftmp, "%f ", net->connections[j].dst_tensor.data[i * sz + k]);
 				}
 				fprintf(ftmp, "\n");
 			}
 			fclose(ftmp);
 			if (sz == 2 && net->connections[j].layer->type == FULL_CONNECTED) {
-				sz = sz * net->connections[j].src_node.w * net->connections[j].src_node.h
-					*net->connections[j].src_node.c;
+				sz = sz * net->connections[j].src_tensor.w * net->connections[j].src_tensor.h
+					*net->connections[j].src_tensor.c;
 #ifdef BCNN_USE_CUDA
 				bcnn_cuda_memcpy_dev2host(net->connections[j].layer->weight_gpu,
 					net->connections[j].layer->weight, sz);
@@ -895,11 +734,9 @@ int bcnn_free_layer(bcnn_layer **layer)
 	bh_free(p_layer->diff_variance);
 	bh_free(p_layer->global_variance);
 	bh_free(p_layer->x_norm);
-	/*bh_free(p_layer->bn_scale);
-	bh_free(p_layer->bn_scale_diff);*/
+	bh_free(p_layer->bn_scale);
+	bh_free(p_layer->bn_scale_diff);
 	bh_free(p_layer->bn_workspace);
-	/*bh_free(p_layer->bn_shift);
-	bh_free(p_layer->bn_shift_diff);*/
 	bh_free(p_layer->rand);
 	bh_free(p_layer->adam_m);
 	bh_free(p_layer->adam_v);
@@ -919,11 +756,9 @@ int bcnn_free_layer(bcnn_layer **layer)
 	if (p_layer->diff_variance_gpu)	bcnn_cuda_free(p_layer->diff_variance_gpu);
 	if (p_layer->global_variance_gpu)	bcnn_cuda_free(p_layer->global_variance_gpu);
 	if (p_layer->x_norm_gpu)			bcnn_cuda_free(p_layer->x_norm_gpu);
-	/*if (p_layer->bn_scale_gpu)		bcnn_cuda_free(p_layer->bn_scale_gpu);
-	if (p_layer->bn_scale_diff_gpu)	bcnn_cuda_free(p_layer->bn_scale_diff_gpu);*/
+	if (p_layer->bn_scale_gpu)		bcnn_cuda_free(p_layer->bn_scale_gpu);
+	if (p_layer->bn_scale_diff_gpu)	bcnn_cuda_free(p_layer->bn_scale_diff_gpu);
 	if (p_layer->bn_workspace_gpu)	bcnn_cuda_free(p_layer->bn_workspace_gpu);
-	/*if (p_layer->bn_shift_gpu)	bcnn_cuda_free(p_layer->bn_shift_gpu);
-	if (p_layer->bn_shift_diff_gpu)	bcnn_cuda_free(p_layer->bn_shift_diff_gpu);*/
 	if (p_layer->rand_gpu)             bcnn_cuda_free(p_layer->rand_gpu);
 	if (p_layer->adam_m_gpu)             bcnn_cuda_free(p_layer->adam_m_gpu);
 	if (p_layer->adam_v_gpu)             bcnn_cuda_free(p_layer->adam_v_gpu);

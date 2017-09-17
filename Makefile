@@ -1,6 +1,6 @@
 # config
-CUDA=1
-CUDNN=1
+CUDA=0
+CUDNN=0
 USE_SSE2=1
 CUDA_PATH=/usr/local/cuda
 CUDNN_PATH=/usr/local/cuda

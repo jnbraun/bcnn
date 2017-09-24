@@ -48,7 +48,7 @@ Only tested with msvc2010 and 2013.
 	- Dropout
 	- Batch normalization
 * Learning algorithms: SGD, Adam.
-* Online data augmentation (crop, rotation, distortion)
+* Online data augmentation (crop, rotation, distortion, flip)
 
 ## How to use it:
 

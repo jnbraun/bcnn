@@ -31,10 +31,10 @@
 
 int create_network(bcnn_net *net)
 {
-	net->input_node.w = 32; net->input_node.h = 32; net->input_node.c = 3;
+	net->input_node.w = 28; net->input_node.h = 28; net->input_node.c = 3;
 	net->input_node.b = 128;
-	net->learner.optimizer = SGD;
-	net->learner.learning_rate = 0.0005f;
+	net->learner.optimizer = ADAM;
+	net->learner.learning_rate = 0.05f; /* SGD 0.005f*/
 	net->learner.gamma = 0.00002f;
 	net->learner.decay = 0.0005f;
 	net->learner.momentum = 0.9f;
@@ -44,11 +44,9 @@ int create_network(bcnn_net *net)
 	net->learner.beta2 = 0.999f;
 	net->max_batches = 50000;
 
-	bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "conv1");
 	bcnn_add_batchnorm_layer(net, "bn1");
-	bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "conv1");
-	bcnn_add_batchnorm_layer(net, "bn1");
-	bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "conv1");
 	bcnn_add_batchnorm_layer(net, "bn1");
 	//bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "conv2");
 	bcnn_add_maxpool_layer(net, 2, 2, "pool1");
@@ -56,8 +54,6 @@ int create_network(bcnn_net *net)
 
 	bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "conv2");
 	bcnn_add_batchnorm_layer(net, "bn1");
-	bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "conv2");
-	bcnn_add_batchnorm_layer(net, "bn2");
 	bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "conv2");
 	bcnn_add_batchnorm_layer(net, "bn2");
 	bcnn_add_maxpool_layer(net, 2, 2, "pool2");
@@ -78,6 +74,7 @@ int create_network(bcnn_net *net)
 	net->data_aug.min_brightness = -60;
 	net->data_aug.max_contrast = 1.5f;
 	net->data_aug.min_contrast = 0.6f;
+	net->data_aug.random_fliph = 1;
 	//net->data_aug.min_scale = 0.7f;
 	//net->data_aug.max_scale = 1.3f;
 	//net->data_aug.swap_to_bgr = 1;
@@ -198,7 +195,7 @@ int run(char *train_data, char *test_data)
 	create_network(net);
 
 	bh_info("Start training...");
-	if (train_cifar10(net, train_data, test_data, 400000, 1000, &error_train) != 0)
+	if (train_cifar10(net, train_data, test_data, 4000000, 1000, &error_train) != 0)
 		bh_error("Can not perform training", -1);
 	
 	bh_info("Start prediction...");

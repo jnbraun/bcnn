@@ -173,6 +173,7 @@ int bcnn_init_workload(bcnn_net *net)
 	int k = (net->connections[n - 1].layer->type == COST ? (n - 2) : (n - 1));
 	int output_size = bcnn_get_tensor_size(&net->connections[k].dst_tensor);
 
+	net->input_buffer = (unsigned char *)calloc(net->input_node.w * net->input_node.h * net->input_node.c, 1);
 	net->input_node.data = (float *)calloc(sz, sizeof(float));
 	for (i = 0; i < n; ++i) {
 		if (net->connections[i].layer->type == COST) {
@@ -203,6 +204,7 @@ int bcnn_free_workload(bcnn_net *net)
 	int i;
 	int n = net->nb_connections;
 
+	bh_free(net->input_buffer);
 	bh_free(net->input_node.data);
 	for (i = 0; i < n; ++i) {
 		if (net->connections[i].layer->type == COST) bh_free(net->connections[i].label);
@@ -278,6 +280,9 @@ int bcnn_forward(bcnn_net *net)
 		case DROPOUT:
 			bcnn_forward_dropout_layer(&conn);
 			break;
+		case CONCAT:
+			bcnn_forward_concat_layer(net, &conn);
+			break;
 		case COST:
 			bcnn_forward_cost_layer(&conn);
 			break;
@@ -322,6 +327,9 @@ int bcnn_backward(bcnn_net *net)
 		case DROPOUT:
 			bcnn_backward_dropout_layer(&conn);
 			break;
+		case CONCAT:
+			bcnn_backward_concat_layer(net, &conn);
+			break;
 		case COST:
 			bcnn_backward_cost_layer(&conn);
 			break;
@@ -336,6 +344,7 @@ int bcnn_backward(bcnn_net *net)
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 {
 	int i, j, sz = net->input_node.w * net->input_node.h * net->input_node.c, n, offset;
+	int sz_img = iter->input_width * iter->input_height * iter->input_depth;
 	int nb = net->nb_connections;
 	int w, h, c;
 	unsigned char *img_tmp = NULL;
@@ -345,7 +354,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 	int x_pos, y_pos;
 	int use_buffer_img = (net->task == TRAIN && net->state != 0 &&
 		(net->data_aug.range_shift_x != 0 || net->data_aug.range_shift_y != 0 ||
-		net->data_aug.rotation_range != 0));
+		net->data_aug.rotation_range != 0 || net->data_aug.random_fliph != 0));
 	bcnn_data_augment *param = &(net->data_aug);
 	int input_size = bcnn_get_tensor_size(&net->input_node);
 	int output_size = net->connections[nb - 2].dst_tensor.w * 
@@ -357,7 +366,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 		memset(y, 0, output_size * net->input_node.b * sizeof(float));
 
 	if (use_buffer_img)
-		img_tmp = (unsigned char *)calloc(sz, sizeof(unsigned char));
+		img_tmp = (unsigned char *)calloc(/*sz*/sz_img, sizeof(unsigned char));
 	
 	if (iter->type == ITER_MNIST || iter->type == ITER_CIFAR10) {
 		for (i = 0; i < net->input_node.b; ++i) {
@@ -365,10 +374,19 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 			bcnn_advance_iterator(net, iter);
 			// Data augmentation
 			if (net->task == TRAIN && net->state)
-				bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-			bip_write_image("test.png", iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c);
-			bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
-				param->mean_r, param->mean_g, param->mean_b, x);
+				bcnn_data_augmentation(iter->input_uchar, iter->input_width, iter->input_height, iter->input_depth, param, img_tmp);
+			//bip_write_image("test.png", iter->input_uchar, iter->input_width, iter->input_height, iter->input_depth, iter->input_width * iter->input_depth);
+			if (net->input_node.w < iter->input_width || net->input_node.h < iter->input_height) {
+				bip_crop_image(iter->input_uchar, iter->input_width, iter->input_height, iter->input_width * iter->input_depth,
+					(iter->input_width - net->input_node.w) / 2, (iter->input_height - net->input_node.h) / 2,
+					net->input_buffer, net->input_node.w, net->input_node.h, net->input_node.w * net->input_node.c, net->input_node.c);
+				bcnn_convert_img_to_float(net->input_buffer, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+					param->mean_r, param->mean_g, param->mean_b, x);
+			}
+			else
+				bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
+					param->mean_r, param->mean_g, param->mean_b, x);	
+			//bip_write_image("test1.png", tmp_buf, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c);
 			x += sz;
 			if (net->task != PREDICT) {
 				// Load truth

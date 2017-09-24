@@ -161,21 +161,22 @@ typedef struct {
  * \brief Structure for online data augmentation parameters.
  */
 typedef struct {
-	int		range_shift_x;			/**< X-shift allowed range (chosen between [-range_shift_x / 2; range_shift_x / 2]). */
-	int		range_shift_y;			/**< Y-shift allowed range (chosen between [-range_shift_y / 2; range_shift_y / 2]). */	
+	int			range_shift_x;			/**< X-shift allowed range (chosen between [-range_shift_x / 2; range_shift_x / 2]). */
+	int			range_shift_y;			/**< Y-shift allowed range (chosen between [-range_shift_y / 2; range_shift_y / 2]). */	
+	int			random_fliph;			/**< If !=0, randomly (with probability of 0.5) apply horizontal flip to image. */	
 	float		min_scale;				/**< Minimum scale factor allowed. */
 	float		max_scale;				/**< Maximum scale factor allowed. */
 	float		rotation_range;			/**< Rotation angle allowed range (chosen between [-rotation_range / 2; rotation_range / 2]). Expressed in degree. */
-	int		min_brightness;			/**< Minimum brightness factor allowed (additive factor, range [-255;255]). */
-	int		max_brightness;			/**< Maximum brightness factor allowed (additive factor, range [-255;255]). */
+	int			min_brightness;			/**< Minimum brightness factor allowed (additive factor, range [-255;255]). */
+	int			max_brightness;			/**< Maximum brightness factor allowed (additive factor, range [-255;255]). */
 	float		min_contrast;			/**< Minimum contrast allowed (mult factor). */
 	float		max_contrast;			/**< Maximum contrast allowed (mult factor). */
-	int		use_precomputed;		/**< Flag set to 1 if the parameters to be applied are those already set. */
+	int			use_precomputed;		/**< Flag set to 1 if the parameters to be applied are those already set. */
 	float		scale;					/**< Current scale factor. */
-	int		shift_x;				/**< Current x-shift. */
-	int		shift_y;				/**< Current y-shift. */
+	int			shift_x;				/**< Current x-shift. */
+	int			shift_y;				/**< Current y-shift. */
 	float		rotation;				/**< Current rotation angle. */
-	int		brightness;				/**< Current brightness factor. */
+	int			brightness;				/**< Current brightness factor. */
 	float		contrast;				/**< Current contrast factor. */
 	float		max_distortion;			/**< Maximum distortion factor allowed. */
 	float		distortion;				/**< Current distortion factor. */
@@ -184,7 +185,7 @@ typedef struct {
 	float		mean_r;
 	float		mean_g;
 	float		mean_b;
-	int		swap_to_bgr;
+	int			swap_to_bgr;
 } bcnn_data_augment;
 
 
@@ -422,19 +423,20 @@ typedef struct {
 * \brief Structure handling the network architecture and generic parameters.
 */
 typedef struct {
-	int			max_batches;		/**< Maximum number of batches during training (=iterations) */ 
+	int					max_batches;		/**< Maximum number of batches during training (=iterations) */ 
 	bcnn_loss_metric	loss_metric;		/**< Loss metric for evaluation */
-	bcnn_learner		learner;		/**< Learner/optimizer parameters */
-	int			seen;			/**< Number of instances seen by the network */
-	int			nb_connections;
+	bcnn_learner		learner;			/**< Learner/optimizer parameters */
+	int					seen;				/**< Number of instances seen by the network */
+	int					nb_connections;
 	bcnn_connection		*connections;
-	bcnn_target		prediction_type;
-	bcnn_data_augment   	data_aug;		/**< Parameters for online data augmentation */
-	bcnn_task		task;
-	int			state;
-	bcnn_tensor		input_node;
-	int			nb_finetune;
-	char			**finetune_id;
+	bcnn_target			prediction_type;
+	bcnn_data_augment   data_aug;			/**< Parameters for online data augmentation */
+	bcnn_task			task;
+	int					state;
+	bcnn_tensor			input_node;
+	int					nb_finetune;
+	char				**finetune_id;
+	unsigned char		*input_buffer;
 } bcnn_net;
 
 /* Define for binarized layers */
@@ -545,6 +547,11 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *id);
 int bcnn_forward_maxpool_layer(bcnn_connection *conn);
 int bcnn_backward_maxpool_layer(bcnn_connection *conn);
 
+/* Concat layer */
+int bcnn_add_concat_layer(bcnn_net *net, char *concat, char *id);
+int bcnn_forward_concat_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_concat_layer(bcnn_net *net, bcnn_connection *conn);
+
 /* Dropout layer */
 int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id);
 int bcnn_forward_dropout_layer(bcnn_connection *conn);
@@ -578,8 +585,6 @@ int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, i
 	int *x_shift, int *y_shift);
 int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth, bcnn_data_augment *param,
 	unsigned char *buffer);
-//int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *data_stream);
-//int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter);
 unsigned int _read_int(char *v);
 
 void get_binary_row(float *row, uint32_t *bin_row, int size);

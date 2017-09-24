@@ -468,7 +468,6 @@ static int bcnn_cifar10_iter(bcnn_net *net, bcnn_iterator *iter)
 	// Read img
 	n = fread(tmp, 1, iter->input_width * iter->input_height * iter->input_depth, iter->f_input);
 	// Swap depth <-> spatial dim arrangement
-
 	for (k = 0; k < iter->input_depth; ++k) {
 		for (y = 0; y < iter->input_height; ++y) {
 			for (x = 0; x < iter->input_width; ++x) {
@@ -477,8 +476,8 @@ static int bcnn_cifar10_iter(bcnn_net *net, bcnn_iterator *iter)
 			}
 		}
 	}
-	bip_write_image("test00.png", iter->input_uchar, iter->input_width, iter->input_height, iter->input_depth, 
-		iter->input_width * iter->input_depth);
+	/*bip_write_image("test00.png", iter->input_uchar, iter->input_width, iter->input_height, iter->input_depth, 
+		iter->input_width * iter->input_depth);*/
 
 	return BCNN_SUCCESS;
 }
@@ -597,6 +596,12 @@ int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
 	float scale = 1.0f, theta = 0.0f, contrast = 1.0f, kx, ky, distortion;
 	int brightness = 0;
 
+	if (param->random_fliph) {
+		if ((float)rand() / RAND_MAX > 0.5f) {
+			bip_fliph_image(img, width, height, depth, width * depth, buffer, width * depth);
+			memcpy(img, buffer, sz * sizeof(unsigned char));
+		}
+	}
 	if (param->range_shift_x || param->range_shift_y) {
 		memset(buffer, 128, sz);
 		if (param->use_precomputed) {

@@ -185,8 +185,6 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 		break;
 	}
 	
-	/*for (i = 0; i < conn.layer->weights_size; ++i)
-		conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);*/
 	conn.dst_tensor.w = (conn.src_tensor.w + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
 	conn.dst_tensor.h = (conn.src_tensor.h + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
 	conn.dst_tensor.c = n;
@@ -718,8 +716,6 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride, int p
 		break;
 	}
 	
-	/*for (i = 0; i < conn.layer->weights_size; ++i)
-		conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);*/
 	conn.dst_tensor.w = (conn.src_tensor.w + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
 	conn.dst_tensor.h = (conn.src_tensor.h + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
 	conn.dst_tensor.c = conn.src_tensor.c;
@@ -852,22 +848,6 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_connection *conn)
 		}
 	}
 	   
-
-	/*dst_data = dst.data;
-	for (n = 0; n < batch_size; ++n) {
-		bias_data = layer->bias;
-		for (c = 0; c < dst.c; ++c) {
-			for (h = 0; h < dst.h; ++h) {
-				for (w = 0; w < dst.w; ++w) {
-					*dst_data += *bias_data;
-					++dst_data;
-				}
-			}
-			++bias_data;
-		}
-	}*/
-
-	
 	_bcnn_add_bias(dst.data, layer->bias, batch_size, dst.c, dst.w * dst.h);
 
 	sz = dst.w * dst.h * dst.c * batch_size;
@@ -899,23 +879,7 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_connection *conn)
 	bcnn_backward_activation_cpu(dst.data, dst.grad_data,
 		dst.w * dst.h * dst.c * batch_size,
 		layer->activation);
-	
-	/*if (src.grad_data) {
-		memset(src.grad_data, 0, sizeof(float));
-		dst_grad_data = dst.grad_data;
-		for (n = 0; n < batch_size; ++n) {
-			bias_diff = layer->bias_diff;
-			for (c = 0; c < dst.c; ++c) {
-				for (h = 0; h < dst.h; ++h) {
-					for (w = 0; w < dst.w; ++w) {
-						*bias_diff += *dst_grad_data;
-						++dst_grad_data;
-					}
-				}
-				++bias_diff;
-			}
-		}
-    }*/
+
 	_bcnn_backward_bias(layer->bias_diff, dst.grad_data, batch_size, dst.c, dst.w * dst.h);
 	
     if (src.grad_data) {

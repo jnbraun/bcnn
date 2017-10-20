@@ -33,8 +33,8 @@ int create_network(bcnn_net *net)
 {
 	net->input_node.w = 28; net->input_node.h = 28; net->input_node.c = 3;
 	net->input_node.b = 128;
-	net->learner.optimizer = ADAM;
-	net->learner.learning_rate = 0.05f; /* SGD 0.005f*/
+	net->learner.optimizer = SGD;
+	net->learner.learning_rate = 0.005f; /* SGD 0.005f*/
 	net->learner.gamma = 0.00002f;
 	net->learner.decay = 0.0005f;
 	net->learner.momentum = 0.9f;
@@ -78,6 +78,105 @@ int create_network(bcnn_net *net)
 	//net->data_aug.min_scale = 0.7f;
 	//net->data_aug.max_scale = 1.3f;
 	//net->data_aug.swap_to_bgr = 1;
+
+	// Target
+	net->prediction_type = CLASSIFICATION;
+
+	return 0;
+}
+
+int create_network2(bcnn_net *net)
+{
+	net->input_node.w = 28; net->input_node.h = 28; net->input_node.c = 3;
+	net->input_node.b = 128;
+	net->learner.optimizer = SGD;
+	net->learner.learning_rate = 0.005f;
+	net->learner.gamma = 0.00002f;
+	net->learner.decay = 0.0005f;
+	net->learner.momentum = 0.9f;
+	net->learner.policy = SIGMOID;
+	net->learner.step = 40000;
+	net->learner.beta1 = 0.9f;
+	net->learner.beta2 = 0.999f;
+	net->max_batches = 50000;
+
+#if 1
+	bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	bcnn_add_maxpool_layer(net, 2, 2, "pool1");
+	
+	bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "conv2");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "conv2");
+	bcnn_add_batchnorm_layer(net, "bn2");
+	bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "conv2");
+	bcnn_add_batchnorm_layer(net, "bn2");
+	bcnn_add_maxpool_layer(net, 2, 2, "pool2");
+
+	bcnn_add_fullc_layer(net, 512, XAVIER, RELU, 0, "fc1");
+	bcnn_add_batchnorm_layer(net, "bn3");
+
+	bcnn_add_fullc_layer(net, 10, XAVIER, RELU, 0, "fc2");
+
+	bcnn_add_softmax_layer(net, "softmax");
+	bcnn_add_cost_layer(net, COST_ERROR, 1.0f);
+
+#else
+	bcnn_add_depthwise_sep_conv_layer(net, 3, 1, 1, 0, XAVIER, NONE, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	bcnn_add_convolutional_layer(net, 32, 1, 1, 0, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	
+	bcnn_add_depthwise_sep_conv_layer(net, 3, 1, 1, 0, XAVIER, NONE, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	bcnn_add_convolutional_layer(net, 32, 1, 1, 0, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	
+	bcnn_add_depthwise_sep_conv_layer(net, 3, 1, 1, 0, XAVIER, NONE, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	bcnn_add_convolutional_layer(net, 32, 1, 1, 0, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	
+	bcnn_add_maxpool_layer(net, 2, 2, "pool1");
+	
+	bcnn_add_depthwise_sep_conv_layer(net, 3, 1, 1, 0, XAVIER, NONE, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	bcnn_add_convolutional_layer(net, 64, 1, 1, 0, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	
+	bcnn_add_depthwise_sep_conv_layer(net, 3, 1, 1, 0, XAVIER, NONE, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	bcnn_add_convolutional_layer(net, 64, 1, 1, 0, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn2");
+	
+	bcnn_add_depthwise_sep_conv_layer(net, 3, 1, 1, 0, XAVIER, NONE, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn1");
+	bcnn_add_convolutional_layer(net, 64, 1, 1, 0, 0, XAVIER, RELU, 0, "conv1");
+	bcnn_add_batchnorm_layer(net, "bn2");
+	bcnn_add_maxpool_layer(net, 2, 2, "pool2");
+
+	bcnn_add_fullc_layer(net, 512, XAVIER, RELU, 0, "fc1");
+	bcnn_add_batchnorm_layer(net, "bn3");
+
+	bcnn_add_fullc_layer(net, 10, XAVIER, RELU, 0, "fc2");
+
+	bcnn_add_softmax_layer(net, "softmax");
+	bcnn_add_cost_layer(net, COST_ERROR, 1.0f);
+#endif
+
+	// Data augmentation
+	net->data_aug.range_shift_x = 10;
+	net->data_aug.range_shift_y = 10;
+	net->data_aug.rotation_range = 20.0f;
+	net->data_aug.max_brightness = 60;
+	net->data_aug.min_brightness = -60;
+	net->data_aug.max_contrast = 1.5f;
+	net->data_aug.min_contrast = 0.6f;
+	net->data_aug.random_fliph = 1;
 
 	// Target
 	net->prediction_type = CLASSIFICATION;
@@ -192,10 +291,10 @@ int run(char *train_data, char *test_data)
 	
 	bcnn_init_net(&net);
 	bh_info("Create Network...");
-	create_network(net);
+	create_network2(net);
 
 	bh_info("Start training...");
-	if (train_cifar10(net, train_data, test_data, 4000000, 1000, &error_train) != 0)
+	if (train_cifar10(net, train_data, test_data, 4000000, 100, &error_train) != 0)
 		bh_error("Can not perform training", -1);
 	
 	bh_info("Start prediction...");

@@ -85,8 +85,7 @@ int bcnn_add_concat_layer(bcnn_net *net, char *concat, char *id)
 
 int bcnn_forward_concat_layer_cpu(bcnn_net *net, bcnn_connection *conn)
 {
-	int i, j, b = conn->src_tensor.b;
-    int offset = 0;
+	int j, b = conn->src_tensor.b;
 	float *data_concat = net->connections[conn->layer->concat_index].dst_tensor.data;
 	bcnn_tensor src = conn->src_tensor;
 	bcnn_tensor dst = conn->dst_tensor;
@@ -108,8 +107,7 @@ int bcnn_forward_concat_layer_cpu(bcnn_net *net, bcnn_connection *conn)
 
 int bcnn_backward_concat_layer_cpu(bcnn_net *net, bcnn_connection *conn)
 {
-	int i, j, b = conn->src_tensor.b;
-    int offset = 0;
+	int j, b = conn->src_tensor.b;
 	float *grad_concat = net->connections[conn->layer->concat_index].dst_tensor.grad_data;
 	bcnn_tensor src = conn->src_tensor;
 	bcnn_tensor dst = conn->dst_tensor;
@@ -133,7 +131,7 @@ int bcnn_backward_concat_layer_cpu(bcnn_net *net, bcnn_connection *conn)
 int bcnn_forward_concat_layer(bcnn_net *net, bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	//return bcnn_forward_concat_layer_gpu(net, conn);
+	return bcnn_forward_concat_layer_gpu(net, conn);
 #else
 	return bcnn_forward_concat_layer_cpu(net, conn);
 #endif
@@ -142,7 +140,7 @@ int bcnn_forward_concat_layer(bcnn_net *net, bcnn_connection *conn)
 int bcnn_backward_concat_layer(bcnn_net *net, bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	//return bcnn_backward_concat_layer_gpu(net, conn);
+	return bcnn_backward_concat_layer_gpu(net, conn);
 #else
 	return bcnn_backward_concat_layer_cpu(net, conn);
 #endif

@@ -233,6 +233,7 @@ typedef struct {
 typedef enum {
 	CONVOLUTIONAL,
 	DECONVOLUTIONAL,
+	DW_SEP_CONV,			/**< Depthwise separable convolution */
 	ACTIVATION,
 	FULL_CONNECTED,
 	MAXPOOL,
@@ -520,6 +521,12 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, i
 int bcnn_forward_deconv_layer(bcnn_connection *conn);
 int bcnn_backward_deconv_layer(bcnn_connection *conn);
 
+/* Depthwise separable conv layer */
+int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride, int pad,
+	int batch_norm, bcnn_weights_init init, bcnn_activation activation, char *id);
+int bcnn_forward_depthwise_sep_conv_layer(bcnn_connection *conn);
+int bcnn_backward_depthwise_sep_conv_layer(bcnn_connection *conn);
+
 /* Batchnorm layer */
 int bcnn_add_batchnorm_layer(bcnn_net *net, char *id);
 int bcnn_forward_batchnorm_layer(bcnn_connection *conn);
@@ -695,8 +702,10 @@ int bcnn_forward_conv_layer_gpu(bcnn_connection *conn);
 int bcnn_backward_conv_layer_gpu(bcnn_connection *conn);
 int bcnn_forward_deconv_layer_gpu(bcnn_connection *conn);
 int bcnn_backward_deconv_layer_gpu(bcnn_connection *conn);
-int bcnn_forward_concat_layer_gpu(bcnn_connection *conn);
-int bcnn_backward_concat_layer_gpu(bcnn_connection *conn);
+int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_connection *conn);
+int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_connection *conn);
+int bcnn_forward_concat_layer_gpu(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_concat_layer_gpu(bcnn_net *net, bcnn_connection *conn);
 int bcnn_forward_fullc_layer_gpu(bcnn_connection *conn);
 int bcnn_backward_fullc_layer_gpu(bcnn_connection *conn);
 int bcnn_forward_maxpool_layer_gpu(bcnn_connection *conn);

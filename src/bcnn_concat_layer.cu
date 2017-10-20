@@ -27,8 +27,7 @@
 
 int bcnn_forward_concat_layer_gpu(bcnn_net *net, bcnn_connection *conn)
 {
-	int i, j, b = conn->src_tensor.b;
-    int offset = 0;
+	int j, b = conn->src_tensor.b;
 	float *data_concat = net->connections[conn->layer->concat_index].dst_tensor.data_gpu;
 	bcnn_tensor src = conn->src_tensor;
 	bcnn_tensor dst = conn->dst_tensor;
@@ -50,8 +49,7 @@ int bcnn_forward_concat_layer_gpu(bcnn_net *net, bcnn_connection *conn)
 
 int bcnn_backward_concat_layer_gpu(bcnn_net *net, bcnn_connection *conn)
 {
-	int i, j, b = conn->src_tensor.b;
-    int offset = 0;
+	int j, b = conn->src_tensor.b;
 	float *grad_concat = net->connections[conn->layer->concat_index].dst_tensor.grad_data_gpu;
 	bcnn_tensor src = conn->src_tensor;
 	bcnn_tensor dst = conn->dst_tensor;

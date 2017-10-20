@@ -262,6 +262,9 @@ int bcnn_forward(bcnn_net *net)
 		case DECONVOLUTIONAL:
 			bcnn_forward_deconv_layer(&conn);
 			break;
+		case DW_SEP_CONV:
+			bcnn_forward_depthwise_sep_conv_layer(&conn);
+			break;
 		case ACTIVATION:
 			bcnn_forward_activation_layer(&conn);
 			break;
@@ -308,6 +311,9 @@ int bcnn_backward(bcnn_net *net)
 			break;
 		case DECONVOLUTIONAL:
 			bcnn_backward_deconv_layer(&conn);
+			break;
+		case DW_SEP_CONV:
+			bcnn_backward_depthwise_sep_conv_layer(&conn);
 			break;
 		case ACTIVATION:
 			bcnn_backward_activation_layer(&conn);
@@ -540,7 +546,7 @@ int bcnn_train_on_batch(bcnn_net *net, bcnn_iterator *iter, float *loss)
 	// Update network weight
 	bcnn_update(net);
 	*loss = net->connections[net->nb_connections - 1].dst_tensor.data[0];
-	
+
 	return BCNN_SUCCESS;
 }
 

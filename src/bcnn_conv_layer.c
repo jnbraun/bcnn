@@ -324,7 +324,9 @@ int bcnn_forward_conv_layer_cpu(bcnn_connection *conn)
 	bcnn_tensor src = conn->src_tensor;
 	bcnn_tensor dst = conn->dst_tensor;
 	int batch_size = src.b;
-
+	/*bh_timer t = { 0 };
+	bh_timer_start(&t);*/
+	
 	sz = bcnn_get_tensor_size(&dst);
 
 	//bcnn_fill_f32(sz, 0.0f, dst.data);
@@ -348,8 +350,13 @@ int bcnn_forward_conv_layer_cpu(bcnn_connection *conn)
 	c = dst.data;
 	
 	for (i = 0; i < batch_size; ++i) {
-		_bcnn_im2col(src.data, src.c, src.h, src.w,
-			layer->size, layer->pad, layer->stride, b);
+		if (layer->size == 1) {
+			b = src.data;
+		}
+		else {
+			_bcnn_im2col(src.data, src.c, src.h, src.w,
+				layer->size, layer->pad, layer->stride, b);
+		}
 		// Binarize inputs here (after padding)
 		if (layer->quantize) {
 			for (j = 0; j < k * n; ++j)
@@ -397,6 +404,9 @@ int bcnn_forward_conv_layer_cpu(bcnn_connection *conn)
 
 	sz = dst.w * dst.h * dst.c * batch_size;
 	bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
+	
+	/*bh_timer_stop(&t);
+	fprintf(stderr, "conv-forward-time %lf sec\n", bh_timer_get_msec(&t) / 1000);*/
 
 	return BCNN_SUCCESS;
 }
@@ -415,7 +425,9 @@ int bcnn_backward_conv_layer_cpu(bcnn_connection *conn)
 	int n = layer->size * layer->size * src.c;
 	int k = dst.w * dst.h;
 	float *a = NULL, *b = NULL, *c = NULL;
-
+	/*bh_timer t = { 0 };
+	bh_timer_start(&t);*/
+	
 	bcnn_backward_activation_cpu(dst.data, dst.grad_data,
 		dst.w * dst.h * dst.c * batch_size,
 		layer->activation);
@@ -426,19 +438,29 @@ int bcnn_backward_conv_layer_cpu(bcnn_connection *conn)
 		a = dst.grad_data + i * m * k;
 		b = layer->conv_workspace;
 		c = layer->weight_diff;
-
-		_bcnn_im2col(src.data + i * sz, src.c, src.h, src.w,
-			layer->size, layer->pad, layer->stride, b);
+		
+		if (layer->size == 1) {
+			b = src.data + i * sz;
+		}
+		else {
+			_bcnn_im2col(src.data + i * sz, src.c, src.h, src.w,
+				layer->size, layer->pad, layer->stride, b);
+		}
 		bcnn_gemm(0, 1, m, n, k, 1, a, k, b, k, 1, c, n);
 
 		if (src.grad_data) {
 			a = layer->weight;
 			b = dst.grad_data + i * m * k;
 			c = layer->conv_workspace;
-
-			bcnn_gemm(1, 0, n, k, m, 1, a, n, b, k, 0, c, k);
-			_bcnn_col2im(layer->conv_workspace, src.c, src.h, src.w,
-				layer->size, layer->pad, layer->stride, src.grad_data + i * sz);
+			
+			if (layer->size == 1) {
+				bcnn_gemm(1, 0, n, k, m, 1, a, n, b, k, 0, src.grad_data + i * sz, k);
+			}
+			else {
+				bcnn_gemm(1, 0, n, k, m, 1, a, n, b, k, 0, c, k);
+				_bcnn_col2im(layer->conv_workspace, src.c, src.h, src.w,
+					layer->size, layer->pad, layer->stride, src.grad_data + i * sz);
+			}
 		}
 	}
 
@@ -448,6 +470,9 @@ int bcnn_backward_conv_layer_cpu(bcnn_connection *conn)
 		}
 	}
 
+	/*bh_timer_stop(&t);
+	fprintf(stderr, "conv-backward-time %lf sec\n", bh_timer_get_msec(&t) / 1000);*/
+	
 	return BCNN_SUCCESS;
 }
 
@@ -640,5 +665,425 @@ int bcnn_backward_deconv_layer(bcnn_connection *conn)
 	return bcnn_backward_deconv_layer_gpu(conn);
 #else
 	return bcnn_backward_deconv_layer_cpu(conn);
+#endif
+}
+
+
+/* Depthwise Separable convolution */
+
+int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride, int pad,
+	int batch_norm, bcnn_weights_init init, bcnn_activation activation, char *id)
+{
+	int nb_connections = net->nb_connections + 1;
+	int i, sz;
+	bcnn_connection conn = { 0 };
+	float std_init = 0.0f;
+	bcnn_gauss_gen g = { 0 };
+#ifdef BCNN_USE_CUDNN
+	size_t cudnn_wrk_sz = 0;
+#endif
+	
+	if (id != NULL)
+		bh_fill_option(&conn.id, id);
+
+	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
+	conn.layer->type = DW_SEP_CONV;
+	if (nb_connections > 1)
+		conn.src_tensor = net->connections[nb_connections - 2].dst_tensor;
+	else
+		conn.src_tensor = net->input_node;
+
+	conn.layer->num = conn.src_tensor.c;
+	conn.layer->stride = stride;
+	conn.layer->size = size;
+	conn.layer->pad = pad;
+	conn.layer->bias_size = conn.src_tensor.c;
+	conn.layer->weights_size = conn.src_tensor.c * size * size;
+
+	conn.layer->weight = (float *)calloc(conn.layer->weights_size, sizeof(float));
+	conn.layer->weight_diff = (float *)calloc(conn.layer->weights_size, sizeof(float));
+	conn.layer->bias = (float *)calloc(conn.layer->bias_size, sizeof(float));
+	conn.layer->bias_diff = (float *)calloc(conn.layer->bias_size, sizeof(float));
+
+	switch (init) {
+	case XAVIER:
+		std_init = (float)sqrt(3.0f / (size * size * conn.src_tensor.c));
+		for (i = 0; i < conn.layer->weights_size; ++i)
+			conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);
+		break;
+	case MSRA:
+		std_init = (float)sqrt(2.0f / (size * size * conn.src_tensor.c));
+		for (i = 0; i < conn.layer->weights_size; ++i)
+			conn.layer->weight[i] = std_init * bcnn_rng_gaussian(&g);
+		break;
+	}
+	
+	/*for (i = 0; i < conn.layer->weights_size; ++i)
+		conn.layer->weight[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);*/
+	conn.dst_tensor.w = (conn.src_tensor.w + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
+	conn.dst_tensor.h = (conn.src_tensor.h + 2 * conn.layer->pad - conn.layer->size) / conn.layer->stride + 1;
+	conn.dst_tensor.c = conn.src_tensor.c;
+	conn.dst_tensor.b = conn.src_tensor.b;
+	sz = conn.dst_tensor.w * conn.dst_tensor.h * conn.src_tensor.c * size * size;
+	conn.layer->conv_workspace = (float *)calloc(sz, sizeof(float));
+	sz = conn.dst_tensor.b * conn.dst_tensor.w * conn.dst_tensor.h * conn.src_tensor.c;
+	conn.dst_tensor.data = (float *)calloc(sz, sizeof(float));
+	conn.dst_tensor.grad_data = (float *)calloc(sz, sizeof(float));
+
+	if (net->learner.optimizer == ADAM) {
+		conn.layer->adam_m = (float *)calloc(conn.layer->weights_size, sizeof(float));
+		conn.layer->adam_v = (float *)calloc(conn.layer->weights_size, sizeof(float));
+	}
+
+#ifdef BCNN_USE_CUDA
+	conn.layer->weight_gpu = bcnn_cuda_memcpy_f32(conn.layer->weight, conn.layer->weights_size);
+	conn.layer->weight_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->weight_diff, conn.layer->weights_size);
+	conn.layer->bias_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias, conn.layer->bias_size);
+	conn.layer->bias_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias_diff, conn.layer->bias_size);
+
+	sz = conn.dst_tensor.b * conn.dst_tensor.w * conn.dst_tensor.h * conn.dst_tensor.c;
+	conn.dst_tensor.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.data, sz);
+	conn.dst_tensor.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.grad_data, sz);
+	if (net->learner.optimizer == ADAM) {
+		conn.layer->adam_m_gpu = bcnn_cuda_memcpy_f32(conn.layer->adam_m, conn.layer->weights_size);
+		conn.layer->adam_v_gpu = bcnn_cuda_memcpy_f32(conn.layer->adam_v, conn.layer->weights_size);
+	}
+	sz = conn.dst_tensor.w * conn.dst_tensor.h * conn.src_tensor.c * size * size;
+	conn.layer->conv_workspace_gpu = bcnn_cuda_memcpy_f32(conn.layer->conv_workspace, sz);
+#endif
+	conn.layer->activation = activation;
+	net->nb_connections = nb_connections;
+	bcnn_net_add_connection(net, conn);
+
+	fprintf(stderr, "[DepthwiseSepConvolutional] input_shape= %dx%dx%d nb_filters= %d kernel_size= %d stride= %d padding= %d output_shape= %dx%dx%d\n",
+		conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, conn.src_tensor.c, size, stride, pad,
+		conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
+
+	return 0;
+}
+
+int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_connection *conn)
+{
+	int n, sz, c, h, w, kh, kw, h_in, w_in, offset;
+	bcnn_layer *layer = conn->layer;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
+	int batch_size = src.b;
+	float *dst_data = NULL;
+	const float *bias_data = NULL;
+	const float *weight_data = NULL;
+	float val = 0;
+	/*bh_timer t = { 0 };
+	bh_timer_start(&t);*/
+
+	sz = bcnn_get_tensor_size(&dst);
+
+	dst_data = dst.data;
+	memset(dst_data, 0, sz * sizeof(float));
+	
+	for (n = 0; n < batch_size; ++n) {
+		for (c = 0; c < dst.c; ++c) {
+			for (h = 0; h < dst.h; ++h) {
+				if (h * layer->stride - layer->pad >= 0 && (h * layer->stride - layer->pad + layer->size) < src.h) {
+					for (w = 0; w < dst.w; ++w) {
+						weight_data = layer->weight + c * layer->size * layer->size;
+						val = 0;
+						if (w * layer->stride - layer->pad >= 0 && (w * layer->stride - layer->pad + layer->size) < src.w) {
+							for (kh = 0; kh < layer->size; ++kh) {
+								for (kw = 0; kw < layer->size; ++kw) {
+									h_in = -layer->pad + h * layer->stride + kh;
+									w_in = -layer->pad + w * layer->stride + kw;
+									offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+									val += (*weight_data) * src.data[offset];
+									++weight_data;
+								}
+							}
+						}
+						else {
+							for (kh = 0; kh < layer->size; ++kh) {
+								for (kw = 0; kw < layer->size; ++kw) {
+									h_in = -layer->pad + h * layer->stride + kh;
+									w_in = -layer->pad + w * layer->stride + kw;
+									if ((w_in >= 0) && (w_in < src.w)) {
+										offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+										val += (*weight_data) * src.data[offset];
+									}
+									++weight_data;
+								}
+							}
+						}
+						*dst_data++ = val;
+					}
+				}
+				else {
+					for (w = 0; w < dst.w; ++w) {
+						weight_data = layer->weight + c * layer->size * layer->size;
+						val = 0;
+						if (w * layer->stride - layer->pad >= 0 && (w * layer->stride - layer->pad + layer->size) < src.w) {
+							for (kh = 0; kh < layer->size; ++kh) {
+								for (kw = 0; kw < layer->size; ++kw) {
+									h_in = -layer->pad + h * layer->stride + kh;
+									w_in = -layer->pad + w * layer->stride + kw;
+									if ((h_in >= 0) && (h_in < src.h)) {
+										offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+										val += (*weight_data) * src.data[offset];
+									}
+									++weight_data;
+								}
+							}
+						}
+						else {
+							for (kh = 0; kh < layer->size; ++kh) {
+								for (kw = 0; kw < layer->size; ++kw) {
+									h_in = -layer->pad + h * layer->stride + kh;
+									w_in = -layer->pad + w * layer->stride + kw;
+									if ((h_in >= 0) && (h_in < src.h) && (w_in >= 0) && (w_in < src.w)) {
+										offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+										val += (*weight_data) * src.data[offset];
+									}
+									++weight_data;
+								}
+							}
+						}
+						*dst_data++ = val;
+					}
+				}
+			}
+		}
+	}
+	   
+
+	/*dst_data = dst.data;
+	for (n = 0; n < batch_size; ++n) {
+		bias_data = layer->bias;
+		for (c = 0; c < dst.c; ++c) {
+			for (h = 0; h < dst.h; ++h) {
+				for (w = 0; w < dst.w; ++w) {
+					*dst_data += *bias_data;
+					++dst_data;
+				}
+			}
+			++bias_data;
+		}
+	}*/
+
+	
+	_bcnn_add_bias(dst.data, layer->bias, batch_size, dst.c, dst.w * dst.h);
+
+	sz = dst.w * dst.h * dst.c * batch_size;
+	bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
+
+	/*bh_timer_stop(&t);
+	fprintf(stderr, "sep-conv-forward-time %lf sec\n", bh_timer_get_msec(&t) / 1000);*/
+	
+	return BCNN_SUCCESS;
+}
+
+
+int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_connection *conn)
+{
+	int sz, n, c, h, w, kh, kw, w_in, h_in, offset;
+	bcnn_layer *layer = conn->layer;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
+	int batch_size = src.b;
+    float *dst_grad_data = NULL;
+	float *weight_diff_base = NULL, *weight_diff = NULL;
+	float *weight_data_base = NULL, *weight_data = NULL;
+	float *bias_diff = NULL;
+	/*bh_timer t = { 0 };
+	bh_timer_start(&t);*/
+	
+	sz = bcnn_get_tensor_size(&dst);
+    
+	bcnn_backward_activation_cpu(dst.data, dst.grad_data,
+		dst.w * dst.h * dst.c * batch_size,
+		layer->activation);
+	
+	/*if (src.grad_data) {
+		memset(src.grad_data, 0, sizeof(float));
+		dst_grad_data = dst.grad_data;
+		for (n = 0; n < batch_size; ++n) {
+			bias_diff = layer->bias_diff;
+			for (c = 0; c < dst.c; ++c) {
+				for (h = 0; h < dst.h; ++h) {
+					for (w = 0; w < dst.w; ++w) {
+						*bias_diff += *dst_grad_data;
+						++dst_grad_data;
+					}
+				}
+				++bias_diff;
+			}
+		}
+    }*/
+	_bcnn_backward_bias(layer->bias_diff, dst.grad_data, batch_size, dst.c, dst.w * dst.h);
+	
+    if (src.grad_data) {
+		dst_grad_data = dst.grad_data;
+		weight_diff_base = layer->weight_diff;;
+		for (n = 0; n < batch_size; ++n) {
+			for (c = 0; c < dst.c; ++c) {
+				for (h = 0; h < dst.h; ++h) {
+					if (h * layer->stride - layer->pad >= 0 && (h * layer->stride - layer->pad + layer->size) < src.h) {
+						for (w = 0; w < dst.w; ++w) {
+							weight_diff = weight_diff_base + c * layer->size * layer->size;
+							if (w * layer->stride - layer->pad >= 0 && (w * layer->stride - layer->pad + layer->size) < src.w) {
+								for (kh = 0; kh < layer->size; ++kh) {
+									for (kw = 0; kw < layer->size; ++kw) {
+										h_in = -layer->pad + h * layer->stride + kh;
+										w_in = -layer->pad + w * layer->stride + kw;
+										offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+										*weight_diff += src.data[offset] * (*dst_grad_data);
+										++weight_diff;
+									}
+								}
+							}
+							else {
+								for (kh = 0; kh < layer->size; ++kh) {
+									for (kw = 0; kw < layer->size; ++kw) {
+										h_in = -layer->pad + h * layer->stride + kh;
+										w_in = -layer->pad + w * layer->stride + kw;
+										if ((w_in >= 0) && (w_in < src.w)) {
+											offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+											*weight_diff += src.data[offset] * (*dst_grad_data);
+										}
+										++weight_diff;
+									}
+								}
+							}
+							++dst_grad_data;
+						}
+					}
+					else {
+						for (w = 0; w < dst.w; ++w) {
+							weight_diff = weight_diff_base + c * layer->size * layer->size;
+							if (w * layer->stride - layer->pad >= 0 && (w * layer->stride - layer->pad + layer->size) < src.w) {
+								for (kh = 0; kh < layer->size; ++kh) {
+									for (kw = 0; kw < layer->size; ++kw) {
+										h_in = -layer->pad + h * layer->stride + kh;
+										w_in = -layer->pad + w * layer->stride + kw;
+										if ((h_in >= 0) && (h_in < src.h)) {
+											offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+											*weight_diff += src.data[offset] * (*dst_grad_data);
+										}
+										++weight_diff;
+									}
+								}
+							}
+							else {
+								for (kh = 0; kh < layer->size; ++kh) {
+									for (kw = 0; kw < layer->size; ++kw) {
+										h_in = -layer->pad + h * layer->stride + kh;
+										w_in = -layer->pad + w * layer->stride + kw;
+										if ((h_in >= 0) && (h_in < src.h) && (w_in >= 0) && (w_in < src.w)) {
+											offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+											*weight_diff += src.data[offset] * (*dst_grad_data);
+										}
+										++weight_diff;
+									}
+								}
+							}
+							++dst_grad_data;
+						}
+					}
+				}
+			}
+		}
+    }
+    if (src.grad_data) {
+		dst_grad_data = dst.grad_data;
+		weight_data_base = layer->weight;
+		for (n = 0; n < batch_size; ++n) {
+			for (c = 0; c < dst.c; ++c) {
+				for (h = 0; h < dst.h; ++h) {
+					if (h * layer->stride - layer->pad >= 0 && (h * layer->stride - layer->pad + layer->size) < src.h) {
+						for (w = 0; w < dst.w; ++w) {
+							weight_data = weight_data_base + c * layer->size * layer->size;
+							if (w * layer->stride - layer->pad >= 0 && (w * layer->stride - layer->pad + layer->size) < src.w) {
+								for (kh = 0; kh < layer->size; ++kh) {
+									for (kw = 0; kw < layer->size; ++kw) {
+										h_in = -layer->pad + h * layer->stride + kh;
+										w_in = -layer->pad + w * layer->stride + kw;	
+										offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+										src.grad_data[offset] += (*weight_data) * (*dst_grad_data);
+										++weight_data;
+									}
+								}
+							}
+							else {
+								for (kh = 0; kh < layer->size; ++kh) {
+									for (kw = 0; kw < layer->size; ++kw) {
+										h_in = -layer->pad + h * layer->stride + kh;
+										w_in = -layer->pad + w * layer->stride + kw;
+										if ((w_in >= 0) && (w_in < src.w)) {
+											offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+											src.grad_data[offset] += (*weight_data) * (*dst_grad_data);
+										}
+										++weight_data;
+									}
+								}
+							}
+							++dst_grad_data;
+						}
+					}
+					else {
+						for (w = 0; w < dst.w; ++w) {
+							weight_data = weight_data_base + c * layer->size * layer->size;
+							if (w * layer->stride - layer->pad >= 0 && (w * layer->stride - layer->pad + layer->size) < src.w) {
+								for (kh = 0; kh < layer->size; ++kh) {
+									for (kw = 0; kw < layer->size; ++kw) {
+										h_in = -layer->pad + h * layer->stride + kh;
+										w_in = -layer->pad + w * layer->stride + kw;
+										if ((h_in >= 0) && (h_in < src.h)) {
+											offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+											src.grad_data[offset] += (*weight_data) * (*dst_grad_data);
+										}
+										++weight_data;
+									}
+								}
+							}
+							else {
+								for (kh = 0; kh < layer->size; ++kh) {
+									for (kw = 0; kw < layer->size; ++kw) {
+										h_in = -layer->pad + h * layer->stride + kh;
+										w_in = -layer->pad + w * layer->stride + kw;
+										if ((h_in >= 0) && (h_in < src.h) && (w_in >= 0) && (w_in < src.w)) {
+											offset = ((n * dst.c + c) * src.h + h_in) * src.w + w_in;
+											src.grad_data[offset] += (*weight_data) * (*dst_grad_data);
+										}
+										++weight_data;
+									}
+								}
+							}
+							++dst_grad_data;
+						}
+					}
+				}
+			}
+		}
+    }
+	
+	/*bh_timer_stop(&t);
+	fprintf(stderr, "sep-conv-backward-time %lf sec\n", bh_timer_get_msec(&t) / 1000);*/
+	
+	return BCNN_SUCCESS;
+}
+
+
+int bcnn_forward_depthwise_sep_conv_layer(bcnn_connection *conn)
+{
+#ifdef BCNN_USE_CUDA
+	return bcnn_forward_depthwise_sep_conv_layer_gpu(conn);
+#else
+	return bcnn_forward_depthwise_sep_conv_layer_cpu(conn);
+#endif
+}
+
+int bcnn_backward_depthwise_sep_conv_layer(bcnn_connection *conn)
+{
+#ifdef BCNN_USE_CUDA
+	return bcnn_backward_depthwise_sep_conv_layer_gpu(conn);
+#else
+	return bcnn_backward_depthwise_sep_conv_layer_cpu(conn);
 #endif
 }

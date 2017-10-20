@@ -24,6 +24,12 @@
 #ifdef BCNN_USE_CUDA
 
 #include "bcnn/bcnn.h"
+#include <bh/bh_timer.h>
+
+bh_inline int bcnn_cuda_blocks(int n)
+{
+  return (n - 1) / (BCNN_CUDA_THREADS) + 1;
+}
 
 // im2col and col2im functions from caffe
 // Reference https://github.com/BVLC/caffe/blob/master/src/caffe/util/im2col.cu
@@ -69,14 +75,11 @@ void bcnn_im2col_gpu(float *im,
          int channels, int height, int width,
          int ksize, int stride, int pad, float *data_col)
 {
-    // We are going to launch channels * height_col * width_col kernels, each
-    // kernel responsible for copying a single-channel grid.
     pad = pad ? ksize/2 : 0;
     int height_col = (height + 2 * pad - ksize) / stride + 1;
     int width_col = (width + 2 * pad - ksize) / stride + 1;
     int num_kernels = channels * height_col * width_col;
-    im2col_gpu_kernel<<<(num_kernels + BCNN_CUDA_THREADS - 1) / BCNN_CUDA_THREADS,
-							BCNN_CUDA_THREADS>>>(
+    im2col_gpu_kernel<<</*bcnn_cuda_blocks(num_kernels)*/(num_kernels + BCNN_CUDA_THREADS - 1) / BCNN_CUDA_THREADS, BCNN_CUDA_THREADS>>>(
 							num_kernels, im, height, width, ksize, pad,
 							stride, height_col,
 							width_col, data_col);
@@ -103,9 +106,9 @@ __global__ void col2im_gpu_kernel(const int n, const float* data_col,
 
         // compute the start and end of the output
         w_col_start = (w < ksize) ? 0 : (w - ksize) / stride + 1;
-        w_col_end = min(w / stride + 1, width_col);
+        w_col_end = bh_min(w / stride + 1, width_col);
         h_col_start = (h < ksize) ? 0 : (h - ksize) / stride + 1;
-        h_col_end = min(h / stride + 1, height_col);
+        h_col_end = bh_min(h / stride + 1, height_col);
 
         // equivalent implementation
         offset = (c * ksize * ksize + h * ksize + w) * height_col * width_col;
@@ -125,8 +128,7 @@ void bcnn_col2im_gpu(float *data_col,
         int ksize, int stride, int pad, float *data_im)
 {
 	int height_col, width_col, num_kernels;
-    // We are going to launch channels * height_col * width_col kernels, each
-    // kernel responsible for copying a single-channel grid.
+
     pad = pad ? ksize/2 : 0;
     height_col = (height + 2 * pad - ksize) / stride + 1;
     width_col = (width + 2 * pad - ksize) / stride + 1;
@@ -146,7 +148,20 @@ __global__ void _bcnn_forward_bias_kernel(float *output, float *bias, int n, int
     int filter = blockIdx.y;
     int batch = blockIdx.z;
 
-    if(offset < size) output[(batch * n+filter) * size + offset] += bias[filter];
+    if (offset < size)
+		output[(batch * n+filter) * size + offset] += bias[filter];
+}
+
+__global__ void ConvolutionDepthwiseBiasForward(int nthreads,
+     float *bias_data, int channels,
+     const int dst_h, const int dst_w, float* const dst_data)
+{
+	int i, c;
+
+	for (i = blockIdx.x * blockDim.x + threadIdx.x; i < nthreads; i += blockDim.x * gridDim.x) {
+		c = (i / dst_h / dst_w) % channels;
+		dst_data[i] += bias_data[c];
+	}
 }
 
 int bcnn_forward_bias_gpu(float *output, float *bias, int batch, int n, int size)
@@ -158,7 +173,6 @@ int bcnn_forward_bias_gpu(float *output, float *bias, int batch, int n, int size
     bcnn_cuda_check(cudaPeekAtLastError());
 	return BCNN_SUCCESS;
 }
-
 
 __global__ void _bcnn_backward_bias_kernel(float *bias_diff, float *diff, int n, int size)
 {
@@ -188,6 +202,9 @@ int bcnn_forward_conv_layer_gpu(bcnn_connection *conn)
 	bcnn_tensor dst = conn->dst_tensor;
 	int batch_size = dst.b;
 	int sz;
+	/*bh_timer t = { 0 };
+	bh_timer_start(&t);*/
+	
 #ifdef BCNN_USE_CUDNN
 	float alpha = 1.0f, beta = 0.0f;
     bcnn_cudnn_check(cudnnConvolutionForward(bcnn_cudnn_handle(),
@@ -217,9 +234,13 @@ int bcnn_forward_conv_layer_gpu(bcnn_connection *conn)
 
 	bcnn_cuda_fill_f32(out_sz, 0, dst.data_gpu, 1);
 	for (i = 0; i < batch_size; ++i) {
-		bcnn_im2col_gpu(src.data_gpu + i * sz,
-			src.c, src.h, src.w,
-			layer->size, layer->stride, layer->pad, layer->conv_workspace_gpu);
+		if (layer->size == 1)
+			layer->conv_workspace_gpu = src.data_gpu + i * sz;
+		else {
+			bcnn_im2col_gpu(src.data_gpu + i * sz,
+				src.c, src.h, src.w,
+				layer->size, layer->stride, layer->pad, layer->conv_workspace_gpu);
+		}
 		bcnn_cuda_gemm(0, 0, layer->num, out_spatial_dim, w_sz, 1.0f,
 			layer->weight_gpu, w_sz, layer->conv_workspace_gpu, out_spatial_dim, 1.0f,
 			dst.data_gpu + i * layer->num * out_spatial_dim, out_spatial_dim);
@@ -229,6 +250,9 @@ int bcnn_forward_conv_layer_gpu(bcnn_connection *conn)
 
 	sz = dst.w * dst.h * dst.c * batch_size;
 	bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
+	
+	/*bh_timer_stop(&t);
+	fprintf(stderr, "conv-forward-time %lf sec\n", bh_timer_get_msec(&t) / 1000);*/
 
 	return BCNN_SUCCESS;
 }
@@ -239,13 +263,16 @@ int bcnn_backward_conv_layer_gpu(bcnn_connection *conn)
 	bcnn_layer *layer = conn->layer;
 	bcnn_tensor src = conn->src_tensor;
 	bcnn_tensor dst = conn->dst_tensor;
+	int batch_size = dst.b;
+#ifndef BCNN_USE_CUDNN
 	int i, sz = src.w * src.h * src.c;
 	int w_sz = layer->size * layer->size * src.c;
 	int out_spatial_dim = dst.w * dst.h;
-	int batch_size = dst.b;
-#ifdef BCNN_USE_CUDNN
+#else
 	float one = 1.0f, zero = 0.0f;
 #endif
+	/*bh_timer t = { 0 };
+	bh_timer_start(&t);*/
 
 	bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu,
 		dst.w * dst.h * dst.c * batch_size,
@@ -257,7 +284,6 @@ int bcnn_backward_conv_layer_gpu(bcnn_connection *conn)
               layer->dst_tensor_desc,  dst.grad_data_gpu,
               &one,
               layer->bias_desc, layer->bias_diff_gpu));
-	//bcnn_backward_bias_gpu(layer->bias_diff_gpu, dst.grad_data_gpu, batch_size, layer->num, out_spatial_dim);
     bcnn_cudnn_check(cudnnConvolutionBackwardFilter(bcnn_cudnn_handle(),
 											&one,
 											layer->src_tensor_desc,
@@ -289,23 +315,36 @@ int bcnn_backward_conv_layer_gpu(bcnn_connection *conn)
 #else
 	bcnn_backward_bias_gpu(layer->bias_diff_gpu, dst.grad_data_gpu, batch_size, layer->num, out_spatial_dim);
 	for (i = 0; i < batch_size; ++i) {
-		bcnn_im2col_gpu(src.data_gpu + i * sz,
-			src.c, src.h, src.w,
-			layer->size, layer->stride, layer->pad, layer->conv_workspace_gpu);
+		if (layer->size == 1)
+			layer->conv_workspace_gpu = src.data_gpu + i * sz;
+		else {
+			bcnn_im2col_gpu(src.data_gpu + i * sz,
+				src.c, src.h, src.w,
+				layer->size, layer->stride, layer->pad, layer->conv_workspace_gpu);
+		}
 		bcnn_cuda_gemm(0, 1, layer->num, w_sz, out_spatial_dim, 1,
 			dst.grad_data_gpu + i * layer->num * out_spatial_dim, out_spatial_dim, layer->conv_workspace_gpu, out_spatial_dim, 1,
 			layer->weight_diff_gpu, w_sz);
 
 		if (src.grad_data_gpu) {
-			bcnn_cuda_gemm(1, 0, w_sz, out_spatial_dim, layer->num, 1,
-			layer->weight_gpu, w_sz, dst.grad_data_gpu + i * out_spatial_dim * layer->num, out_spatial_dim, 0,
-			layer->conv_workspace_gpu, out_spatial_dim);
-			bcnn_col2im_gpu(layer->conv_workspace_gpu,
-				src.c, src.h, src.w,
-				layer->size, layer->stride, layer->pad, src.grad_data_gpu + i * sz);
+			if (layer->size == 1) {
+				bcnn_cuda_gemm(1, 0, w_sz, out_spatial_dim, layer->num, 1,
+					layer->weight_gpu, w_sz, dst.grad_data_gpu + i * out_spatial_dim * layer->num, out_spatial_dim, 0,
+					src.grad_data_gpu + i * sz, out_spatial_dim);
+			}
+			else {
+				bcnn_cuda_gemm(1, 0, w_sz, out_spatial_dim, layer->num, 1,
+					layer->weight_gpu, w_sz, dst.grad_data_gpu + i * out_spatial_dim * layer->num, out_spatial_dim, 0,
+					layer->conv_workspace_gpu, out_spatial_dim);
+				bcnn_col2im_gpu(layer->conv_workspace_gpu,
+					src.c, src.h, src.w,
+					layer->size, layer->stride, layer->pad, src.grad_data_gpu + i * sz);
+			}
 		}
 	}
 #endif
+	/*bh_timer_stop(&t);
+	fprintf(stderr, "conv-backward-time %lf sec\n", bh_timer_get_msec(&t) / 1000);*/
 	return BCNN_SUCCESS;
 }
 
@@ -379,5 +418,201 @@ int bcnn_backward_deconv_layer_gpu(bcnn_connection *conn)
 	}
 	return 0;
 }
+
+
+/* Depthwise Separable convolution */
+
+__global__ void _bcnn_forward_depthwise_sep_conv_weight_kernel(int nthreads,
+     float *src_data, float *weight_data, int channels, int dst_h,
+     int dst_w, int src_h, int src_w, int kernel_sz, int stride,
+     int pad, float *dst_data)
+{
+   int i, n, c, h, w, kh, kw, h_in, w_in, offset;
+   float value;
+   float *weight = NULL;
+
+	for (i = blockIdx.x * blockDim.x + threadIdx.x; i < nthreads; i += blockDim.x * gridDim.x) {
+		n = i / channels / dst_h / dst_w;
+		c = (i / dst_h / dst_w) % channels;
+		h = (i / dst_w) % dst_h;
+		w = i % dst_w;
+		weight = weight_data + c * kernel_sz * kernel_sz;
+		value = 0;
+		/*if (h * layer->stride - layer->pad >= 0 && (h * layer->stride - layer->pad + layer->size) < src.h &&
+			w * layer->stride - layer->pad >= 0 && (w * layer->stride - layer->pad + layer->size) < src.w) {
+				
+		}*/
+		for (kh = 0; kh < kernel_sz; ++kh) {
+			for (kw = 0; kw < kernel_sz; ++kw) {
+				h_in = -pad + h * stride + kh;
+				w_in = -pad + w * stride + kw;
+				if ((h_in >= 0) && (h_in < src_h) && (w_in >= 0) && (w_in < src_w)) {
+					offset = ((n * channels + c) * src_h + h_in) * src_w + w_in;
+					value += (*weight) * src_data[offset];
+				}
+				++weight;
+			}
+		}
+		dst_data[i] = value;
+	}
+}
+
+
+int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_connection *conn)
+{
+	bcnn_layer *layer = conn->layer;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
+	int sz = bcnn_get_tensor_size(&dst);
+	/*bh_timer t = { 0 };
+	bh_timer_start(&t);*/
+	
+	_bcnn_forward_depthwise_sep_conv_weight_kernel<<<bcnn_cuda_blocks(sz), BCNN_CUDA_THREADS>>>(
+		   sz, src.data_gpu, layer->weight_gpu, dst.c,
+		   dst.h, dst.w, src.h, src.w, layer->size, layer->stride,
+		   layer->pad, dst.data_gpu);
+	bcnn_cuda_check(cudaPeekAtLastError());
+	
+    /*ConvolutionDepthwiseBiasForward<<<bcnn_cuda_blocks(sz), BCNN_CUDA_THREADS>>>(
+			sz, layer->bias_gpu, dst.c, dst.h, dst.w, dst.data_gpu);
+	bcnn_cuda_check(cudaPeekAtLastError());*/
+	bcnn_forward_bias_gpu(dst.data_gpu, layer->bias_gpu, dst.b, src.c, dst.h * dst.w);
+	
+	bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
+	/*bh_timer_stop(&t);
+	fprintf(stderr, "sepconv-forward-time %lf sec\n", bh_timer_get_msec(&t) / 1000);*/
+			
+   return BCNN_SUCCESS;
+}
+
+
+__global__ void _bcnn_backward_depthwise_sep_conv_weight_kernel(int nthreads,
+     float *dst_grad, float *src_data,
+     int batch_size, const int channels, int dst_h, int dst_w, const int src_h, const int src_w,
+     int kernel_sz, int stride, int pad, float *weight_diff)
+{
+ 
+	int i, n, c, h, w, kw, kh, h_out_s, w_out_s, h_out, w_out, offset; 
+	float value = 0.0f;
+	float *p_weight_diff = NULL;
+
+	for (i = blockIdx.x * blockDim.x + threadIdx.x; i < nthreads; i += blockDim.x * gridDim.x) {
+		n = i / channels / src_h / src_w;
+		c = (i / src_h / src_w) % channels;
+		h = (i / src_w) % src_h;
+		w = i % src_w;
+		p_weight_diff = weight_diff + c * kernel_sz * kernel_sz;
+		value = 0.0f;
+		for (kh = 0; kh < kernel_sz; ++kh) {
+			for (kw = 0; kw < kernel_sz; ++kw) {
+				h_out_s = h + pad - kh;
+				w_out_s = w + pad - kw;
+				if (((h_out_s % stride) == 0) && ((w_out_s % stride) == 0)) {
+					h_out = h_out_s / stride;
+					w_out = w_out_s / stride;
+					if ((h_out >= 0) && (h_out < dst_h) && (w_out >= 0) && (w_out < dst_w)) {
+						offset = ((n * channels + c) * dst_h + h_out) * dst_w + w_out;
+						*p_weight_diff += src_data[i] * dst_grad[offset];
+					}
+				}
+				++p_weight_diff;
+			}
+		}
+	}
+}
+
+
+__global__ void _bcnn_backward_depthwise_sep_conv_data_kernel(int nthreads,
+     float *dst_grad, float *weight_data,
+     int batch_size, const int channels, int dst_h, int dst_w, const int src_h, const int src_w,
+     int kernel_sz, int stride, int pad, float *src_grad)
+{
+ 
+	int i, n, c, h, w, kw, kh, h_out_s, w_out_s, h_out, w_out, offset; 
+	float value = 0.0f;
+	float *weight = NULL;
+
+	for (i = blockIdx.x * blockDim.x + threadIdx.x; i < nthreads; i += blockDim.x * gridDim.x) {
+		n = i / channels / src_h / src_w;
+		c = (i / src_h / src_w) % channels;
+		h = (i / src_w) % src_h;
+		w = i % src_w;
+		weight = weight_data + c * kernel_sz * kernel_sz;
+		value = 0.0f;
+		for (kh = 0; kh < kernel_sz; ++kh) {
+			for (kw = 0; kw < kernel_sz; ++kw) {
+				h_out_s = h + pad - kh;
+				w_out_s = w + pad - kw;
+				if (((h_out_s % stride) == 0) && ((w_out_s % stride) == 0)) {
+					h_out = h_out_s / stride;
+					w_out = w_out_s / stride;
+					if ((h_out >= 0) && (h_out < dst_h) && (w_out >= 0) && (w_out < dst_w)) {
+						offset = ((n * channels + c) * dst_h + h_out) * dst_w + w_out;
+						value += (*weight) * dst_grad[offset];
+					}
+				}
+				++weight;
+			}
+		}
+		src_grad[i] += value;
+	}
+}
+
+
+__global__ void ConvolutionDepthwiseBiasBackward(const int nthreads,
+     float *top_diff, int batch_size, int channels,
+     int dst_h, int dst_w, float *buffer_data)
+{
+	int i, c, n, h, w, offset;
+
+	for (i = blockIdx.x * blockDim.x + threadIdx.x; i < nthreads; i += blockDim.x * gridDim.x) {
+		c = i / batch_size / dst_h / dst_w;
+		n = (i / dst_h / dst_w) % batch_size;
+		h = (i / dst_w) % dst_h;
+		w = i % dst_w;
+		offset = ((n * channels + c) * dst_h + h) * dst_w + w;
+		buffer_data[i] = top_diff[offset];
+	}
+}
+
+
+int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_connection *conn)
+{
+	bcnn_layer *layer = conn->layer;
+	bcnn_tensor src = conn->src_tensor;
+	bcnn_tensor dst = conn->dst_tensor;
+	int src_sz = bcnn_get_tensor_size(&src);
+	int dst_sz = bcnn_get_tensor_size(&dst);
+	/*bh_timer t = { 0 };
+	bh_timer_start(&t);*/
+	
+    if (src.grad_data_gpu)
+		bcnn_cuda_fill_f32(src_sz, 0.0f, src.grad_data_gpu, 1);
+	
+	bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu,
+		dst.w * dst.h * dst.c * dst.b,
+		layer->activation);
+
+    bcnn_backward_bias_gpu(layer->bias_diff_gpu, dst.grad_data_gpu, src.b, src.c, dst.w * dst.h);
+
+	_bcnn_backward_depthwise_sep_conv_weight_kernel<<<bcnn_cuda_blocks(src_sz), BCNN_CUDA_THREADS>>>(
+		 src_sz, dst.grad_data_gpu, src.data_gpu,
+		 src.b, src.c, dst.h, dst.w, src.h, src.w,
+		 layer->size, layer->stride, layer->pad, layer->weight_diff_gpu);
+	bcnn_cuda_check(cudaPeekAtLastError());
+	
+	if (src.grad_data_gpu) {
+		_bcnn_backward_depthwise_sep_conv_data_kernel<<<bcnn_cuda_blocks(src_sz), BCNN_CUDA_THREADS>>>(
+			 src_sz, dst.grad_data_gpu, layer->weight_gpu, src.b, src.c,
+			 dst.h, dst.w, src.h, src.w, layer->size, layer->stride, layer->pad, src.grad_data_gpu);
+		bcnn_cuda_check(cudaPeekAtLastError());
+	}
+   
+	/*bh_timer_stop(&t);
+	fprintf(stderr, "sepconv-backward-time %lf sec\n", bh_timer_get_msec(&t) / 1000);*/
+   
+   return BCNN_SUCCESS;
+}
+
 
 #endif

@@ -139,7 +139,8 @@ int bcnn_update(bcnn_net *net)
 		for (i = 0; i < net->nb_connections; ++i) {
 			type = net->connections[i].layer->type;
 			if ((type == CONVOLUTIONAL || 
-				type == DECONVOLUTIONAL || 
+				type == DECONVOLUTIONAL ||
+				type == DW_SEP_CONV ||
 				type == FULL_CONNECTED)) {
 				bcnn_sgd_optimizer(&net->connections[i],
 						net->input_node.b, lr, net->learner.momentum, net->learner.decay);
@@ -151,11 +152,13 @@ int bcnn_update(bcnn_net *net)
 			type = net->connections[i].layer->type;
 			if ((type == CONVOLUTIONAL || 
 				type == DECONVOLUTIONAL || 
+				type == DW_SEP_CONV ||
 				type == FULL_CONNECTED)) {
 				bcnn_adam_optimizer(&net->connections[i], net->seen, net->input_node.b, net->learner.beta1, net->learner.beta2,
 					lr, net->learner.momentum, net->learner.decay);
 			}
 		}
 	}
+
 	return BCNN_SUCCESS;
 }

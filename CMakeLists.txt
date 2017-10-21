@@ -69,4 +69,5 @@ endif()
 add_executable(bcnn-cl ${SRC_CLI})
 target_link_libraries(bcnn-cl libbcnn bip)
 
-add_subdirectory(examples/mnist) 
+add_subdirectory(examples/mnist)
+add_subdirectory(examples/cifar10)

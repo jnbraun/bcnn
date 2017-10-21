@@ -39,8 +39,9 @@ Only tested with msvc2010 and 2013.
 ## Features:
 
 * Currently implemented layers: 
-	- Convolutional
-	- Deconvolutional
+	- Convolution
+	- Transposed convolution (aka Deconvolution)
+	- Depthwise separable convolution
 	- Fully-connected
 	- Activation functions: relu, tanh, abs, ramp, softplus, leaky-relu, clamp.
 	- Softmax

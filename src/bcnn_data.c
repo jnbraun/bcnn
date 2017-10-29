@@ -348,7 +348,7 @@ static int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path
 	fread(&iter->label_width, 1, sizeof(int), f_bin);
 	fread(&type, 1, sizeof(int), f_bin);
 	iter->input_width = net->input_node.w;
-	iter->input_height = net->input_node.w;
+	iter->input_height = net->input_node.h;
 	iter->input_depth = net->input_node.c;
 	iter->input_uchar = (unsigned char *)calloc(iter->input_width * iter->input_height * iter->input_depth,
 		sizeof(unsigned char));

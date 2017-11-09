@@ -5,10 +5,16 @@ set(USE_SSE2 1)
 set(USE_CUDA 1)
 set(BUILD_EXAMPLES 1)
 
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
 if (USE_CUDA)
 find_package(CUDA QUIET REQUIRED)
 add_definitions(-DBCNN_USE_CUDA)
-set(CUDA_NVCC_FLAGS "-arch=compute_20; -code=sm_20; -lcuda -lcudart -lcublas -lcurand")
+#set(CUDA_HOST_COMPILATION_CPP OFF)
+set(CUDA_NVCC_FLAGS "-arch=compute_50; -code=sm_50; -lcuda -lcudart -lcublas -lcurand")
+#list(APPEND CMAKE_CXX_SOURCE_FILE_EXTENSIONS c)
 endif()
 
 if (USE_SSE2)
@@ -67,7 +73,15 @@ target_link_libraries(libbcnn bip)
 endif()
 
 add_executable(bcnn-cl ${SRC_CLI})
-target_link_libraries(bcnn-cl libbcnn bip)
 
+if(NOT MSVC)
+	target_link_libraries(bcnn-cl libbcnn bip -lstdc++ -lm)
+else()
+	target_link_libraries(bcnn-cl libbcnn bip)
+endif()
+
+
+if (BUILD_EXAMPLES)
 add_subdirectory(examples/mnist)
 add_subdirectory(examples/cifar10)
+endif()

@@ -42,10 +42,11 @@ include_directories (
 	)
 
 file(GLOB SRC *.c)
-add_executable(mnist-example ${SRC})
-#target_link_libraries(mnist-example libbcnn)
+add_executable(cifar10-example ${SRC})
+#target_link_libraries(cifar10-example libbcnn)
+
 if(NOT MSVC)
-	target_link_libraries(mnist-example libbcnn bip -lstdc++ -lm)
+	target_link_libraries(cifar10-example libbcnn bip -lstdc++ -lm)
 else()
-	target_link_libraries(mnist-example libbcnn bip)
+	target_link_libraries(cifar10-example libbcnn bip)
 endif()

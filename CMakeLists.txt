@@ -3,6 +3,7 @@ project (bcnn)
 
 set(USE_SSE2 1)
 set(USE_CUDA 1)
+set(USE_CUDNN 1)
 set(BUILD_EXAMPLES 1)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -15,14 +16,20 @@ add_definitions(-DBCNN_USE_CUDA)
 #set(CUDA_HOST_COMPILATION_CPP OFF)
 set(CUDA_NVCC_FLAGS "-arch=compute_50; -code=sm_50; -lcuda -lcudart -lcublas -lcurand")
 #list(APPEND CMAKE_CXX_SOURCE_FILE_EXTENSIONS c)
+	if (USE_CUDNN)
+		set(CUDNN_ROOT_DIR "" CACHE PATH "Folder contains NVIDIA cuDNN")
+		find_path(CUDNN_INCLUDE_DIR cudnn.h HINTS ${CUDNN_ROOT_DIR} ${CUDA_TOOLKIT_ROOT_DIR}
+			PATH_SUFFIXES cuda/include include)
+		find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDA_TOOLKIT_ROOT_DIR}
+			PATH_SUFFIXES lib lib64 cuda/lib cuda/lib64 lib/x64)
+		set(CUDNN_INCLUDE_DIRS ${CUDNN_INCLUDE_DIR})
+		set(CUDNN_LIBRARIES ${CUDNN_LIBRARY})
+		add_definitions(-DBCNN_USE_CUDNN)
+	endif()
 endif()
 
 if (USE_SSE2)
 add_definitions(-DBCNN_USE_SSE2)
-endif()
-
-if (USE_CUDNN)
-add_definitions(-DBCNN_USE_CUDNN)
 endif()
 
 add_definitions(-DBIP_USE_STB_IMAGE)
@@ -65,11 +72,16 @@ MESSAGE(STATUS "${SRC_LIB}")
 MESSAGE(STATUS "${CMAKE_CURRENT_SOURCE_DIR}")
 
 if (USE_CUDA)
-cuda_add_library(libbcnn ${SRC_LIB} STATIC)
-target_link_libraries(libbcnn bip ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDA_curand_LIBRARY})
+	cuda_add_library(libbcnn ${SRC_LIB} STATIC)
+	if (USE_CUDNN)
+		target_link_libraries(libbcnn bip ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDA_curand_LIBRARY}
+			${CUDNN_LIBRARIES})
+	else()
+		target_link_libraries(libbcnn bip ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDA_curand_LIBRARY})
+	endif()
 else()
-add_library(libbcnn STATIC ${SRC_LIB})
-target_link_libraries(libbcnn bip)
+	add_library(libbcnn STATIC ${SRC_LIB})
+	target_link_libraries(libbcnn bip)
 endif()
 
 add_executable(bcnn-cl ${SRC_CLI})

@@ -247,8 +247,14 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 		1, conn.dst_tensor.c, 1, 1));
 	bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->bias_desc_diff, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
 		1, conn.dst_tensor.c, 1, 1));
-    bcnn_cudnn_check(cudnnSetConvolution2dDescriptor(conn.layer->conv_desc, conn.layer->pad, conn.layer->pad, conn.layer->stride, conn.layer->stride, 1, 1, CUDNN_CROSS_CORRELATION));
-    bcnn_cudnn_check(cudnnGetConvolutionForwardAlgorithm(bcnn_cudnn_handle(),
+#if CUDNN_MAJOR >= 6
+	bcnn_cudnn_check(cudnnSetConvolution2dDescriptor(conn.layer->conv_desc, conn.layer->pad, conn.layer->pad,
+		conn.layer->stride, conn.layer->stride, 1, 1, CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+#else
+	bcnn_cudnn_check(cudnnSetConvolution2dDescriptor(conn.layer->conv_desc, conn.layer->pad, conn.layer->pad,
+		conn.layer->stride, conn.layer->stride, 1, 1, CUDNN_CROSS_CORRELATION));
+#endif
+	bcnn_cudnn_check(cudnnGetConvolutionForwardAlgorithm(bcnn_cudnn_handle(),
             conn.layer->src_tensor_desc,
             conn.layer->filter_desc,
             conn.layer->conv_desc,
@@ -295,7 +301,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
             conn.layer->src_tensor_desc_diff,
             conn.layer->bwd_data_algo,
             &cudnn_wrk_sz));
-    conn.layer->workspace_size = bh_max(conn.layer->workspace_size, cudnn_wrk_sz);
+	conn.layer->workspace_size = bh_max(conn.layer->workspace_size, cudnn_wrk_sz);
 	conn.layer->conv_workspace_gpu = bcnn_cuda_malloc_f32(conn.layer->workspace_size);
 #else
 	sz = conn.dst_tensor.w * conn.dst_tensor.h * conn.src_tensor.c * size * size;

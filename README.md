@@ -5,18 +5,18 @@
 
 #### ***  Contributors are welcomed ! ***
 
-bcnn is a plain C / Cuda implementation of Convolutional Neural Networks (widely used for Deep Learning applications such as object detection and recognition in images).
+bcnn (Bare CNN) is a minimalist implementation of Convolutional Neural Networks in plain C and Cuda.
 
 It is aimed to be easy to build with a very limited number of dependencies (standalone if only used on CPU) and designed with 'hackability' in mind.
 
-At the current state, it can run on CPU and Nvidia's GPU. CuDNNv5 is now supported.
+At the current state, it can run on CPU and Nvidia's GPU. CuDNN versions >= 5 (up to 7) are supported.
 
 ## Dependencies:
 ### Minimal build (CPU with or without SSE2 acceleration):
 No external dependency (only requires bip (image processing library) and bh (helpers library) already included).
 
 ### GPU build: 
-Requires CUDA libraries (cudart, cublas, curand) and a GPU with compute capability 2.0 at least.
+Requires CUDA libraries (cudart, cublas, curand) and a GPU with compute capability 2.0 at least. CuDNN is optional but supported.
 
 ## Build:
 - On linux systems: clone the repository and simply type: 

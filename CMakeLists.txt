@@ -1,9 +1,11 @@
 cmake_minimum_required (VERSION 2.9)
 project (bcnn)
 
+# Configuration settings
 set(USE_SSE2 1)
 set(USE_CUDA 1)
 set(USE_CUDNN 1)
+# Building examples
 set(BUILD_EXAMPLES 1)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

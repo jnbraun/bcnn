@@ -1,4 +1,4 @@
-# config
+# Configuration settings
 CUDA=0
 CUDNN=0
 USE_SSE2=1

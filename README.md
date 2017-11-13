@@ -19,8 +19,17 @@ No external dependency (only requires bip (image processing library) and bh (hel
 Requires CUDA libraries (cudart, cublas, curand) and a GPU with compute capability 2.0 at least. CuDNN is optional but supported.
 
 ## Build:
-- On linux systems: clone the repository and simply type: 
-```bash
+### Linux:
+* CMake build:
+```
+mkdir build
+cd build/
+cmake ../
+cmake --build ./
+```
+
+* Provided Makefile: 
+```
 make
 ```
 You may want to edit the following lines of the Makefile at your convenience:
@@ -33,8 +42,9 @@ CUDA_PATH=/usr/local/cuda
 ARCH= --gpu-architecture=compute_50 --gpu-code=compute_50
 ```
 
-- On windows systems: Use cmake to generate the project (choose x64 configuration if using CUDA lib), then build the solution.
-Only tested with msvc2010 and 2013.
+### Windows:
+Use cmake to generate the project (choose x64 configuration if using CUDA lib), then build the solution.
+Tested with msvc2010 and msvc2013 only.
 
 ## Features:
 

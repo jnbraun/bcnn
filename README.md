@@ -19,6 +19,11 @@ No external dependency (only requires bip (image processing library) and bh (hel
 Requires CUDA libraries (cudart, cublas, curand) and a GPU with compute capability 2.0 at least. CuDNN is optional but supported.
 
 ## Build:
+Download or clone the repository:
+```
+git clone --recursive https://github.com/jnbraun/bcnn.git
+```
+
 ### Linux:
 * CMake build:
 ```

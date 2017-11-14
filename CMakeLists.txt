@@ -89,7 +89,7 @@ endif()
 add_executable(bcnn-cl ${SRC_CLI})
 
 if(NOT MSVC)
-	target_link_libraries(bcnn-cl libbcnn bip -lstdc++ -lm)
+	target_link_libraries(bcnn-cl libbcnn bip -lm)
 else()
 	target_link_libraries(bcnn-cl libbcnn bip)
 endif()

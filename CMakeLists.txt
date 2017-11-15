@@ -8,6 +8,9 @@ set(USE_CUDNN 1)
 # Building examples
 set(BUILD_EXAMPLES 1)
 
+# Convenience stuff
+include(CMakeToolsHelpers OPTIONAL)
+
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -89,7 +92,11 @@ endif()
 add_executable(bcnn-cl ${SRC_CLI})
 
 if(NOT MSVC)
-	target_link_libraries(bcnn-cl libbcnn bip -lm)
+	if (CMAKE_BUILD_TYPE STREQUAL "Debug") 
+		target_link_libraries(bcnn-cl libbcnn bip -lstdc++ -lm)
+	else()
+		target_link_libraries(bcnn-cl libbcnn bip -lm)
+	endif()
 else()
 	target_link_libraries(bcnn-cl libbcnn bip)
 endif()

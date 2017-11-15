@@ -746,8 +746,9 @@ int bcnn_init_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input, cha
 	else if (strcmp(type, "cifar10") == 0) {
 		return bcnn_init_cifar10_iterator(net, iter, path_input);
 	}
-	else if (strcmp(type, "csv") == 0) {
-		
+	else {
+		bh_error("Unknown data_format. Available are 'mnist' 'bin' 'list' 'cifar10'",
+			BCNN_INVALID_PARAMETER);
 	}
 	
 	return BCNN_SUCCESS;

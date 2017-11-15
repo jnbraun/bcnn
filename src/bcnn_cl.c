@@ -207,6 +207,7 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error)
 	int batch_size = net->input_node.b;
 	bh_timer t = { 0 };
 	bcnn_iterator iter_data = { 0 };
+	char chk_pt_path[1024];
 
 	if (bcnn_init_iterator(net, &iter_data, param->train_input, param->path_train_label, param->data_format) != 0)
 		return -1;
@@ -217,28 +218,28 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error)
 	for (i = 0; i < nb_iter; ++i) {
 		bcnn_train_on_batch(net, &iter_data, &error_batch);
 		sum_error += error_batch;
-		if (param->eval_test) {
-			if (i % param->eval_period == 0 && i > 0) {
-				bh_timer_stop(&t);
+		
+		if (i % param->eval_period == 0 && i > 0) {
+			bh_timer_stop(&t);
+			if (param->eval_test) {
 				bcnncl_predict(net, param, &error_valid, 1);
 				fprintf(stderr, "iter= %d train-error= %f test-error= %f training-time= %lf sec\n", i,
 					sum_error / (param->eval_period * batch_size), error_valid, bh_timer_get_msec(&t) / 1000);
-				fflush(stderr);
-				bh_timer_start(&t);
-				sum_error = 0;
-				bcnn_compile_net(net, "train");
 			}
-		}
-		else {
-			if (i % param->eval_period == 0 && i > 0) {
-				bh_timer_stop(&t);
+			else {
 				fprintf(stderr, "iter= %d train-error= %f training-time= %lf sec\n", i,
 					sum_error / (param->eval_period * batch_size), bh_timer_get_msec(&t) / 1000);
-				fflush(stderr);
-				bh_timer_start(&t);
-				sum_error = 0;
-			}
+			}	
+			fflush(stderr);
+			bh_timer_start(&t);
+			sum_error = 0;
+			if (param->eval_test)
+				bcnn_compile_net(net, "train");
 		}
+		if (i % param->save_model == 0 && i > 0) {
+			sprintf(chk_pt_path, "%s_iter%d.dat", param->output_model, i);
+			bcnn_write_model(net, chk_pt_path);
+		}	
 	}
 
 	bcnn_free_iterator(&iter_data);

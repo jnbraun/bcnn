@@ -284,7 +284,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
             conn.layer->conv_desc,
             conn.layer->dst_tensor_desc,
             conn.layer->fwd_algo,
-            &cudnn_wrk_sz));
+			&cudnn_wrk_sz));
     conn.layer->workspace_size = bh_max(conn.layer->workspace_size, cudnn_wrk_sz);
     bcnn_cudnn_check(cudnnGetConvolutionBackwardFilterWorkspaceSize(bcnn_cudnn_handle(),
             conn.layer->src_tensor_desc,
@@ -292,7 +292,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
             conn.layer->conv_desc,
             conn.layer->filter_desc_diff,
             conn.layer->bwd_filter_algo,
-            &cudnn_wrk_sz));
+			&cudnn_wrk_sz));
     conn.layer->workspace_size = bh_max(conn.layer->workspace_size, cudnn_wrk_sz);
     bcnn_cudnn_check(cudnnGetConvolutionBackwardDataWorkspaceSize(bcnn_cudnn_handle(),
             conn.layer->filter_desc,
@@ -300,12 +300,14 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
             conn.layer->conv_desc,
             conn.layer->src_tensor_desc_diff,
             conn.layer->bwd_data_algo,
-            &cudnn_wrk_sz));
+			&cudnn_wrk_sz));
 	conn.layer->workspace_size = bh_max(conn.layer->workspace_size, cudnn_wrk_sz);
-	conn.layer->conv_workspace_gpu = bcnn_cuda_malloc_f32(conn.layer->workspace_size);
+	net->workspace_size = bh_max(net->workspace_size, conn.layer->workspace_size);
+	//conn.layer->conv_workspace_gpu = bcnn_cuda_malloc_f32(conn.layer->workspace_size);
 #else
-	sz = conn.dst_tensor.w * conn.dst_tensor.h * conn.src_tensor.c * size * size;
-	conn.layer->conv_workspace_gpu = bcnn_cuda_memcpy_f32(conn.layer->conv_workspace, sz);
+	conn.layer->workspace_size = conn.dst_tensor.w * conn.dst_tensor.h * conn.src_tensor.c * size * size;
+	net->workspace_size = bh_max(net->workspace_size, conn.layer->workspace_size);
+	//conn.layer->conv_workspace_gpu = bcnn_cuda_memcpy_f32(conn.layer->conv_workspace, sz);
 #endif
 #endif
 	conn.layer->activation = activation;

@@ -185,7 +185,11 @@ int bcnn_init_workload(bcnn_net *net)
 	net->connections[0].src_tensor.grad_data = net->input_node.grad_data;
 #ifdef BCNN_USE_CUDA
 	net->input_node.data_gpu = bcnn_cuda_malloc_f32(sz);
+	net->workspace_gpu = bcnn_cuda_malloc_f32(net->workspace_size);
 	for (i = 0; i < n; ++i) {
+		if (net->connections[i].layer->type == CONVOLUTIONAL) {
+			net->connections[i].layer->conv_workspace_gpu = net->workspace_gpu;
+		}
 		if (net->connections[i].layer->type == COST) {
 			net->connections[i].label_gpu = bcnn_cuda_malloc_f32(output_size);
 		}
@@ -211,6 +215,7 @@ int bcnn_free_workload(bcnn_net *net)
 	}
 #ifdef BCNN_USE_CUDA
 	bcnn_cuda_free(net->input_node.data_gpu);
+	bcnn_cuda_free(net->workspace_gpu);
 	for (i = 0; i < n; ++i) {
 		if (net->connections[i].layer->type == COST) bcnn_cuda_free(net->connections[i].label);
 	}
@@ -222,8 +227,6 @@ int bcnn_compile_net(bcnn_net *net, char *phase)
 {
 	int i;
 
-	bcnn_free_workload(net);
-	bcnn_init_workload(net);
 	if (strcmp(phase, "train") == 0) net->state = 1;
 	else if (strcmp(phase, "predict") == 0) net->state = 0;
 	else {
@@ -234,6 +237,9 @@ int bcnn_compile_net(bcnn_net *net, char *phase)
 	for (i = 0; i < net->nb_connections; ++i)
 		net->connections[i].state = net->state;
 
+	bcnn_free_workload(net);
+	bcnn_init_workload(net);
+	
 	return BCNN_SUCCESS;
 }
 

@@ -385,6 +385,7 @@ typedef struct {
 #endif
 	unsigned int		*binary_weight;
 	unsigned int		*binary_workspace;
+	size_t				workspace_size;
 #ifdef BCNN_USE_CUDA
 #ifdef BCNN_USE_CUDNN
 	cudnnTensorDescriptor_t				src_tensor_desc;
@@ -400,7 +401,6 @@ typedef struct {
 	cudnnConvolutionFwdAlgo_t			fwd_algo;
 	cudnnConvolutionBwdDataAlgo_t		bwd_data_algo;
 	cudnnConvolutionBwdFilterAlgo_t 	bwd_filter_algo;
-	size_t								workspace_size;
 #endif
 #endif
 } bcnn_layer;
@@ -438,6 +438,11 @@ typedef struct {
 	int					nb_finetune;
 	char				**finetune_id;
 	unsigned char		*input_buffer;
+	int					workspace_size;
+	float				*workspace;
+#ifdef BCNN_USE_CUDA
+	float				*workspace_gpu;
+#endif
 } bcnn_net;
 
 /* Define for binarized layers */

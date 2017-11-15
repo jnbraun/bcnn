@@ -239,7 +239,7 @@ int bcnn_compile_net(bcnn_net *net, char *phase)
 
 	bcnn_free_workload(net);
 	bcnn_init_workload(net);
-	
+
 	return BCNN_SUCCESS;
 }
 
@@ -605,6 +605,16 @@ int bcnn_write_model(bcnn_net *net, char *filename)
 			fwrite(layer->bias, sizeof(float), layer->bias_size, fp);
 			fwrite(layer->weight, sizeof(float), layer->weights_size, fp);
 		}
+		if (layer->type == BATCHNORM) {
+#ifdef BCNN_USE_CUDA
+			bcnn_cuda_memcpy_dev2host(layer->global_mean_gpu, layer->global_mean,
+				net->connections[i].dst_tensor.c);
+			bcnn_cuda_memcpy_dev2host(layer->global_variance_gpu, layer->global_variance,
+				net->connections[i].dst_tensor.c);
+#endif
+			fwrite(layer->global_mean, sizeof(float), net->connections[i].dst_tensor.c, fp);
+			fwrite(layer->global_variance, sizeof(float), net->connections[i].dst_tensor.c, fp);
+		}
 	}
 	fclose(fp);
 	return BCNN_SUCCESS;
@@ -623,10 +633,10 @@ int bcnn_load_model(bcnn_net *net, char *filename)
 		return -1;
 	}
 
-	fread(&tmp, sizeof(float), 1, fp);
-	fread(&tmp, sizeof(float), 1, fp);
-	fread(&tmp, sizeof(float), 1, fp);
-	fread(&net->seen, sizeof(int), 1, fp);
+	nb_read = fread(&tmp, sizeof(float), 1, fp);
+	nb_read = fread(&tmp, sizeof(float), 1, fp);
+	nb_read = fread(&tmp, sizeof(float), 1, fp);
+	nb_read = fread(&net->seen, sizeof(int), 1, fp);
 	fprintf(stderr, "lr= %f ", net->learner.learning_rate);
 	fprintf(stderr, "m= %f ", net->learner.momentum);
 	fprintf(stderr, "decay= %f ", net->learner.decay);
@@ -652,6 +662,18 @@ int bcnn_load_model(bcnn_net *net, char *filename)
 			bcnn_cuda_memcpy_host2dev(layer->weight_gpu, layer->weight, layer->weights_size);
 			bcnn_cuda_memcpy_host2dev(layer->bias_gpu, layer->bias, layer->bias_size);
 #endif	
+		}
+		if (layer->type == BATCHNORM) {
+			nb_read = fread(layer->global_mean, sizeof(float), net->connections[i].dst_tensor.c, fp);
+			fprintf(stderr, "batchnorm layer= %d nbread_mean= %lu mean_size_expected= %d\n",
+				i, (unsigned long)nb_read, net->connections[i].dst_tensor.c);
+			nb_read = fread(layer->global_variance, sizeof(float), net->connections[i].dst_tensor.c, fp);
+			fprintf(stderr, "batchnorm layer= %d nbread_variance= %lu variance_size_expected= %d\n",
+				i, (unsigned long)nb_read, net->connections[i].dst_tensor.c);
+#ifdef BCNN_USE_CUDA
+			bcnn_cuda_memcpy_host2dev(layer->global_mean_gpu, layer->global_mean, net->connections[i].dst_tensor.c);
+			bcnn_cuda_memcpy_host2dev(layer->global_variance_gpu, layer->global_variance, net->connections[i].dst_tensor.c);
+#endif
 		}
 	}
 	if (fp != NULL)
@@ -776,7 +798,7 @@ int bcnn_free_layer(bcnn_layer **layer)
 	if (p_layer->indexes_gpu)          bcnn_cuda_free(p_layer->indexes_gpu);
 	if (p_layer->weight_gpu)          bcnn_cuda_free(p_layer->weight_gpu);
 	if (p_layer->weight_diff_gpu)   bcnn_cuda_free(p_layer->weight_diff_gpu);
-	if (p_layer->conv_workspace_gpu)        bcnn_cuda_free(p_layer->conv_workspace_gpu);
+	//if (p_layer->conv_workspace_gpu)        bcnn_cuda_free(p_layer->conv_workspace_gpu);
 	if (p_layer->bias_gpu)           bcnn_cuda_free(p_layer->bias_gpu);
 	if (p_layer->bias_diff_gpu)     bcnn_cuda_free(p_layer->bias_diff_gpu);
 	if (p_layer->mean_gpu)			bcnn_cuda_free(p_layer->mean_gpu);

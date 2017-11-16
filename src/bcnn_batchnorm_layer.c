@@ -132,7 +132,7 @@ static void _norm_forward(float *x, float *mean, float *variance, int b, int c, 
         for (j = 0; j < c; ++j) {
             for (i = 0; i < wxh; ++i) {
                 ind = k * c * wxh + j * wxh + i;
-                x[ind] = (x[ind] - mean[j]) / (sqrtf(variance[j]) + 0.000001f);
+                x[ind] = (x[ind] - mean[j]) / (sqrtf(variance[j] + 0.000001f));
             }
         }
     }

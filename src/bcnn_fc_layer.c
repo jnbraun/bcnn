@@ -154,10 +154,12 @@ int bcnn_forward_fullc_layer_cpu(bcnn_connection *conn)
 		}
 	}
 	else {
-		/*bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1.0f,
-			src.data, src_size, layer->weight, src_size, 1.0f, dst.data, dst_size);*/
-		bcnn_gemm(0, 0, batch_size, dst_size, src_size, 1.0f,
-				src.data, src_size, layer->weight, dst_size, 1.0f, dst.data, dst_size);
+		// Original
+		bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1.0f,
+			src.data, src_size, layer->weight, src_size, 1.0f, dst.data, dst_size);
+		// Transposed
+		/*bcnn_gemm(0, 0, batch_size, dst_size, src_size, 1.0f,
+				src.data, src_size, layer->weight, dst_size, 1.0f, dst.data, dst_size);*/
 	}
 		
 	for (i = 0; i < batch_size; ++i)
@@ -183,16 +185,21 @@ int bcnn_backward_fullc_layer_cpu(bcnn_connection *conn)
 	for (i = 0; i < batch_size; ++i)
 		bcnn_axpy(dst_size, 1, dst.grad_data + i * dst_size, layer->bias_diff);
 
-	/*bcnn_gemm(1, 0, dst_size, src_size, batch_size, 1,
-		dst.grad_data, dst_size, src.data, src_size, 1, layer->weight_diff, src_size);*/
-	bcnn_gemm(1, 0, src_size, dst_size, batch_size, 1,
-		src.data, src_size, dst.grad_data, dst_size, 1, layer->weight_diff, dst_size);
+	// Original
+	bcnn_gemm(1, 0, dst_size, src_size, batch_size, 1,
+		dst.grad_data, dst_size, src.data, src_size, 1, layer->weight_diff, src_size);
+	// Transposed
+	/*bcnn_gemm(1, 0, src_size, dst_size, batch_size, 1,
+		src.data, src_size, dst.grad_data, dst_size, 1, layer->weight_diff, dst_size);*/
 
-	if (src.grad_data)
-		bcnn_gemm(0, 1, batch_size, src_size, dst_size, 1,
-			dst.grad_data, dst_size, layer->weight, dst_size, 1, src.grad_data, src_size);
-		/*bcnn_gemm(0, 0, batch_size, src_size, dst_size, 1,
-			dst.grad_data, dst_size, layer->weight, src_size, 1, src.grad_data, src_size);*/
+	if (src.grad_data) {
+		// Original
+		bcnn_gemm(0, 0, batch_size, src_size, dst_size, 1,
+			dst.grad_data, dst_size, layer->weight, src_size, 1, src.grad_data, src_size);
+		// Transposed
+		/*bcnn_gemm(0, 1, batch_size, src_size, dst_size, 1,
+			dst.grad_data, dst_size, layer->weight, dst_size, 1, src.grad_data, src_size);*/
+	}
 
 	if (layer->quantize && src.grad_data) {
 		for (i = 0; i < batch_size * src_size; ++i) {

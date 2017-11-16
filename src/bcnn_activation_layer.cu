@@ -44,6 +44,10 @@ __global__ void _bcnn_forward_activation_layer_kernel(float *x, int sz, bcnn_act
 		case CLAMP:
 			x[i] = bh_clamp(x[i], 0, 1);
 			break;
+		case NONE:
+			break;
+		default:
+			break;
 		}
 	}
 	return;
@@ -87,6 +91,10 @@ __global__ void _bcnn_backward_activation_layer_kernel(float *x, float *diff, in
 			break;
 		case CLAMP:
 			diff[i] *= (float)(x[i] > 0.0f && (x[i] < 1.0f));
+			break;
+		case NONE:
+			break;
+		default:
 			break;
 		}
 	}

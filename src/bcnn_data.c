@@ -296,11 +296,11 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter)
 		fseek(iter->f_label, -1, SEEK_CUR);
 
 	if (ftell(iter->f_input) == 0 && ftell(iter->f_label) == 0) {
-		fread(tmp, 1, 16, iter->f_input);
+		n = fread(tmp, 1, 16, iter->f_input);
 		n_img = _read_int(tmp + 4);
 		iter->input_height = _read_int(tmp + 8);
 		iter->input_width = _read_int(tmp + 12);
-		fread(tmp, 1, 8, iter->f_label);
+		n = fread(tmp, 1, 8, iter->f_label);
 		n_labels = _read_int(tmp + 4);
 		bh_assert(n_img == n_labels, "MNIST data: number of images and labels must be the same", 
 			BCNN_INVALID_DATA);
@@ -324,6 +324,7 @@ static int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path
 	FILE *f_bin = NULL, *f_lst = NULL;
 	char *line = NULL;
 	bcnn_label_type type;
+	int nr = 0;
 
 	iter->type = ITER_BIN;
 
@@ -344,9 +345,9 @@ static int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path
 		return BCNN_INVALID_PARAMETER;
 	}
 
-	fread(&iter->n_samples, 1, sizeof(int), f_bin);
-	fread(&iter->label_width, 1, sizeof(int), f_bin);
-	fread(&type, 1, sizeof(int), f_bin);
+	nr = fread(&iter->n_samples, 1, sizeof(int), f_bin);
+	nr = fread(&iter->label_width, 1, sizeof(int), f_bin);
+	nr = fread(&type, 1, sizeof(int), f_bin);
 	iter->input_width = net->input_node.w;
 	iter->input_height = net->input_node.h;
 	iter->input_depth = net->input_node.c;
@@ -365,7 +366,7 @@ static int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path
 static int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
 {
 	unsigned char l;
-	size_t n = 0;
+	size_t n = 0, nr = 0;
 	int i, buf_sz = 0, label_width, type;
 	float lf;
 	unsigned char *buf = NULL;
@@ -390,22 +391,22 @@ static int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
 		fseek(iter->f_input, -1, SEEK_CUR);
 
 	if (ftell(iter->f_input) == 0) {
-		fread(&n, 1, sizeof(int), iter->f_input);
-		fread(&label_width, 1, sizeof(int), iter->f_input);
-		fread(&type, 1, sizeof(int), iter->f_input);
+		nr = fread(&n, 1, sizeof(int), iter->f_input);
+		nr = fread(&label_width, 1, sizeof(int), iter->f_input);
+		nr = fread(&type, 1, sizeof(int), iter->f_input);
 	}
 
 	// Read image
-	fread(&buf_sz, 1, sizeof(int), iter->f_input);
+	nr = fread(&buf_sz, 1, sizeof(int), iter->f_input);
 	buf = (unsigned char *)calloc(buf_sz, sizeof(unsigned char));
-	fread(buf, 1, buf_sz, iter->f_input);
+	nr = fread(buf, 1, buf_sz, iter->f_input);
 	bcnn_load_image_from_memory(buf, buf_sz, net->input_node.w, net->input_node.h, net->input_node.c,
 		&iter->input_uchar, net->state, &net->data_aug.shift_x, &net->data_aug.shift_y);
 	bh_free(buf);
 
 	// Read label
 	for (i = 0; i < iter->label_width; ++i) {
-		n = fread(&lf, 1, sizeof(float), iter->f_input);
+		nr = fread(&lf, 1, sizeof(float), iter->f_input);
 		iter->label_float[i] = lf;
 	}
 
@@ -695,7 +696,7 @@ static int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *p
 {
 	FILE *f_img = NULL, *f_label = NULL;
 	char tmp[16] = { 0 };
-	int n_img = 0, n_lab = 0;
+	int n_img = 0, n_lab = 0, nr = 0;
 
 	iter->type = ITER_MNIST;
 	f_img = fopen(path_img, "rb");
@@ -713,11 +714,11 @@ static int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *p
 	iter->f_label = f_label;
 	iter->n_iter = 0;
 	// Read header
-	fread(tmp, 1, 16, iter->f_input);
+	nr = fread(tmp, 1, 16, iter->f_input);
 	n_img = _read_int(tmp + 4);
 	iter->input_height = _read_int(tmp + 8);
 	iter->input_width = _read_int(tmp + 12);
-	fread(tmp, 1, 8, iter->f_label);
+	nr = fread(tmp, 1, 8, iter->f_label);
 	n_lab = _read_int(tmp + 4);
 	bh_assert(n_img == n_lab, "Inconsistent MNIST data: number of images and labels must be the same",
 		BCNN_INVALID_DATA);

@@ -73,6 +73,11 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
 					strcmp(curr_layer, "{deconvolutional}") == 0) {
 					bcnn_add_deconvolutional_layer(net, n_filts, size, stride, pad, init, a, layer_id);
 				}
+				else if (strcmp(curr_layer, "{depthwise-conv}") == 0 ||
+					strcmp(curr_layer, "{dw-conv}") == 0) {
+					//bcnn_add_deconvolutional_layer(net, n_filts, size, stride, pad, init, a, layer_id);
+					bcnn_add_depthwise_sep_conv_layer(net, size, stride, pad, 0, init, a, layer_id);
+				}
 				else if (strcmp(curr_layer, "{activation}") == 0 ||
 					strcmp(curr_layer, "{nl}") == 0) {
 					bcnn_add_activation_layer(net, a, layer_id);

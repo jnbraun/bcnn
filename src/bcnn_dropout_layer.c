@@ -28,106 +28,114 @@
 
 int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id)
 {
-	int sz = 0;
-	int nb_connections = net->nb_connections + 1;
-	bcnn_connection conn = { 0 };
+    int sz = 0;
+    int nb_connections = net->nb_connections + 1;
+    bcnn_connection conn = { 0 };
 
-	bh_assert(nb_connections > 2,
-		"Dropout layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);
+    bh_assert(nb_connections > 2,
+        "Dropout layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);
 
-	if (id != NULL)
-		bh_fill_option(&conn.id, id);
-	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-	conn.layer->type = DROPOUT;
-	if (nb_connections > 1)
-		conn.src_tensor = net->connections[nb_connections - 2].dst_tensor;
-	else
-		conn.src_tensor = net->input_node;
+    if (id != NULL) {
+        bh_fill_option(&conn.id, id);
+    }
+    conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
+    conn.layer->type = DROPOUT;
+    if (nb_connections > 1) {
+        conn.src_tensor = net->connections[nb_connections - 2].dst_tensor;
+    }
+    else {
+        conn.src_tensor = net->input_node;
+    }
 
-	conn.dst_tensor.w = conn.src_tensor.w;
-	conn.dst_tensor.h = conn.src_tensor.h;
-	conn.dst_tensor.c = conn.src_tensor.c;
-	conn.dst_tensor.b = conn.src_tensor.b;
+    conn.dst_tensor.w = conn.src_tensor.w;
+    conn.dst_tensor.h = conn.src_tensor.h;
+    conn.dst_tensor.c = conn.src_tensor.c;
+    conn.dst_tensor.b = conn.src_tensor.b;
 
-	conn.layer->dropout_rate = rate;
-	sz = bcnn_get_tensor_size(&conn.src_tensor);
-	conn.layer->rand = (float *)calloc(sz, sizeof(float));
-	conn.layer->scale = 1.0f / (1.0f - rate);
+    conn.layer->dropout_rate = rate;
+    sz = bcnn_get_tensor_size(&conn.src_tensor);
+    conn.layer->rand = (float *)calloc(sz, sizeof(float));
+    conn.layer->scale = 1.0f / (1.0f - rate);
 #ifdef BCNN_USE_CUDA
-	conn.layer->rand_gpu = bcnn_cuda_memcpy_f32(conn.layer->rand, sz);
+    conn.layer->rand_gpu = bcnn_cuda_memcpy_f32(conn.layer->rand, sz);
 #endif
-	conn.dst_tensor.data = conn.src_tensor.data;
-	conn.dst_tensor.grad_data = conn.src_tensor.grad_data;
+    conn.dst_tensor.data = conn.src_tensor.data;
+    conn.dst_tensor.grad_data = conn.src_tensor.grad_data;
 #ifdef BCNN_USE_CUDA
-	conn.dst_tensor.data_gpu = conn.src_tensor.data_gpu;
-	conn.dst_tensor.grad_data_gpu = conn.src_tensor.grad_data_gpu;
+    conn.dst_tensor.data_gpu = conn.src_tensor.data_gpu;
+    conn.dst_tensor.grad_data_gpu = conn.src_tensor.grad_data_gpu;
 #endif
-	net->nb_connections = nb_connections;
-	bcnn_net_add_connection(net, conn);
+    net->nb_connections = nb_connections;
+    bcnn_net_add_connection(net, conn);
 
-	fprintf(stderr, "[Dropout] input_shape= %dx%dx%d rate= %f output_shape= %dx%dx%d\n",
-		conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, rate,
-		conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
-	return 0;
+    fprintf(stderr, "[Dropout] input_shape= %dx%dx%d rate= %f output_shape= %dx%dx%d\n",
+        conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, rate,
+        conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
+    return 0;
 }
 
 
 int bcnn_forward_dropout_layer_cpu(bcnn_connection *conn)
 {
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	int i, sz = bcnn_get_tensor_size(&src);
-	float r;
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    int i, sz = bcnn_get_tensor_size(&src);
+    float r;
 
-	if (!conn->state) // state != train
-		return BCNN_SUCCESS;
+    if (!conn->state) // state != train
+        return BCNN_SUCCESS;
 
-	for (i = 0; i < sz; ++i) {
-		r = (float)rand() / RAND_MAX;
-		layer->rand[i] = r;
-		if (r < layer->dropout_rate)
-			src.data[i] = 0;
-		else
-			src.data[i] *= layer->scale;
-	}
-	return BCNN_SUCCESS;
+    for (i = 0; i < sz; ++i) {
+        r = (float)rand() / RAND_MAX;
+        layer->rand[i] = r;
+        if (r < layer->dropout_rate) {
+            src.data[i] = 0;
+        }
+        else {
+            src.data[i] *= layer->scale;
+        }
+    }
+    return BCNN_SUCCESS;
 }
 
 int bcnn_forward_dropout_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_forward_dropout_layer_gpu(conn);
+    return bcnn_forward_dropout_layer_gpu(conn);
 #else
-	return bcnn_forward_dropout_layer_cpu(conn);
+    return bcnn_forward_dropout_layer_cpu(conn);
 #endif
 }
 
 
 int bcnn_backward_dropout_layer_cpu(bcnn_connection *conn)
 {
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	int i, sz = bcnn_get_tensor_size(&src);
-	float r;
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    int i, sz = bcnn_get_tensor_size(&src);
+    float r;
 
-	if (!src.grad_data)
-		return BCNN_SUCCESS;
+    if (!src.grad_data) {
+        return BCNN_SUCCESS;
+    }
 
-	for (i = 0; i < sz; ++i) {
-		r = layer->rand[i];
-		if (r < layer->dropout_rate)
-			src.grad_data[i] = 0;
-		else
-			src.grad_data[i] *= layer->scale;
-	}
-	return BCNN_SUCCESS;
+    for (i = 0; i < sz; ++i) {
+        r = layer->rand[i];
+        if (r < layer->dropout_rate) {
+            src.grad_data[i] = 0;
+        }
+        else {
+            src.grad_data[i] *= layer->scale;
+        }
+    }
+    return BCNN_SUCCESS;
 }
 
 int bcnn_backward_dropout_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_backward_dropout_layer_gpu(conn);
+    return bcnn_backward_dropout_layer_gpu(conn);
 #else
-	return bcnn_backward_dropout_layer_cpu(conn);
+    return bcnn_backward_dropout_layer_cpu(conn);
 #endif
 }

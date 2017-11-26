@@ -87,13 +87,13 @@ __global__ void  fast_variance_kernel(float *x, float *mean, int batch, int filt
 
 extern "C" void fast_mean_gpu(float *x, int batch, int filters, int spatial, float *mean)
 {
-	fast_mean_kernel<<<filters, BCNN_CUDA_THREADS>>>(x, batch, filters, spatial, mean);
+    fast_mean_kernel<<<filters, BCNN_CUDA_THREADS>>>(x, batch, filters, spatial, mean);
     bcnn_cuda_check(cudaPeekAtLastError());
 }
 
 extern "C" void fast_variance_gpu(float *x, float *mean, int batch, int filters, int spatial, float *variance)
 {
-	fast_variance_kernel<<<filters, BCNN_CUDA_THREADS>>>(x, mean, batch, filters, spatial, variance);
+    fast_variance_kernel<<<filters, BCNN_CUDA_THREADS>>>(x, mean, batch, filters, spatial, variance);
     bcnn_cuda_check(cudaPeekAtLastError());
 }
 
@@ -158,13 +158,13 @@ __global__ void  fast_variance_delta_kernel(float *x, float *delta, float *mean,
 
 extern "C" void fast_mean_delta_gpu(float *delta, float *variance, int batch, int filters, int spatial, float *mean_delta)
 {
-	fast_mean_delta_kernel<<<filters, BCNN_CUDA_THREADS>>>(delta, variance, batch, filters, spatial, mean_delta);
+    fast_mean_delta_kernel<<<filters, BCNN_CUDA_THREADS>>>(delta, variance, batch, filters, spatial, mean_delta);
     bcnn_cuda_check(cudaPeekAtLastError());
 }
 
 extern "C" void fast_variance_delta_gpu(float *x, float *delta, float *mean, float *variance, int batch, int filters, int spatial, float *variance_delta)
 {
-	fast_variance_delta_kernel<<<filters, BCNN_CUDA_THREADS>>>(x, delta, mean, variance, batch, filters, spatial, variance_delta);
+    fast_variance_delta_kernel<<<filters, BCNN_CUDA_THREADS>>>(x, delta, mean, variance, batch, filters, spatial, variance_delta);
     bcnn_cuda_check(cudaPeekAtLastError());
 }
 
@@ -172,18 +172,18 @@ extern "C" void fast_variance_delta_gpu(float *x, float *delta, float *mean, flo
 
 int bcnn_forward_batchnorm_layer_gpu(bcnn_connection *conn)
 {
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	bcnn_tensor dst = conn->dst_tensor;
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    bcnn_tensor dst = conn->dst_tensor;
 #ifndef BCNN_USE_CUDNN
-	int batch_size = src.b;
-	int sz = dst.w * dst.h * dst.c;
+    int batch_size = src.b;
+    int sz = dst.w * dst.h * dst.c;
 #else
-	float alpha = 1.0f;
+    float alpha = 1.0f;
     float beta = 0.0f;
 #endif
-	
-	if (conn->state) {
+    
+    if (conn->state) {
 #ifdef BCNN_USE_CUDNN
         bcnn_cudnn_check(cudnnBatchNormalizationForwardTraining(bcnn_cudnn_handle(),
                 CUDNN_BATCHNORM_SPATIAL,
@@ -203,26 +203,26 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_connection *conn)
                 layer->mean_gpu,
                 layer->variance_gpu));
 #else
-		bcnn_cuda_copy_f32(sz * batch_size, src.data_gpu, 1, dst.data_gpu, 1);
-		bcnn_cuda_copy_f32(sz * batch_size, dst.data_gpu, 1, layer->bn_workspace_gpu, 1);
-		
-		//bcnn_cuda_mean_variance_forward(dst.data_gpu, batch_size, dst.c, dst.h * dst.w, layer->mean_gpu, layer->variance_gpu);
-		fast_mean_gpu(dst.data_gpu, batch_size, dst.c, dst.h * dst.w, layer->mean_gpu);
-		fast_variance_gpu(dst.data_gpu, layer->mean_gpu, batch_size, dst.c, dst.h * dst.w, layer->variance_gpu);
-		
-		bcnn_cuda_scal(dst.c, 0.9f, layer->global_mean_gpu, 1);
-		bcnn_cuda_axpy(dst.c, 0.1f, layer->mean_gpu, 1, layer->global_mean_gpu, 1);
-		bcnn_cuda_scal(dst.c, 0.9f, layer->global_variance_gpu, 1);
-		bcnn_cuda_axpy(dst.c, 0.1f, layer->variance_gpu, 1, layer->global_variance_gpu, 1);
-		
-		//bcnn_cuda_copy_f32(batch_size * sz, dst.data_gpu, 1, layer->bn_workspace_gpu, 1);
-		bcnn_cuda_norm_forward(dst.data_gpu, layer->mean_gpu, layer->variance_gpu, batch_size, dst.c, dst.h * dst.w);   
-		bcnn_cuda_copy_f32(batch_size * sz, dst.data_gpu, 1, layer->x_norm_gpu, 1);
+        bcnn_cuda_copy_f32(sz * batch_size, src.data_gpu, 1, dst.data_gpu, 1);
+        bcnn_cuda_copy_f32(sz * batch_size, dst.data_gpu, 1, layer->bn_workspace_gpu, 1);
+        
+        //bcnn_cuda_mean_variance_forward(dst.data_gpu, batch_size, dst.c, dst.h * dst.w, layer->mean_gpu, layer->variance_gpu);
+        fast_mean_gpu(dst.data_gpu, batch_size, dst.c, dst.h * dst.w, layer->mean_gpu);
+        fast_variance_gpu(dst.data_gpu, layer->mean_gpu, batch_size, dst.c, dst.h * dst.w, layer->variance_gpu);
+        
+        bcnn_cuda_scal(dst.c, 0.9f, layer->global_mean_gpu, 1);
+        bcnn_cuda_axpy(dst.c, 0.1f, layer->mean_gpu, 1, layer->global_mean_gpu, 1);
+        bcnn_cuda_scal(dst.c, 0.9f, layer->global_variance_gpu, 1);
+        bcnn_cuda_axpy(dst.c, 0.1f, layer->variance_gpu, 1, layer->global_variance_gpu, 1);
+        
+        //bcnn_cuda_copy_f32(batch_size * sz, dst.data_gpu, 1, layer->bn_workspace_gpu, 1);
+        bcnn_cuda_norm_forward(dst.data_gpu, layer->mean_gpu, layer->variance_gpu, batch_size, dst.c, dst.h * dst.w);   
+        bcnn_cuda_copy_f32(batch_size * sz, dst.data_gpu, 1, layer->x_norm_gpu, 1);
 #endif
-	}
-	else {
+    }
+    else {
 #ifdef BCNN_USE_CUDNN
-		bcnn_cudnn_check(cudnnBatchNormalizationForwardInference(bcnn_cudnn_handle(),
+        bcnn_cudnn_check(cudnnBatchNormalizationForwardInference(bcnn_cudnn_handle(),
             CUDNN_BATCHNORM_SPATIAL,
             &alpha,
             &beta,
@@ -237,37 +237,37 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_connection *conn)
             layer->global_variance_gpu,
             0.0001));
 #else
-		bcnn_cuda_copy_f32(sz * batch_size, src.data_gpu, 1, dst.data_gpu, 1);
-		bcnn_cuda_copy_f32(sz * batch_size, dst.data_gpu, 1, layer->bn_workspace_gpu, 1);
-		// Normalize with global mean / variance
-		bcnn_cuda_norm_forward(dst.data_gpu, layer->global_mean_gpu, layer->global_variance_gpu, batch_size, dst.c, dst.h * dst.w);  
+        bcnn_cuda_copy_f32(sz * batch_size, src.data_gpu, 1, dst.data_gpu, 1);
+        bcnn_cuda_copy_f32(sz * batch_size, dst.data_gpu, 1, layer->bn_workspace_gpu, 1);
+        // Normalize with global mean / variance
+        bcnn_cuda_norm_forward(dst.data_gpu, layer->global_mean_gpu, layer->global_variance_gpu, batch_size, dst.c, dst.h * dst.w);  
 #endif
-	}
+    }
 
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 
 int bcnn_backward_batchnorm_layer_gpu(bcnn_connection *conn)
 {
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	bcnn_tensor dst = conn->dst_tensor;
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    bcnn_tensor dst = conn->dst_tensor;
 #ifndef BCNN_USE_CUDNN
-	int batch_size = src.b;
-	int sz = dst.w * dst.h * dst.c;
+    int batch_size = src.b;
+    int sz = dst.w * dst.h * dst.c;
 #else
-	float a_data = 1.0f, a_param = 1.0f;
+    float a_data = 1.0f, a_param = 1.0f;
     float b_data = 0.0f, b_param = 1.0f;
 #endif
 
-	if (!conn->state) {
+    if (!conn->state) {
         layer->mean_gpu = layer->global_mean_gpu;
         layer->variance_gpu = layer->global_variance_gpu;
-	}
+    }
 
 #ifdef BCNN_USE_CUDNN
-	bcnn_cudnn_check(cudnnBatchNormalizationBackward(bcnn_cudnn_handle(),
+    bcnn_cudnn_check(cudnnBatchNormalizationBackward(bcnn_cudnn_handle(),
             CUDNN_BATCHNORM_SPATIAL,
             &a_data,
             &b_data,
@@ -287,18 +287,18 @@ int bcnn_backward_batchnorm_layer_gpu(bcnn_connection *conn)
             layer->mean_gpu,
             layer->variance_gpu));
 #else
-	fast_mean_delta_gpu(dst.grad_data_gpu, layer->variance_gpu, batch_size, dst.c, dst.w * dst.h, layer->diff_mean_gpu);
-	fast_variance_delta_gpu(layer->bn_workspace_gpu, dst.grad_data_gpu, layer->mean_gpu, layer->variance_gpu, batch_size, dst.c, dst.w * dst.h, layer->diff_variance_gpu);
-	bcnn_cuda_norm_backward(layer->bn_workspace_gpu, layer->mean_gpu, layer->variance_gpu, layer->diff_mean_gpu, layer->diff_variance_gpu, src.b,
-		dst.c, dst.w * dst.h, dst.grad_data_gpu);
-	
-	if (src.grad_data_gpu)
-		bcnn_cuda_copy_f32(sz * batch_size, dst.grad_data_gpu, 1, src.grad_data_gpu, 1);	
+    fast_mean_delta_gpu(dst.grad_data_gpu, layer->variance_gpu, batch_size, dst.c, dst.w * dst.h, layer->diff_mean_gpu);
+    fast_variance_delta_gpu(layer->bn_workspace_gpu, dst.grad_data_gpu, layer->mean_gpu, layer->variance_gpu, batch_size, dst.c, dst.w * dst.h, layer->diff_variance_gpu);
+    bcnn_cuda_norm_backward(layer->bn_workspace_gpu, layer->mean_gpu, layer->variance_gpu, layer->diff_mean_gpu, layer->diff_variance_gpu, src.b,
+        dst.c, dst.w * dst.h, dst.grad_data_gpu);
+    
+    if (src.grad_data_gpu)
+        bcnn_cuda_copy_f32(sz * batch_size, dst.grad_data_gpu, 1, src.grad_data_gpu, 1);	
 #endif
 
-	
+    
 
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 #endif

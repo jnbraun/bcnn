@@ -79,7 +79,7 @@ typedef unsigned __int64  uint64_t;
 #endif
 
 /*typedef struct bcnn_context {
-	bh_logctx *log_hdl;
+    bh_logctx *log_hdl;
 } bcnn_context;*/
 
 //typedef struct bcnn_context *bcnn_context_handle;
@@ -88,55 +88,55 @@ typedef unsigned __int64  uint64_t;
 * \brief Enum of error codes.
 */
 typedef enum {
-	BCNN_SUCCESS,
-	BCNN_INVALID_PARAMETER,
-	BCNN_INVALID_DATA,
-	BCNN_FAILED_ALLOC,
-	BCNN_INTERNAL_ERROR,
-	BCNN_CUDA_FAILED_ALLOC,
-	BCNN_UNKNOWN_ERROR
+    BCNN_SUCCESS,
+    BCNN_INVALID_PARAMETER,
+    BCNN_INVALID_DATA,
+    BCNN_FAILED_ALLOC,
+    BCNN_INTERNAL_ERROR,
+    BCNN_CUDA_FAILED_ALLOC,
+    BCNN_UNKNOWN_ERROR
 } bcnn_status;
 
 /**
  * \brief Enum of available tasks.
  */
 typedef enum {
-	TRAIN,
-	PREDICT,
+    TRAIN,
+    PREDICT,
 } bcnn_task;
 
 typedef enum {
-	CLASSIFICATION,
-	REGRESSION,
-	HEATMAP_REGRESSION,
-	SEGMENTATION
+    CLASSIFICATION,
+    REGRESSION,
+    HEATMAP_REGRESSION,
+    SEGMENTATION
 } bcnn_target;
 
 
 typedef enum {
-	ITER_BIN,
-	ITER_LIST,
-	ITER_CSV,
-	ITER_MNIST,
-	ITER_CIFAR10
+    ITER_BIN,
+    ITER_LIST,
+    ITER_CSV,
+    ITER_MNIST,
+    ITER_CIFAR10
 } bcnn_iterator_type;
 
 
 typedef struct {
-	int	n_samples;
-	bcnn_iterator_type type;
-	FILE *f_input;
-	FILE *f_label;
-	FILE *f_list;
-	int n_iter;
-	int input_width;
-	int input_height;
-	int input_depth;
-	unsigned char *input_uchar;
-	int label_width;
-	int *label_int;
-	float *label_float;
-	unsigned char *label_uchar;
+    int	n_samples;
+    bcnn_iterator_type type;
+    FILE *f_input;
+    FILE *f_label;
+    FILE *f_list;
+    int n_iter;
+    int input_width;
+    int input_height;
+    int input_depth;
+    unsigned char *input_uchar;
+    int label_width;
+    int *label_int;
+    float *label_float;
+    unsigned char *label_uchar;
 } bcnn_iterator;
 
 
@@ -144,48 +144,48 @@ typedef struct {
  * \brief Structure for online data augmentation parameters.
  */
 typedef enum {
-	LABEL_INT,
-	LABEL_FLOAT,
-	LABEL_IMG
+    LABEL_INT,
+    LABEL_FLOAT,
+    LABEL_IMG
 } bcnn_label_type;
 
 typedef struct {
-	int			n_samples;
-	int			width;
-	int			label_width;
-	bcnn_label_type		label_type;
-	unsigned char		*data;
+    int			n_samples;
+    int			width;
+    int			label_width;
+    bcnn_label_type		label_type;
+    unsigned char		*data;
 } bcnn_data;
 
 /**
  * \brief Structure for online data augmentation parameters.
  */
 typedef struct {
-	int			range_shift_x;			/**< X-shift allowed range (chosen between [-range_shift_x / 2; range_shift_x / 2]). */
-	int			range_shift_y;			/**< Y-shift allowed range (chosen between [-range_shift_y / 2; range_shift_y / 2]). */	
-	int			random_fliph;			/**< If !=0, randomly (with probability of 0.5) apply horizontal flip to image. */	
-	float		min_scale;				/**< Minimum scale factor allowed. */
-	float		max_scale;				/**< Maximum scale factor allowed. */
-	float		rotation_range;			/**< Rotation angle allowed range (chosen between [-rotation_range / 2; rotation_range / 2]). Expressed in degree. */
-	int			min_brightness;			/**< Minimum brightness factor allowed (additive factor, range [-255;255]). */
-	int			max_brightness;			/**< Maximum brightness factor allowed (additive factor, range [-255;255]). */
-	float		min_contrast;			/**< Minimum contrast allowed (mult factor). */
-	float		max_contrast;			/**< Maximum contrast allowed (mult factor). */
-	int			use_precomputed;		/**< Flag set to 1 if the parameters to be applied are those already set. */
-	float		scale;					/**< Current scale factor. */
-	int			shift_x;				/**< Current x-shift. */
-	int			shift_y;				/**< Current y-shift. */
-	float		rotation;				/**< Current rotation angle. */
-	int			brightness;				/**< Current brightness factor. */
-	float		contrast;				/**< Current contrast factor. */
-	float		max_distortion;			/**< Maximum distortion factor allowed. */
-	float		distortion;				/**< Current distortion factor. */
-	float		distortion_kx;			/**< Current distortion x kernel. */
-	float		distortion_ky;			/**< Current distortion y kernel. */
-	float		mean_r;
-	float		mean_g;
-	float		mean_b;
-	int			swap_to_bgr;
+    int         range_shift_x;          /**< X-shift allowed range (chosen between [-range_shift_x / 2; range_shift_x / 2]). */
+    int         range_shift_y;          /**< Y-shift allowed range (chosen between [-range_shift_y / 2; range_shift_y / 2]). */	
+    int         random_fliph;           /**< If !=0, randomly (with probability of 0.5) apply horizontal flip to image. */	
+    float       min_scale;              /**< Minimum scale factor allowed. */
+    float       max_scale;              /**< Maximum scale factor allowed. */
+    float       rotation_range;         /**< Rotation angle allowed range (chosen between [-rotation_range / 2; rotation_range / 2]). Expressed in degree. */
+    int         min_brightness;         /**< Minimum brightness factor allowed (additive factor, range [-255;255]). */
+    int         max_brightness;         /**< Maximum brightness factor allowed (additive factor, range [-255;255]). */
+    float       min_contrast;           /**< Minimum contrast allowed (mult factor). */
+    float       max_contrast;           /**< Maximum contrast allowed (mult factor). */
+    int         use_precomputed;        /**< Flag set to 1 if the parameters to be applied are those already set. */
+    float       scale;                  /**< Current scale factor. */
+    int         shift_x;                /**< Current x-shift. */
+    int         shift_y;                /**< Current y-shift. */
+    float       rotation;               /**< Current rotation angle. */
+    int         brightness;             /**< Current brightness factor. */
+    float       contrast;               /**< Current contrast factor. */
+    float       max_distortion;         /**< Maximum distortion factor allowed. */
+    float       distortion;             /**< Current distortion factor. */
+    float       distortion_kx;          /**< Current distortion x kernel. */
+    float       distortion_ky;          /**< Current distortion y kernel. */
+    float       mean_r;
+    float       mean_g;
+    float       mean_b;
+    int         swap_to_bgr;
 } bcnn_data_augment;
 
 
@@ -193,37 +193,37 @@ typedef struct {
  * \brief Enum of learning policies.
  */
 typedef enum {
-	CONSTANT,
-	STEP,
-	INV,
-	EXP,
-	POLY,
-	SIGMOID
+    CONSTANT,
+    STEP,
+    INV,
+    EXP,
+    POLY,
+    SIGMOID
 } bcnn_lr_policy;
 
 /**
  * \brief Enum of optimization methods.
  */
 typedef enum {
-	SGD,
-	ADAM
+    SGD,
+    ADAM
 } bcnn_optimizer;
 
 /**
  * \brief Structure to handle learner method and parameters.
  */
 typedef struct {
-	float			momentum;				/**< Momentum parameter */
-	float			decay;					/**< Decay parameter */
-	float			learning_rate;				/**< Base learning rate */
-	float			gamma;
-	float			scale;
-	float			power;
-	float			beta1;					/**< Parameter for Adam optimizer */
-	float			beta2;					/**< Parameter for Adam optimizer */
-	int				step;
-	bcnn_optimizer	optimizer;				/**< Optimization method */
-	bcnn_lr_policy	policy;					/**< Learning rate policy */
+    float           momentum;               /**< Momentum parameter */
+    float           decay;                  /**< Decay parameter */
+    float           learning_rate;          /**< Base learning rate */
+    float           gamma;
+    float           scale;
+    float           power;
+    float           beta1;                  /**< Parameter for Adam optimizer */
+    float           beta2;                  /**< Parameter for Adam optimizer */
+    int             step;
+    bcnn_optimizer  optimizer;              /**< Optimization method */
+    bcnn_lr_policy  policy;                 /**< Learning rate policy */
 } bcnn_learner;
 
 
@@ -231,45 +231,45 @@ typedef struct {
  * \brief Enum of available layers types.
  */
 typedef enum {
-	CONVOLUTIONAL,
-	DECONVOLUTIONAL,
-	DW_SEP_CONV,			/**< Depthwise separable convolution */
-	ACTIVATION,
-	FULL_CONNECTED,
-	MAXPOOL,
-	SOFTMAX,
-	DROPOUT,
-	BATCHNORM,
-	CONCAT,
-	COST
+    CONVOLUTIONAL,
+    DECONVOLUTIONAL,
+    DEPTHWISE_CONV,            /**< Depthwise convolution */
+    ACTIVATION,
+    FULL_CONNECTED,
+    MAXPOOL,
+    SOFTMAX,
+    DROPOUT,
+    BATCHNORM,
+    CONCAT,
+    COST
 } bcnn_layer_type;
 
 /**
  * \brief Enum of available activations functions (non-linearities).
  */
 typedef enum {
-	NONE,
-	TANH,
-	RELU,
-	RAMP,
-	SOFTPLUS,
-	LRELU,				/**< Leaky relu (alpha (negative slope) set to 0.01) */
-	ABS,
-	CLAMP
+    NONE,
+    TANH,
+    RELU,
+    RAMP,
+    SOFTPLUS,
+    LRELU,              /**< Leaky relu (alpha (negative slope) set to 0.01) */
+    ABS,
+    CLAMP
 } bcnn_activation;
 
 /**
  * \brief Enum of available weight inializations modes.
  */
 typedef enum {
-	XAVIER,				/**< Xavier weight init */
-	MSRA				/**< MSRA weight init */
+    XAVIER,             /**< Xavier weight init */
+    MSRA                /**< MSRA weight init */
 } bcnn_weights_init;
 
 
 typedef enum {
-	L2,
-	HUBER
+    L2,
+    HUBER
 } bcnn_loss;
 
 
@@ -277,44 +277,44 @@ typedef enum {
  * \brief Enum of available loss metrics.
  */
 typedef enum {
-	COST_ERROR,			/**< Error rate (classification only) */
-	COST_LOGLOSS,			/**< Multi-class Logloss (classification only) */
-	COST_SSE,			/**< Sum-squared error */
-	COST_MSE,			/**< Mean-squared error */
-	COST_CRPS,			/**< Continuous Ranked Probability Score */
-	COST_DICE			/**< Sørensen–Dice index: metric for image segmentation */
+    COST_ERROR,         /**< Error rate (classification only) */
+    COST_LOGLOSS,       /**< Multi-class Logloss (classification only) */
+    COST_SSE,           /**< Sum-squared error */
+    COST_MSE,           /**< Mean-squared error */
+    COST_CRPS,          /**< Continuous Ranked Probability Score */
+    COST_DICE           /**< Sørensen–Dice index: metric for image segmentation */
 } bcnn_loss_metric;
 
 /**
  * \brief Structure for handling the current workload through the network (data batch).
  */
 typedef struct {
-	float	*input;
-	float	*input2;
-	float	*truth;
+    float	*input;
+    float	*input2;
+    float	*truth;
 #ifdef BCNN_USE_CUDA
-	float	*input_gpu;
-	float	*input2_gpu;
-	float	*truth_gpu;
+    float	*input_gpu;
+    float	*input2_gpu;
+    float	*truth_gpu;
 #endif
-	float	*diff;
-	float	*diff2;
-	int		train;
-	int		batch_size;
+    float	*diff;
+    float	*diff2;
+    int		train;
+    int		batch_size;
 } bcnn_workload;
 
 
 /* Experimental */
 typedef struct {
-	int		b;				/**< Batch size */
-	int		w;
-	int		h;
-	int		c;
-	float	*data;
-	float	*grad_data;
+    int     b;              /**< Batch size */
+    int     w;
+    int     h;
+    int     c;
+    float   *data;
+    float   *grad_data;
 #ifdef BCNN_USE_CUDA
-	float	*data_gpu;
-	float	*grad_data_gpu;
+    float   *data_gpu;
+    float   *grad_data_gpu;
 #endif
 } bcnn_tensor;
 
@@ -322,85 +322,85 @@ typedef struct {
 * \brief Structure defining a generic layer.
 */
 typedef struct {
-	int					num;
-	int					size;
-	int					stride;
-	int					pad;
-	int					quantize;
-	bcnn_layer_type		type;
-	bcnn_activation		activation;
-	bcnn_loss_metric	loss_metric;
-	float				dropout_rate;
-	float				scale;
-	int					concat_index;
-	int					weights_size;
-	float				*weight;
-	float				*weight_diff;
+    int                 num;
+    int                 size;
+    int                 stride;
+    int                 pad;
+    int                 quantize;
+    bcnn_layer_type     type;
+    bcnn_activation     activation;
+    bcnn_loss_metric    loss_metric;
+    float               dropout_rate;
+    float               scale;
+    int                 concat_index;
+    int                 weights_size;
+    float               *weight;
+    float               *weight_diff;
 #ifdef BCNN_USE_CUDA
-	float				*weight_gpu;
-	float				*weight_diff_gpu;
+    float               *weight_gpu;
+    float               *weight_diff_gpu;
 #endif
-	int					bias_size;
-	float				*bias;
-	float				*bias_diff;
+    int                 bias_size;
+    float               *bias;
+    float               *bias_diff;
 #ifdef BCNN_USE_CUDA
-	float				*bias_gpu;
-	float				*bias_diff_gpu;
+    float               *bias_gpu;
+    float               *bias_diff_gpu;
 #endif
-	int					*indexes;
-	float				*conv_workspace;
-	float				*rand;
+    int                 *indexes;
+    float               *conv_workspace;
+    float               *rand;
 #ifdef BCNN_USE_CUDA
-	int					*indexes_gpu;
-	float				*conv_workspace_gpu;
-	float				*rand_gpu;
+    int                 *indexes_gpu;
+    float               *conv_workspace_gpu;
+    float               *rand_gpu;
 #endif
-	float				*bn_workspace;
-	float				*mean;
-	float				*variance;
-	float				*global_mean;
-	float				*global_variance;
-	float				*diff_mean;
-	float				*diff_variance;
-	float				*x_norm;
-	float				*bn_scale;
-	float				*bn_scale_diff;
+    float               *bn_workspace;
+    float               *mean;
+    float               *variance;
+    float               *global_mean;
+    float               *global_variance;
+    float               *diff_mean;
+    float               *diff_variance;
+    float               *x_norm;
+    float               *bn_scale;
+    float               *bn_scale_diff;
 #ifdef BCNN_USE_CUDA
-	float				*mean_gpu;
-	float				*variance_gpu;
-	float				*global_mean_gpu;
-	float				*global_variance_gpu;
-	float				*diff_mean_gpu;
-	float				*diff_variance_gpu;
-	float				*bn_workspace_gpu;
-	float				*x_norm_gpu;
-	float				*bn_scale_gpu;
-	float				*bn_scale_diff_gpu;
+    float               *mean_gpu;
+    float               *variance_gpu;
+    float               *global_mean_gpu;
+    float               *global_variance_gpu;
+    float               *diff_mean_gpu;
+    float               *diff_variance_gpu;
+    float               *bn_workspace_gpu;
+    float               *x_norm_gpu;
+    float               *bn_scale_gpu;
+    float               *bn_scale_diff_gpu;
 #endif
-	float				*adam_m;		/**< Adam optimizer: first moment gradient */
-	float				*adam_v;		/**< Adam optimizer: second moment gradient */
+    float               *adam_m;        /**< Adam optimizer: first moment gradient */
+    float               *adam_v;        /**< Adam optimizer: second moment gradient */
 #ifdef BCNN_USE_CUDA
-	float				*adam_m_gpu;	/**< Adam optimizer: first moment gradient */
-	float				*adam_v_gpu;	/**< Adam optimizer: second moment gradient */
+    float               *adam_m_gpu;    /**< Adam optimizer: first moment gradient */
+    float               *adam_v_gpu;    /**< Adam optimizer: second moment gradient */
 #endif
-	unsigned int		*binary_weight;
-	unsigned int		*binary_workspace;
-	size_t				workspace_size;
+    unsigned int        *binary_weight;
+    unsigned int        *binary_workspace;
+    size_t              workspace_size;
 #ifdef BCNN_USE_CUDA
 #ifdef BCNN_USE_CUDNN
-	cudnnTensorDescriptor_t				src_tensor_desc;
-	cudnnTensorDescriptor_t				dst_tensor_desc;
-	cudnnTensorDescriptor_t				src_tensor_desc_diff;
-	cudnnTensorDescriptor_t				dst_tensor_desc_diff;
-	cudnnFilterDescriptor_t				filter_desc;
-	cudnnFilterDescriptor_t				filter_desc_diff;
-	cudnnTensorDescriptor_t				bias_desc;
-	cudnnTensorDescriptor_t				bias_desc_diff;
-	cudnnConvolutionDescriptor_t		conv_desc;
-	cudnnPoolingDescriptor_t			pooling_desc;
-	cudnnConvolutionFwdAlgo_t			fwd_algo;
-	cudnnConvolutionBwdDataAlgo_t		bwd_data_algo;
-	cudnnConvolutionBwdFilterAlgo_t 	bwd_filter_algo;
+    cudnnTensorDescriptor_t             src_tensor_desc;
+    cudnnTensorDescriptor_t             dst_tensor_desc;
+    cudnnTensorDescriptor_t             src_tensor_desc_diff;
+    cudnnTensorDescriptor_t             dst_tensor_desc_diff;
+    cudnnFilterDescriptor_t             filter_desc;
+    cudnnFilterDescriptor_t             filter_desc_diff;
+    cudnnTensorDescriptor_t             bias_desc;
+    cudnnTensorDescriptor_t             bias_desc_diff;
+    cudnnConvolutionDescriptor_t        conv_desc;
+    cudnnPoolingDescriptor_t            pooling_desc;
+    cudnnConvolutionFwdAlgo_t           fwd_algo;
+    cudnnConvolutionBwdDataAlgo_t       bwd_data_algo;
+    cudnnConvolutionBwdFilterAlgo_t     bwd_filter_algo;
 #endif
 #endif
 } bcnn_layer;
@@ -409,14 +409,14 @@ typedef struct {
 * \brief Structure handling the network architecture and generic parameters.
 */
 typedef struct {
-	int			state; // 1: train / 0: predict
-	bcnn_tensor		src_tensor;
-	bcnn_tensor		dst_tensor;
-	bcnn_layer		*layer;
-	float			*label;
-	char			*id;
+    int             state; // 1: train / 0: predict
+    bcnn_tensor     src_tensor;
+    bcnn_tensor     dst_tensor;
+    bcnn_layer      *layer;
+    float           *label;
+    char            *id;
 #ifdef BCNN_USE_CUDA
-	float			*label_gpu;
+    float           *label_gpu;
 #endif
 } bcnn_connection;
 
@@ -424,24 +424,24 @@ typedef struct {
 * \brief Structure handling the network architecture and generic parameters.
 */
 typedef struct {
-	int					max_batches;		/**< Maximum number of batches during training (=iterations) */ 
-	bcnn_loss_metric	loss_metric;		/**< Loss metric for evaluation */
-	bcnn_learner		learner;			/**< Learner/optimizer parameters */
-	int					seen;				/**< Number of instances seen by the network */
-	int					nb_connections;
-	bcnn_connection		*connections;
-	bcnn_target			prediction_type;
-	bcnn_data_augment   data_aug;			/**< Parameters for online data augmentation */
-	bcnn_task			task;
-	int					state;
-	bcnn_tensor			input_node;
-	int					nb_finetune;
-	char				**finetune_id;
-	unsigned char		*input_buffer;
-	int					workspace_size;
-	float				*workspace;
+    int                 max_batches;        /**< Maximum number of batches during training (=iterations) */ 
+    bcnn_loss_metric    loss_metric;        /**< Loss metric for evaluation */
+    bcnn_learner        learner;            /**< Learner/optimizer parameters */
+    int                 seen;               /**< Number of instances seen by the network */
+    int                 nb_connections;
+    bcnn_connection     *connections;
+    bcnn_target         prediction_type;
+    bcnn_data_augment   data_aug;           /**< Parameters for online data augmentation */
+    bcnn_task           task;
+    int                 state;
+    bcnn_tensor         input_node;
+    int                 nb_finetune;
+    char                **finetune_id;
+    unsigned char       *input_buffer;
+    int                 workspace_size;
+    float               *workspace;
 #ifdef BCNN_USE_CUDA
-	float				*workspace_gpu;
+    float               *workspace_gpu;
 #endif
 } bcnn_net;
 
@@ -490,16 +490,16 @@ int bcnn_vdiv(int n, float *a, float *b, float *y);
 int bcnn_vmul(int n, float *a, float *b, float *y);
 int bcnn_axpby(int n, float a, float *x, float b, float *y);
 int bcnn_gemv(int trans_a, int m, int n, float alpha, float *a, float *x,
-	float beta, float *y);
+    float beta, float *y);
 int bcnn_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
-	float *A, int lda,
-	float *B, int ldb,
-	float BETA,
-	float *C, int ldc);
+    float *A, int lda,
+    float *B, int ldb,
+    float BETA,
+    float *C, int ldc);
 int bcnn_xnor_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
                         uint32_t *A, int lda,
                         uint32_t *B, int ldb,
-						float BETA,
+                        float BETA,
                         float *C, int ldc);
 float bcnn_l2_distance(float *x, float *y, int n);
 float bcnn_sqrdiff_vs(float *x, float a, int n);
@@ -516,19 +516,19 @@ int bcnn_realloc(bcnn_net *net, int nb_layers);
 
 /* Conv layer */
 int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int pad,
-	int batch_norm, bcnn_weights_init init, bcnn_activation activation, int quantize, char *id);
+    int batch_norm, bcnn_weights_init init, bcnn_activation activation, int quantize, char *id);
 int bcnn_forward_conv_layer(bcnn_connection *conn);
 int bcnn_backward_conv_layer(bcnn_connection *conn);
 
 /* Deconv layer */
 int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, int pad,
-	bcnn_weights_init init, bcnn_activation activation, char *id);
+    bcnn_weights_init init, bcnn_activation activation, char *id);
 int bcnn_forward_deconv_layer(bcnn_connection *conn);
 int bcnn_backward_deconv_layer(bcnn_connection *conn);
 
 /* Depthwise separable conv layer */
 int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride, int pad,
-	int batch_norm, bcnn_weights_init init, bcnn_activation activation, char *id);
+    int batch_norm, bcnn_weights_init init, bcnn_activation activation, char *id);
 int bcnn_forward_depthwise_sep_conv_layer(bcnn_connection *conn);
 int bcnn_backward_depthwise_sep_conv_layer(bcnn_connection *conn);
 
@@ -594,9 +594,9 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
 int bcnn_load_image_from_csv(char *str, int w, int h, int c, unsigned char **img);
 int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **img, int state, int *x_shift, int *y_shift);
 int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, int h, int c, unsigned char **img, int state,
-	int *x_shift, int *y_shift);
+    int *x_shift, int *y_shift);
 int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth, bcnn_data_augment *param,
-	unsigned char *buffer);
+    unsigned char *buffer);
 unsigned int _read_int(char *v);
 
 void get_binary_row(float *row, uint32_t *bin_row, int size);
@@ -606,11 +606,11 @@ void get_binary_col_unrolled(float *col, uint32_t *bin_col, int n, int k);
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter);
 
 int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_to_bgr, 
-	float mean_r, float mean_g, float mean_b, float *dst);
+    float mean_r, float mean_g, float mean_b, float *dst);
 
 typedef struct {
-	int state;
-	float r;
+    int state;
+    float r;
 } bcnn_gauss_gen;
 float bcnn_rng_gaussian(bcnn_gauss_gen *g);
 
@@ -622,32 +622,32 @@ float bcnn_rng_gaussian(bcnn_gauss_gen *g);
 #define BCNN_CUDA_THREADS 512
 #endif
 
-#define bcnn_cuda_check(RET) {													\
-	if ((RET) != cudaSuccess) {													\
-		fprintf(stderr, "[ERROR] [CUDA] %s\n", cudaGetErrorString((RET)));		\
-		exit((RET));															\
-	}																			\
+#define bcnn_cuda_check(RET) {                                                  \
+    if ((RET) != cudaSuccess) {                                                 \
+        fprintf(stderr, "[ERROR] [CUDA] %s\n", cudaGetErrorString((RET)));      \
+        exit((RET));                                                            \
+    }                                                                           \
 }
-#define bcnn_cublas_check(RET) {												\
-	if ((RET) != CUBLAS_STATUS_SUCCESS) {										\
-		fprintf(stderr, "[ERROR] [CUBLAS] %d\n", (int)(RET));					\
-		exit((RET));															\
-	}																			\
+#define bcnn_cublas_check(RET) {                                                \
+    if ((RET) != CUBLAS_STATUS_SUCCESS) {                                       \
+        fprintf(stderr, "[ERROR] [CUBLAS] %d\n", (int)(RET));                   \
+        exit((RET));                                                            \
+    }                                                                           \
 }
 
-#define bcnn_curand_check(RET) {												\
-	if ((RET) != CURAND_STATUS_SUCCESS) {										\
-		fprintf(stderr, "[ERROR] [CURAND] %d\n", (int)(RET));					\
-		exit((RET));															\
-	}																			\
+#define bcnn_curand_check(RET) {                                                \
+    if ((RET) != CURAND_STATUS_SUCCESS) {                                       \
+        fprintf(stderr, "[ERROR] [CURAND] %d\n", (int)(RET));                   \
+        exit((RET));                                                            \
+    }                                                                           \
 }
 
 #ifdef BCNN_USE_CUDNN
-#define bcnn_cudnn_check(RET) {													\
-	if ((RET) != CUDNN_STATUS_SUCCESS) {										\
-		fprintf(stderr, "[ERROR] [CUDNN] %s\n", cudnnGetErrorString((RET)));	\
-		exit((RET));															\
-	}																			\
+#define bcnn_cudnn_check(RET) {                                                 \
+    if ((RET) != CUDNN_STATUS_SUCCESS) {                                        \
+        fprintf(stderr, "[ERROR] [CUDNN] %s\n", cudnnGetErrorString((RET)));    \
+        exit((RET));                                                            \
+    }                                                                           \
 }
 
 cudnnHandle_t bcnn_cudnn_handle();
@@ -665,13 +665,13 @@ void bcnn_cuda_memcpy_host2dev(float *x_gpu, float *x, int n);
 void bcnn_cuda_memcpy_dev2host(float *x_gpu, float *x, int n);
 
 void bcnn_cuda_gemm(int trans_a, int trans_b, int m, int n, int k, float alpha,
-	float *a, int lda,
-	float *b, int ldb,
-	float beta,
-	float *c, int ldc);
+    float *a, int lda,
+    float *b, int ldb,
+    float beta,
+    float *c, int ldc);
 void bcnn_cuda_gemv(int trans_a, const int m,
-	const int n, const float alpha, const float *a, const float *x,
-	const float beta, float *y);
+    const int n, const float alpha, const float *a, const float *x,
+    const float beta, float *y);
 void bcnn_cuda_fill_f32(int n, float alpha, float *x, int incx);
 void bcnn_cuda_copy_f32(int n, float * x, int incx, float * y, int incy);
 void bcnn_cuda_axpy(int n, float alpha, float *x, int incx, float *y, int incy);
@@ -690,11 +690,11 @@ void bcnn_cuda_mean_variance_backward(float *x, float *grad, float *mean, float 
 void bcnn_cuda_norm_backward(float *x, float *mean, float *var, float *mean_diff, float *var_diff, int b, int c, int wxh, float *grad);
 
 void bcnn_im2col_gpu(float *im,
-	int channels, int height, int width,
-	int ksize, int stride, int pad, float *data_col);
+    int channels, int height, int width,
+    int ksize, int stride, int pad, float *data_col);
 void bcnn_col2im_gpu(float *data_col,
-	int channels, int height, int width,
-	int ksize, int stride, int pad, float *data_im);
+    int channels, int height, int width,
+    int ksize, int stride, int pad, float *data_im);
 
 int bcnn_forward_bias_gpu(float *output, float *biases, int batch_size, int n, int size);
 int bcnn_backward_bias_gpu(float *bias_diff, float *diff, int batch_size, int n, int size);

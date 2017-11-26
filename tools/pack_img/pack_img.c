@@ -30,87 +30,87 @@
 
 int show_usage()
 {
-	fprintf(stderr, "Usage: pack-img <list_img_labels> <output_path> [-l label_width] [-t label_type]\n");
-	fprintf(stderr, "\t Values for 'label_type': 'int' or 'float' or 'img' \n");
-	return 0;
+    fprintf(stderr, "Usage: pack-img <list_img_labels> <output_path> [-l label_width] [-t label_type]\n");
+    fprintf(stderr, "\t Values for 'label_type': 'int' or 'float' or 'img' \n");
+    return 0;
 }
 
 int is_option(char *argv)
 {
-	if (strncmp(argv, "-", 1) == 0)
-		return 1;
-	else
-		return 0;
+    if (strncmp(argv, "-", 1) == 0)
+        return 1;
+    else
+        return 0;
 }
 
 void bad_parameter(char *param)
 {
-	fprintf(stderr, "[ERROR] Bad parameter for option '%s'\n", param);
-	show_usage();
+    fprintf(stderr, "[ERROR] Bad parameter for option '%s'\n", param);
+    show_usage();
 }
 
 void bad_option(char *opt)
 {
-	fprintf(stderr, "[ERROR] Unknown option '%s'\n", opt);
-	show_usage();
+    fprintf(stderr, "[ERROR] Unknown option '%s'\n", opt);
+    show_usage();
 }
 
 
 int main(int argc, char **argv)
 {
-	int label_width = 1;
-	bcnn_label_type type = LABEL_INT;
-	int i = 3;
+    int label_width = 1;
+    bcnn_label_type type = LABEL_INT;
+    int i = 3;
 
-	if (argc < 2) {
-		show_usage();
-		return -1;
-	}
-	while (i < argc) {
-		if (strcmp(argv[i], "-l") == 0) {
-			if (i + 1 < argc) {
-				if (is_option(argv[i + 1])) {
-					bad_parameter(argv[i]);
-					return -1;
-				}
-				label_width = atoi(argv[i + 1]);
-			}
-			else {
-				bad_parameter(argv[i]);
-				return -1;
-			}
-			i++;
-		}
-		else if (strcmp(argv[i], "-t") == 0) {
-			if (i + 1 < argc) {
-				if (is_option(argv[i + 1])) {
-					bad_parameter(argv[i]);
-					return -1;
-				}
-				if (!strcmp(argv[i + 1], "int")) type = LABEL_INT;
-				else if (!strcmp(argv[i + 1], "float")) type = LABEL_FLOAT;
-				else if (!strcmp(argv[i + 1], "img")) type = LABEL_IMG;
-				else {
-					bad_parameter(argv[i]);
-					return -1;
-				}
-			}
-			else {
-				bad_parameter(argv[i]);
-				return -1;
-			}
-			i++;
-		}
-		else {
-			bad_option(argv[i]);
-			return -1;
-		}
-		i++;
-	}
+    if (argc < 2) {
+        show_usage();
+        return -1;
+    }
+    while (i < argc) {
+        if (strcmp(argv[i], "-l") == 0) {
+            if (i + 1 < argc) {
+                if (is_option(argv[i + 1])) {
+                    bad_parameter(argv[i]);
+                    return -1;
+                }
+                label_width = atoi(argv[i + 1]);
+            }
+            else {
+                bad_parameter(argv[i]);
+                return -1;
+            }
+            i++;
+        }
+        else if (strcmp(argv[i], "-t") == 0) {
+            if (i + 1 < argc) {
+                if (is_option(argv[i + 1])) {
+                    bad_parameter(argv[i]);
+                    return -1;
+                }
+                if (!strcmp(argv[i + 1], "int")) type = LABEL_INT;
+                else if (!strcmp(argv[i + 1], "float")) type = LABEL_FLOAT;
+                else if (!strcmp(argv[i + 1], "img")) type = LABEL_IMG;
+                else {
+                    bad_parameter(argv[i]);
+                    return -1;
+                }
+            }
+            else {
+                bad_parameter(argv[i]);
+                return -1;
+            }
+            i++;
+        }
+        else {
+            bad_option(argv[i]);
+            return -1;
+        }
+        i++;
+    }
 
-	bcnn_pack_data(argv[1], label_width, type, argv[2]);
+    bcnn_pack_data(argv[1], label_width, type, argv[2]);
 
-	return 0;
+    return 0;
 }
 
 

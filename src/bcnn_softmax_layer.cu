@@ -30,10 +30,11 @@ __global__ void _bcnn_forward_softmax_layer_kernel(int n, int batch, float *inpu
     int i;
     float sum = 0;
     float largest = -INFINITY;
-	int b = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
+    int b = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
     
-	if (b >= batch)
-		return;
+    if (b >= batch) {
+        return;
+    }
     
     for (i = 0; i < n; ++i) {
         int val = input[i+b*n];
@@ -53,28 +54,28 @@ __global__ void _bcnn_forward_softmax_layer_kernel(int n, int batch, float *inpu
 
 int bcnn_forward_softmax_layer_gpu(bcnn_connection *conn)
 {
-	int src_size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c;
-	int batch_size = conn->dst_tensor.b;
-	bcnn_tensor src = conn->src_tensor;
-	bcnn_tensor dst = conn->dst_tensor;
+    int src_size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c;
+    int batch_size = conn->dst_tensor.b;
+    bcnn_tensor src = conn->src_tensor;
+    bcnn_tensor dst = conn->dst_tensor;
 
-	_bcnn_forward_softmax_layer_kernel<<<bcnn_cuda_gridsize(batch_size), BCNN_CUDA_THREADS>>>(src_size,
-		batch_size, src.data_gpu, dst.data_gpu);
+    _bcnn_forward_softmax_layer_kernel<<<bcnn_cuda_gridsize(batch_size), BCNN_CUDA_THREADS>>>(src_size,
+        batch_size, src.data_gpu, dst.data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
 
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 int bcnn_backward_softmax_layer_gpu(bcnn_connection *conn)
 {
-	int size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c
-		* conn->dst_tensor.b;
-	bcnn_tensor src = conn->src_tensor;
-	bcnn_tensor dst = conn->dst_tensor;
+    int size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c
+        * conn->dst_tensor.b;
+    bcnn_tensor src = conn->src_tensor;
+    bcnn_tensor dst = conn->dst_tensor;
 
-	bcnn_cuda_axpy(size, 1, dst.grad_data_gpu, 1, src.grad_data_gpu, 1);
+    bcnn_cuda_axpy(size, 1, dst.grad_data_gpu, 1, src.grad_data_gpu, 1);
 
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 

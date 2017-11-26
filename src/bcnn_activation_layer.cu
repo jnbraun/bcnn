@@ -31,47 +31,47 @@ __global__ void _bcnn_forward_activation_layer_kernel(float *x, int sz, bcnn_act
 {
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
     if (i < sz) {
-		switch (a) {
-		case TANH:
-			x[i] = (exp(2 * x[i]) - 1) / (exp(2 * x[i]) + 1);
-			break;
-		case RELU:
-			x[i] = x[i] * (x[i] > 0);
-			break;
-		case RAMP:
-			x[i] = x[i] * (x[i] > 0) + 0.1 * x[i];
-			break;
-		case CLAMP:
-			x[i] = bh_clamp(x[i], 0, 1);
-			break;
-		case NONE:
-			break;
-		default:
-			break;
-		}
-	}
-	return;
+        switch (a) {
+        case TANH:
+            x[i] = (exp(2 * x[i]) - 1) / (exp(2 * x[i]) + 1);
+            break;
+        case RELU:
+            x[i] = x[i] * (x[i] > 0);
+            break;
+        case RAMP:
+            x[i] = x[i] * (x[i] > 0) + 0.1 * x[i];
+            break;
+        case CLAMP:
+            x[i] = bh_clamp(x[i], 0, 1);
+            break;
+        case NONE:
+            break;
+        default:
+            break;
+        }
+    }
+    return;
 }
 
 int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a)
 {
-	_bcnn_forward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(x,
-		sz, a);
-	return BCNN_SUCCESS;
+    _bcnn_forward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(x,
+        sz, a);
+    return BCNN_SUCCESS;
 }
 
 int bcnn_forward_activation_layer_gpu(bcnn_connection *conn)
 {
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	bcnn_tensor dst = conn->dst_tensor;
-	int sz = bcnn_get_tensor_size(&dst);
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    bcnn_tensor dst = conn->dst_tensor;
+    int sz = bcnn_get_tensor_size(&dst);
 
-	dst.data_gpu = src.data_gpu;
-	bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
-	bcnn_cuda_check(cudaPeekAtLastError());
+    dst.data_gpu = src.data_gpu;
+    bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
+    bcnn_cuda_check(cudaPeekAtLastError());
 
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 
@@ -79,46 +79,46 @@ __global__ void _bcnn_backward_activation_layer_kernel(float *x, float *diff, in
 {
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
     if (i < sz) {
-		switch (a) {
-		case TANH:
-			diff[i] *= (1 - x[i] * x[i]);
-			break;
-		case RELU:
-			diff[i] *= ((float)(x[i] > 0));
-			break;
-		case RAMP:
-			diff[i] *= ((float)(x[i] > 0) + 0.1f);
-			break;
-		case CLAMP:
-			diff[i] *= (float)(x[i] > 0.0f && (x[i] < 1.0f));
-			break;
-		case NONE:
-			break;
-		default:
-			break;
-		}
-	}
+        switch (a) {
+        case TANH:
+            diff[i] *= (1 - x[i] * x[i]);
+            break;
+        case RELU:
+            diff[i] *= ((float)(x[i] > 0));
+            break;
+        case RAMP:
+            diff[i] *= ((float)(x[i] > 0) + 0.1f);
+            break;
+        case CLAMP:
+            diff[i] *= (float)(x[i] > 0.0f && (x[i] < 1.0f));
+            break;
+        case NONE:
+            break;
+        default:
+            break;
+        }
+    }
 }
 
 int bcnn_backward_activation_gpu(float *x, float *dx, int sz, bcnn_activation a)
 {
-	_bcnn_backward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(x, dx, 
-		sz, a);
-	return BCNN_SUCCESS;
+    _bcnn_backward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(x, dx, 
+        sz, a);
+    return BCNN_SUCCESS;
 }
 
 int bcnn_backward_activation_layer_gpu(bcnn_connection *conn)
 {
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	bcnn_tensor dst = conn->dst_tensor;
-	int sz = bcnn_get_tensor_size(&dst);
-	
-	bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu, sz, layer->activation);
-	bcnn_cuda_check(cudaPeekAtLastError());
-	src.grad_data_gpu = dst.grad_data_gpu;
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    bcnn_tensor dst = conn->dst_tensor;
+    int sz = bcnn_get_tensor_size(&dst);
+    
+    bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu, sz, layer->activation);
+    bcnn_cuda_check(cudaPeekAtLastError());
+    src.grad_data_gpu = dst.grad_data_gpu;
 
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 

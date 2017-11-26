@@ -27,51 +27,53 @@
 
 int bcnn_forward_fullc_layer_gpu(bcnn_connection *conn)
 {
-	int i, batch_size = conn->dst_tensor.b;
-	int src_size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c;
-	int dst_size = conn->dst_tensor.w * conn->dst_tensor.h * conn->dst_tensor.c;
-	int sz = dst_size * conn->dst_tensor.b;
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	bcnn_tensor dst = conn->dst_tensor;
-	
-	bcnn_cuda_fill_f32(dst_size * batch_size, 0.0f, dst.data_gpu, 1);
+    int i, batch_size = conn->dst_tensor.b;
+    int src_size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c;
+    int dst_size = conn->dst_tensor.w * conn->dst_tensor.h * conn->dst_tensor.c;
+    int sz = dst_size * conn->dst_tensor.b;
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    bcnn_tensor dst = conn->dst_tensor;
+    
+    bcnn_cuda_fill_f32(dst_size * batch_size, 0.0f, dst.data_gpu, 1);
 
-	bcnn_cuda_gemm(0, 1, batch_size, dst_size, src_size, 1,
-		src.data_gpu, src_size, layer->weight_gpu, src_size, 1, dst.data_gpu, dst_size);
+    bcnn_cuda_gemm(0, 1, batch_size, dst_size, src_size, 1,
+        src.data_gpu, src_size, layer->weight_gpu, src_size, 1, dst.data_gpu, dst_size);
 
-	for (i = 0; i < batch_size; ++i){
+    for (i = 0; i < batch_size; ++i){
         bcnn_cuda_axpy(dst_size, 1, layer->bias_gpu, 1, dst.data_gpu + i * dst_size, 1);
     }
-	bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
+    bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
 
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 
 int bcnn_backward_fullc_layer_gpu(bcnn_connection *conn)
 {
-	int i, batch_size = conn->dst_tensor.b;
-	int src_size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c;
-	int dst_size = conn->dst_tensor.w * conn->dst_tensor.h * conn->dst_tensor.c;
-	int sz = dst_size * conn->dst_tensor.b;
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	bcnn_tensor dst = conn->dst_tensor;
+    int i, batch_size = conn->dst_tensor.b;
+    int src_size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c;
+    int dst_size = conn->dst_tensor.w * conn->dst_tensor.h * conn->dst_tensor.c;
+    int sz = dst_size * conn->dst_tensor.b;
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    bcnn_tensor dst = conn->dst_tensor;
 
-	bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu, sz, layer->activation);
+    bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu, sz, layer->activation);
 
-	for (i = 0; i < batch_size; ++i)
-		bcnn_cuda_axpy(dst_size, 1, dst.grad_data_gpu + i * dst_size, 1, layer->bias_diff_gpu, 1);
+    for (i = 0; i < batch_size; ++i) {
+        bcnn_cuda_axpy(dst_size, 1, dst.grad_data_gpu + i * dst_size, 1, layer->bias_diff_gpu, 1);
+    }
 
-	bcnn_cuda_gemm(1, 0, dst_size, src_size, batch_size, 1,
-		dst.grad_data_gpu, dst_size, src.data_gpu, src_size, 1,
-		layer->weight_diff_gpu, src_size);
-	if (src.grad_data_gpu)
-		bcnn_cuda_gemm(0, 0, batch_size, src_size, dst_size, 1,
-			dst.grad_data_gpu, dst_size, layer->weight_gpu, src_size, 1, src.grad_data_gpu, src_size);
+    bcnn_cuda_gemm(1, 0, dst_size, src_size, batch_size, 1,
+        dst.grad_data_gpu, dst_size, src.data_gpu, src_size, 1,
+        layer->weight_diff_gpu, src_size);
+    if (src.grad_data_gpu) {
+        bcnn_cuda_gemm(0, 0, batch_size, src_size, dst_size, 1,
+            dst.grad_data_gpu, dst_size, layer->weight_gpu, src_size, 1, src.grad_data_gpu, src_size);
+    }
 
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 #endif

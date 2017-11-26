@@ -28,40 +28,43 @@
 __global__ void _bcnn_dropout_layer_kernel(float *input, int size, float *rand, float prob, float scale)
 {
     int id = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
-    if (id < size)
-		input[id] = (rand[id] < prob) ? 0 : input[id] * scale;
+    if (id < size) {
+        input[id] = (rand[id] < prob) ? 0 : input[id] * scale;
+    }
 }
 
 int bcnn_forward_dropout_layer_gpu(bcnn_connection *conn)
 {
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	int size = bcnn_get_tensor_size(&src);
-	
-	if (!conn->state) // state != train
-		return BCNN_SUCCESS;
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    int size = bcnn_get_tensor_size(&src);
+    
+    if (!conn->state) { // state != train
+        return BCNN_SUCCESS;
+    }
 
     bcnn_cuda_fill_with_random(layer->rand_gpu, size);
 
-	_bcnn_dropout_layer_kernel<<<bcnn_cuda_gridsize(size), BCNN_CUDA_THREADS>>>(src.data_gpu,
-	 size, layer->rand_gpu, layer->dropout_rate, layer->scale);
+    _bcnn_dropout_layer_kernel<<<bcnn_cuda_gridsize(size), BCNN_CUDA_THREADS>>>(src.data_gpu,
+     size, layer->rand_gpu, layer->dropout_rate, layer->scale);
     bcnn_cuda_check(cudaPeekAtLastError());
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 int bcnn_backward_dropout_layer_gpu(bcnn_connection *conn)
 {
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	int size = bcnn_get_tensor_size(&src);
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    int size = bcnn_get_tensor_size(&src);
 
-	if (!src.grad_data_gpu)
-		return BCNN_SUCCESS;
+    if (!src.grad_data_gpu) {
+        return BCNN_SUCCESS;
+    }
     
-	_bcnn_dropout_layer_kernel<<<bcnn_cuda_gridsize(size), BCNN_CUDA_THREADS>>>(src.grad_data_gpu,
-	 size, layer->rand_gpu, layer->dropout_rate, layer->scale);
+    _bcnn_dropout_layer_kernel<<<bcnn_cuda_gridsize(size), BCNN_CUDA_THREADS>>>(src.grad_data_gpu,
+     size, layer->rand_gpu, layer->dropout_rate, layer->scale);
     bcnn_cuda_check(cudaPeekAtLastError());
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 

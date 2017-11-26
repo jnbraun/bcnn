@@ -19,39 +19,39 @@ endif()
 add_definitions(-DBIP_USE_STB_IMAGE)
 
 if(MSVC)
-	set(variables
-		CMAKE_C_FLAGS_DEBUG
-		CMAKE_C_FLAGS_MINSIZEREL
-		CMAKE_C_FLAGS_RELEASE
-		CMAKE_C_FLAGS_RELWITHDEBINFO
-		CMAKE_CXX_FLAGS_DEBUG
-		CMAKE_CXX_FLAGS_MINSIZEREL
-		CMAKE_CXX_FLAGS_RELEASE
-		CMAKE_CXX_FLAGS_RELWITHDEBINFO
-	)
-	foreach(variable ${variables})
-		if(${variable} MATCHES "/MD")
-			string(REGEX REPLACE "/MD" "/MT" ${variable} "${${variable}}")
-		endif()
-	endforeach()
+    set(variables
+        CMAKE_C_FLAGS_DEBUG
+        CMAKE_C_FLAGS_MINSIZEREL
+        CMAKE_C_FLAGS_RELEASE
+        CMAKE_C_FLAGS_RELWITHDEBINFO
+        CMAKE_CXX_FLAGS_DEBUG
+        CMAKE_CXX_FLAGS_MINSIZEREL
+        CMAKE_CXX_FLAGS_RELEASE
+        CMAKE_CXX_FLAGS_RELWITHDEBINFO
+    )
+    foreach(variable ${variables})
+        if(${variable} MATCHES "/MD")
+            string(REGEX REPLACE "/MD" "/MT" ${variable} "${${variable}}")
+        endif()
+    endforeach()
 endif()
 
 include_directories (
-	${PROJECT_SOURCE_DIR}/../../inc
-	${PROJECT_SOURCE_DIR}/../../bh/inc
-	)
+    ${PROJECT_SOURCE_DIR}/../../inc
+    ${PROJECT_SOURCE_DIR}/../../bh/inc
+    )
 
 file(GLOB SRC *.c)
 add_executable(cifar10-example ${SRC})
 #target_link_libraries(cifar10-example libbcnn)
 
 if(NOT MSVC)
-	#target_link_libraries(cifar10-example libbcnn bip -lstdc++ -lm)
-	if (CMAKE_BUILD_TYPE STREQUAL "Debug") 
-		target_link_libraries(cifar10-example libbcnn bip -lstdc++ -lm)
-	else()
-		target_link_libraries(cifar10-example libbcnn bip -lm)
-	endif()
+    #target_link_libraries(cifar10-example libbcnn bip -lstdc++ -lm)
+    if (CMAKE_BUILD_TYPE STREQUAL "Debug") 
+        target_link_libraries(cifar10-example libbcnn bip -lstdc++ -lm)
+    else()
+        target_link_libraries(cifar10-example libbcnn bip -lm)
+    endif()
 else()
-	target_link_libraries(cifar10-example libbcnn bip)
+    target_link_libraries(cifar10-example libbcnn bip)
 endif()

@@ -27,70 +27,71 @@
 
 int bcnn_get_tensor_size(bcnn_tensor *tensor)
 {
-	return tensor->w * tensor->h * tensor->c * tensor->b;
+    return tensor->w * tensor->h * tensor->c * tensor->b;
 }
 
 float bcnn_rng_gaussian(bcnn_gauss_gen *g)
 {
-	float v1, v2, s, m;
-	if (g->state){
-       g->state = 0;
-       return g->r;
+    float v1, v2, s, m;
+    
+    if (g->state) {
+        g->state = 0;
+        return g->r;
     }
     else {
-		do {
-		   v1 = 2 * (float)rand() / RAND_MAX - 1;
-		   v2 = 2 * (float)rand() / RAND_MAX - 1;
-		   s = v1 * v1 + v2 * v2;
-		}
-		while (s >= 1.0f || s == 0.0f);
-		g->state = 1;
-		m = sqrtf(-2.0f * logf(s) / s);
-		g->r = v2 * m;
-		return v1 * m;
-	}
+        do {
+            v1 = 2 * (float)rand() / RAND_MAX - 1;
+            v2 = 2 * (float)rand() / RAND_MAX - 1;
+            s = v1 * v1 + v2 * v2;
+        }
+        while (s >= 1.0f || s == 0.0f);
+        g->state = 1;
+        m = sqrtf(-2.0f * logf(s) / s);
+        g->r = v2 * m;
+        return v1 * m;
+    }
 }
 
 void get_binary_row(float *row, uint32_t *bin_row, int size)
 {
-	int i, j;
-	uint32_t rvalue, sign;
+    int i, j;
+    uint32_t rvalue, sign;
     for (i = 0; i < size; i += BITS_IN_UINT32) {
-		rvalue=0;
-		for (j = 0;j < BITS_IN_UINT32; ++j) {
-			sign = (row[i+j]>=0);
-			rvalue |= (sign << j);
-		}
-		bin_row[i / BITS_IN_UINT32] = rvalue;
-	}
+        rvalue=0;
+        for (j = 0;j < BITS_IN_UINT32; ++j) {
+            sign = (row[i+j]>=0);
+            rvalue |= (sign << j);
+        }
+        bin_row[i / BITS_IN_UINT32] = rvalue;
+    }
 }
 
 void get_binary_col(float *col, uint32_t *bin_col, int n, int k)
 {           
     int x, y, b;
-	uint32_t rvalue, sign;
-	for (y = 0; y < (n / BITS_IN_UINT32); y++) {
-		for (x = 0; x < k; ++x) {          
-			rvalue=0;    
-			for (b=0; b < BITS_IN_UINT32; ++b){
-				sign = (col[(y * BITS_IN_UINT32 + b) * k + x]>=0); 
-				rvalue |= (sign << b);
-			}
-			bin_col[y * k + x] = rvalue;
-		}
-	}    
+    uint32_t rvalue, sign;
+    for (y = 0; y < (n / BITS_IN_UINT32); y++) {
+        for (x = 0; x < k; ++x) {          
+            rvalue=0;    
+            for (b=0; b < BITS_IN_UINT32; ++b){
+                sign = (col[(y * BITS_IN_UINT32 + b) * k + x]>=0); 
+                rvalue |= (sign << b);
+            }
+            bin_col[y * k + x] = rvalue;
+        }
+    }    
 }
 
 void get_binary_col_unrolled(float* col, uint32_t * b_col, int n, int k)
 {        
-	int y, b, x;
+    int y, b, x;
     float *col_0, *col_1, *col_2, *col_3;
-	uint32_t *y_col_pt = NULL, *pnter = NULL;
-	//register uint32_t rvalue0,rvalue1, rvalue2, rvalue3;
-	/*register uint32_t sign0, sign1, sign2, sign3, sign4, sign5, sign6, sign7,
+    uint32_t *y_col_pt = NULL, *pnter = NULL;
+    //register uint32_t rvalue0,rvalue1, rvalue2, rvalue3;
+    /*register uint32_t sign0, sign1, sign2, sign3, sign4, sign5, sign6, sign7,
           sign8, sign9, sign10, sign11, sign12, sign13, sign14, sign15;*/
 
-	for (y = 0; y < (n / BITS_IN_UINT32); y++) {
+    for (y = 0; y < (n / BITS_IN_UINT32); y++) {
       y_col_pt = &b_col[y * k];
       for (x = 0; x < k; x += 4) {          
         register uint32_t rvalue0 = 0, rvalue1 = 0, rvalue2 = 0, rvalue3 = 0;
@@ -170,109 +171,109 @@ cudnnHandle_t bcnn_cudnn_handle()
 
 cublasHandle_t bcnn_cublas_handle()
 {
-	static int init = 0;
-	static cublasHandle_t handle;
-	if (!init) {
-		cublasCreate(&handle);
-		init = 1;
-	}
-	return handle;
+    static int init = 0;
+    static cublasHandle_t handle;
+    if (!init) {
+        cublasCreate(&handle);
+        init = 1;
+    }
+    return handle;
 }
 
 
 dim3 bcnn_cuda_gridsize(unsigned int n)
 {
-	unsigned int k = (n - 1) / (BCNN_CUDA_THREADS)+1;
-	unsigned int x = k;
-	unsigned int y = 1;
-	dim3 d;
+    unsigned int k = (n - 1) / (BCNN_CUDA_THREADS)+1;
+    unsigned int x = k;
+    unsigned int y = 1;
+    dim3 d;
 
-	if (x > 65535) {
-		x = (unsigned int)ceil(sqrt((float)k));
-		y = (n - 1) / (x * (BCNN_CUDA_THREADS)) + 1;
-	}
+    if (x > 65535) {
+        x = (unsigned int)ceil(sqrt((float)k));
+        y = (n - 1) / (x * (BCNN_CUDA_THREADS)) + 1;
+    }
 
-	d.x = x;
-	d.y = y;
-	d.z = 1;
+    d.x = x;
+    d.y = y;
+    d.z = 1;
 
-	return d;
+    return d;
 }
 
 
 int *bcnn_cuda_malloc_i32(int n)
 {
-	int *x_gpu;
-	size_t size = sizeof(int)*n;
-	cudaError_t status = cudaMalloc((void **)&x_gpu, size);
+    int *x_gpu;
+    size_t size = sizeof(int)*n;
+    cudaError_t status = cudaMalloc((void **)&x_gpu, size);
 
-	bcnn_cuda_check(status);
-	return x_gpu;
+    bcnn_cuda_check(status);
+    return x_gpu;
 }
 
 float *bcnn_cuda_malloc_f32(int n)
 {
-	float *x_gpu;
-	size_t size = sizeof(float) * n;
-	cudaError_t status = cudaMalloc((void **)&x_gpu, size);
+    float *x_gpu;
+    size_t size = sizeof(float) * n;
+    cudaError_t status = cudaMalloc((void **)&x_gpu, size);
 
-	bcnn_cuda_check(status);
-	return x_gpu;
+    bcnn_cuda_check(status);
+    return x_gpu;
 }
 
 
 float *bcnn_cuda_memcpy_f32(float *x, int n)
 {
-	float *x_gpu;
-	size_t size = sizeof(float)* n;
+    float *x_gpu;
+    size_t size = sizeof(float)* n;
 
-	cudaError_t status = cudaMalloc((void **)&x_gpu, size);
-	bcnn_cuda_check(status);
+    cudaError_t status = cudaMalloc((void **)&x_gpu, size);
+    bcnn_cuda_check(status);
 
-	if (x) {
-		status = cudaMemcpy(x_gpu, x, size, cudaMemcpyHostToDevice);
-		bcnn_cuda_check(status);
-	}
+    if (x) {
+        status = cudaMemcpy(x_gpu, x, size, cudaMemcpyHostToDevice);
+        bcnn_cuda_check(status);
+    }
 
-	if (!x_gpu) {
-		//bh_error("Cuda malloc failed", BCNN_CUDA_FAILED_ALLOC);
-		fprintf(stderr, "[ERROR] Cuda malloc failed\n");
-	}
+    if (!x_gpu) {
+        //bh_error("Cuda malloc failed", BCNN_CUDA_FAILED_ALLOC);
+        fprintf(stderr, "[ERROR] Cuda malloc failed\n");
+    }
 
-	return x_gpu;
+    return x_gpu;
 }
 
 void bcnn_cuda_fill_with_random(float *x_gpu, int n)
 {
-	static curandGenerator_t gen;
-	static int init = 0;
-	if (!init) {
-		curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT);
-		curandSetPseudoRandomGeneratorSeed(gen, time(0));
-		init = 1;
-	}
-	curandGenerateUniform(gen, x_gpu, n);
-	bcnn_cuda_check(cudaPeekAtLastError());
+    static curandGenerator_t gen;
+    static int init = 0;
+    if (!init) {
+        curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT);
+        curandSetPseudoRandomGeneratorSeed(gen, time(0));
+        init = 1;
+    }
+    curandGenerateUniform(gen, x_gpu, n);
+    bcnn_cuda_check(cudaPeekAtLastError());
 }
 
 void bcnn_cuda_free(void *x_gpu)
 {
-	cudaError_t status = cudaFree(x_gpu);
-	bcnn_cuda_check(status);
+    cudaError_t status = cudaFree(x_gpu);
+    bcnn_cuda_check(status);
 }
 
 void bcnn_cuda_memcpy_host2dev(float *x_gpu, float *x, int n)
 {
-	size_t size = sizeof(float)* n;
-	cudaError_t status = cudaMemcpy(x_gpu, x, size, cudaMemcpyHostToDevice);
-	bcnn_cuda_check(status);
+    size_t size = sizeof(float)* n;
+    cudaError_t status = cudaMemcpy(x_gpu, x, size, cudaMemcpyHostToDevice);
+    bcnn_cuda_check(status);
 }
 
 void bcnn_cuda_memcpy_dev2host(float *x_gpu, float *x, int n)
 {
-	size_t size = sizeof(float)* n;
-	cudaError_t status = cudaMemcpy(x, x_gpu, size, cudaMemcpyDeviceToHost);
-	bcnn_cuda_check(status);
+    size_t size = sizeof(float)* n;
+    cudaError_t status = cudaMemcpy(x, x_gpu, size, cudaMemcpyDeviceToHost);
+    bcnn_cuda_check(status);
 }
 
 #endif

@@ -29,181 +29,197 @@
 
 int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id)
 {
-	int nb_connections = net->nb_connections + 1;
-	bcnn_connection conn = { 0 };
-	char type_name[256];
+    int nb_connections = net->nb_connections + 1;
+    bcnn_connection conn = { 0 };
+    char type_name[256];
 
-	bh_assert(nb_connections >= 2,
-		"Activation layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);
+    bh_assert(nb_connections >= 2,
+        "Activation layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);
 
-	if (id != NULL)
-		bh_fill_option(&conn.id, id);
-	conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-	conn.layer->type = ACTIVATION;
-	if (nb_connections > 1)
-		conn.src_tensor = net->connections[nb_connections - 2].dst_tensor;
-	else
-		conn.src_tensor = net->input_node;
-	conn.dst_tensor.w = conn.src_tensor.w;
-	conn.dst_tensor.h = conn.src_tensor.h;
-	conn.dst_tensor.c = conn.src_tensor.c;
-	conn.dst_tensor.b = conn.src_tensor.b;
-	conn.layer->activation = type;
+    if (id != NULL) {
+        bh_fill_option(&conn.id, id);
+    }
+    conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
+    conn.layer->type = ACTIVATION;
+    if (nb_connections > 1) {
+        conn.src_tensor = net->connections[nb_connections - 2].dst_tensor;
+    }
+    else {
+        conn.src_tensor = net->input_node;
+    }
+    conn.dst_tensor.w = conn.src_tensor.w;
+    conn.dst_tensor.h = conn.src_tensor.h;
+    conn.dst_tensor.c = conn.src_tensor.c;
+    conn.dst_tensor.b = conn.src_tensor.b;
+    conn.layer->activation = type;
 
-	conn.dst_tensor.data = conn.src_tensor.data;
-	conn.dst_tensor.grad_data = conn.src_tensor.grad_data;
+    conn.dst_tensor.data = conn.src_tensor.data;
+    conn.dst_tensor.grad_data = conn.src_tensor.grad_data;
 #ifdef BCNN_USE_CUDA
-	conn.dst_tensor.data_gpu = conn.src_tensor.data_gpu;
-	conn.dst_tensor.grad_data_gpu = conn.src_tensor.grad_data_gpu;
+    conn.dst_tensor.data_gpu = conn.src_tensor.data_gpu;
+    conn.dst_tensor.grad_data_gpu = conn.src_tensor.grad_data_gpu;
 #endif
-	net->nb_connections = nb_connections;
-	bcnn_net_add_connection(net, conn);
+    net->nb_connections = nb_connections;
+    bcnn_net_add_connection(net, conn);
 
-	switch (type) {
-	case TANH:		sprintf(type_name, "Tanh");			break;
-	case RELU:		sprintf(type_name, "Relu");			break;
-	case RAMP:		sprintf(type_name, "Ramp");			break;
-	case SOFTPLUS:	sprintf(type_name, "Softplus");		break;
-	case LRELU:		sprintf(type_name, "Leaky-Relu");	break;
-	case ABS:		sprintf(type_name, "AbsVal");		break;
-	case CLAMP:		sprintf(type_name, "Clamp");		break;
-	default:		sprintf(type_name, "None");			break;
-	}
+    switch (type) {
+    case TANH:		sprintf(type_name, "Tanh");			break;
+    case RELU:		sprintf(type_name, "Relu");			break;
+    case RAMP:		sprintf(type_name, "Ramp");			break;
+    case SOFTPLUS:	sprintf(type_name, "Softplus");		break;
+    case LRELU:		sprintf(type_name, "Leaky-Relu");	break;
+    case ABS:		sprintf(type_name, "AbsVal");		break;
+    case CLAMP:		sprintf(type_name, "Clamp");		break;
+    default:		sprintf(type_name, "None");			break;
+    }
 
-	fprintf(stderr, "[Activation] input_shape= %dx%dx%d type= %s output_shape= %dx%dx%d\n",
-		conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, type_name,
-		conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
+    fprintf(stderr, "[Activation] input_shape= %dx%dx%d type= %s output_shape= %dx%dx%d\n",
+        conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, type_name,
+        conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
 
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 
 int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a)
 {
-	int i;
+    int i;
 
-	switch (a) {
-	case TANH:
-		for (i = 0; i < sz; ++i)
-			x[i] = (float)(exp(2 * x[i]) - 1) /
-			((float)exp(2 * x[i]) + 1);
-		break;
-	case RELU:
-		for (i = 0; i < sz; ++i)
-			x[i] = x[i] * (x[i] > 0);
-		break;
-	case LRELU:
-		for (i = 0; i < sz; ++i)
-			x[i] = (x[i] > 0 ? 
-				x[i] : 0.01f * x[i]);
-		break;
-	case RAMP:
-		for (i = 0; i < sz; ++i)
-			x[i] = x[i] * (x[i] > 0) + 0.1f * x[i];
-		break;
-	case SOFTPLUS:
-		for (i = 0; i < sz; ++i)
-			x[i] = (float)log(1.0f + (float)exp(x[i]));
-		break;
-	case ABS:
-		for (i = 0; i < sz; ++i)
-			x[i] = (float)fabs(x[i]);
-		break;
-	case CLAMP:
-		for (i = 0; i < sz; ++i)
-			x[i] = bh_clamp(x[i], 0, 1);
-		break;
-	case NONE:
-		break;
-	default:
-		break;
-	}
-	return BCNN_SUCCESS;
+    switch (a) {
+    case TANH:
+        for (i = 0; i < sz; ++i) {
+            x[i] = (float)(exp(2 * x[i]) - 1) /
+            ((float)exp(2 * x[i]) + 1);
+        }
+        break;
+    case RELU:
+        for (i = 0; i < sz; ++i) {
+            x[i] = x[i] * (x[i] > 0);
+        }
+        break;
+    case LRELU:
+        for (i = 0; i < sz; ++i) {
+            x[i] = (x[i] > 0 ? x[i] : 0.01f * x[i]);
+        }
+        break;
+    case RAMP:
+        for (i = 0; i < sz; ++i) {
+            x[i] = x[i] * (x[i] > 0) + 0.1f * x[i];
+        }
+        break;
+    case SOFTPLUS:
+        for (i = 0; i < sz; ++i) {
+            x[i] = (float)log(1.0f + (float)exp(x[i]));
+        }
+        break;
+    case ABS:
+        for (i = 0; i < sz; ++i) {
+            x[i] = (float)fabs(x[i]);
+        }
+        break;
+    case CLAMP:
+        for (i = 0; i < sz; ++i) {
+            x[i] = bh_clamp(x[i], 0, 1);
+        }
+        break;
+    case NONE:
+        break;
+    default:
+        break;
+    }
+    return BCNN_SUCCESS;
 }
 
 int bcnn_forward_activation_layer_cpu(bcnn_connection *conn)
 {
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	bcnn_tensor dst = conn->dst_tensor;
-	int sz = bcnn_get_tensor_size(&dst);
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    bcnn_tensor dst = conn->dst_tensor;
+    int sz = bcnn_get_tensor_size(&dst);
 
-	dst.data = src.data;
-	bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
+    dst.data = src.data;
+    bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
 
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 
 int bcnn_backward_activation_cpu(float *x, float *dx, int sz, bcnn_activation a)
 {
-	int i;
+    int i;
 
-	switch (a) {
-	case TANH:
-		for (i = 0; i < sz; ++i)
-			dx[i] *= (1 - x[i] * x[i]);
-		break;
-	case RELU:
-		for (i = 0; i < sz; ++i)
-			dx[i] *= ((float)(x[i] > 0));
-		break;
-	case LRELU:
-		for (i = 0; i < sz; ++i)
-			dx[i] *= (x[i] > 0 ? 1.0f : 0.01f);
-		break;
-	case RAMP:
-		for (i = 0; i < sz; ++i)
-			dx[i] *= ((float)(x[i] > 0) + 0.1f);
-		break;
-	case SOFTPLUS:
-		for (i = 0; i < sz; ++i)
-			dx[i] *= 1.0f / (1.0f + (float)exp(-x[i]));
-		break;
-	case ABS:
-		for (i = 0; i < sz; ++i)
-			dx[i] *= (x[i] >= 0 ? 1.0f : -1.0f);
-		break;
-	case CLAMP:
-		for (i = 0; i < sz; ++i)
-			dx[i] *= ((float)(x[i] > 0.0f && x[i] < 1.0f));
-		break;
-	case NONE:
-		break;
-	default:
-		break;
-	}
-	return 0;
+    switch (a) {
+    case TANH:
+        for (i = 0; i < sz; ++i) {
+            dx[i] *= (1 - x[i] * x[i]);
+        }
+        break;
+    case RELU:
+        for (i = 0; i < sz; ++i) {
+            dx[i] *= ((float)(x[i] > 0));
+        }
+        break;
+    case LRELU:
+        for (i = 0; i < sz; ++i) {
+            dx[i] *= (x[i] > 0 ? 1.0f : 0.01f);
+        }
+        break;
+    case RAMP:
+        for (i = 0; i < sz; ++i) {
+            dx[i] *= ((float)(x[i] > 0) + 0.1f);
+        }
+        break;
+    case SOFTPLUS:
+        for (i = 0; i < sz; ++i) {
+            dx[i] *= 1.0f / (1.0f + (float)exp(-x[i]));
+        }
+        break;
+    case ABS:
+        for (i = 0; i < sz; ++i) {
+            dx[i] *= (x[i] >= 0 ? 1.0f : -1.0f);
+        }
+        break;
+    case CLAMP:
+        for (i = 0; i < sz; ++i) {
+            dx[i] *= ((float)(x[i] > 0.0f && x[i] < 1.0f));
+        }
+        break;
+    case NONE:
+        break;
+    default:
+        break;
+    }
+    return 0;
 }
 
 int bcnn_backward_activation_layer_cpu(bcnn_connection *conn)
 {
-	bcnn_layer *layer = conn->layer;
-	bcnn_tensor src = conn->src_tensor;
-	bcnn_tensor dst = conn->dst_tensor;
-	int sz = bcnn_get_tensor_size(&dst);
-	
-	bcnn_backward_activation_cpu(dst.data, dst.grad_data, sz, layer->activation);
-	src.grad_data = dst.grad_data;
+    bcnn_layer *layer = conn->layer;
+    bcnn_tensor src = conn->src_tensor;
+    bcnn_tensor dst = conn->dst_tensor;
+    int sz = bcnn_get_tensor_size(&dst);
+    
+    bcnn_backward_activation_cpu(dst.data, dst.grad_data, sz, layer->activation);
+    src.grad_data = dst.grad_data;
 
-	return BCNN_SUCCESS;
+    return BCNN_SUCCESS;
 }
 
 
 int bcnn_forward_activation_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_forward_activation_layer_gpu(conn);
+    return bcnn_forward_activation_layer_gpu(conn);
 #else
-	return bcnn_forward_activation_layer_cpu(conn);
+    return bcnn_forward_activation_layer_cpu(conn);
 #endif
 }
 
 int bcnn_backward_activation_layer(bcnn_connection *conn)
 {
 #ifdef BCNN_USE_CUDA
-	return bcnn_backward_activation_layer_gpu(conn);
+    return bcnn_backward_activation_layer_gpu(conn);
 #else
-	return bcnn_backward_activation_layer_cpu(conn);
+    return bcnn_backward_activation_layer_cpu(conn);
 #endif
 }

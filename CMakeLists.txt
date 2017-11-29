@@ -3,8 +3,8 @@ project (bcnn)
 
 # Configuration settings
 set(USE_SSE2 1)
-set(USE_CUDA 0)
-set(USE_CUDNN 0)
+set(USE_CUDA 1)
+set(USE_CUDNN 1)
 # Building examples
 set(BUILD_EXAMPLES 1)
 
@@ -92,7 +92,7 @@ endif()
 add_executable(bcnn-cl ${SRC_CLI})
 
 if(NOT MSVC)
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug") 
+    if (USE_CUDA) 
         target_link_libraries(bcnn-cl libbcnn bip -lstdc++ -lm)
     else()
         target_link_libraries(bcnn-cl libbcnn bip -lm)

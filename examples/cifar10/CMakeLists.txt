@@ -47,7 +47,7 @@ add_executable(cifar10-example ${SRC})
 
 if(NOT MSVC)
     #target_link_libraries(cifar10-example libbcnn bip -lstdc++ -lm)
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug") 
+    if (USE_CUDA) 
         target_link_libraries(cifar10-example libbcnn bip -lstdc++ -lm)
     else()
         target_link_libraries(cifar10-example libbcnn bip -lm)

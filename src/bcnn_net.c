@@ -210,6 +210,9 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val)
     else if (strcmp(name, "max_distortion") == 0) {
         net->data_aug.max_distortion = (float)atof(val);
     }
+    else if (strcmp(name, "flip_h") == 0) {
+        net->data_aug.random_fliph = 1;
+    }
     else if (strcmp(name, "mean_r") == 0) {
         net->data_aug.mean_r = (float)atof(val) / 255.0f;
     }

@@ -51,7 +51,12 @@ extern "C" {
 #include <limits.h>
 #include <time.h>
 #ifdef BCNN_USE_SSE2
-#include <emmintrin.h> // SSE2
+//#include <emmintrin.h> // SSE2
+#if defined(_MSC_VER)
+#include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
 #endif
 
 #include "bh/bh_error.h"

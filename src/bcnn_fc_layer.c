@@ -20,11 +20,14 @@
 * SOFTWARE.
 */
 
+#include "bcnn/bcnn.h"
+
+#ifdef BCNN_USE_BLAS
+#include "cblas.h"
+#endif
 
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
-
-#include "bcnn/bcnn.h"
 
 int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation, int quantize, char *id)
 {
@@ -159,12 +162,17 @@ int bcnn_forward_fullc_layer_cpu(bcnn_connection *conn)
         }
     }
     else {
+#ifdef BCNN_USE_BLAS
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, batch_size, dst_size, src_size, 1.0f,
+             src.data, src_size, layer->weight, src_size, 1.0f, dst.data, dst_size);
+#else
         // Original
         bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1.0f,
             src.data, src_size, layer->weight, src_size, 1.0f, dst.data, dst_size);
         // Transposed
         /*bcnn_gemm(0, 0, batch_size, dst_size, src_size, 1.0f,
                 src.data, src_size, layer->weight, dst_size, 1.0f, dst.data, dst_size);*/
+#endif
     }
         
     for (i = 0; i < batch_size; ++i)
@@ -187,23 +195,34 @@ int bcnn_backward_fullc_layer_cpu(bcnn_connection *conn)
 
     bcnn_backward_activation_cpu(dst.data, dst.grad_data, sz, layer->activation);
 
-    for (i = 0; i < batch_size; ++i)
+    for (i = 0; i < batch_size; ++i) {
         bcnn_axpy(dst_size, 1, dst.grad_data + i * dst_size, layer->bias_diff);
+    }
 
+#ifdef BCNN_USE_BLAS
+    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, dst_size, src_size, batch_size, 1.0f,
+        dst.grad_data, dst_size, src.data, src_size, 1.0f, layer->weight_diff, src_size);
+#else
     // Original
-    bcnn_gemm(1, 0, dst_size, src_size, batch_size, 1,
-        dst.grad_data, dst_size, src.data, src_size, 1, layer->weight_diff, src_size);
+    bcnn_gemm(1, 0, dst_size, src_size, batch_size, 1.0f,
+        dst.grad_data, dst_size, src.data, src_size, 1.0f, layer->weight_diff, src_size);
     // Transposed
     /*bcnn_gemm(1, 0, src_size, dst_size, batch_size, 1,
         src.data, src_size, dst.grad_data, dst_size, 1, layer->weight_diff, dst_size);*/
+#endif
 
     if (src.grad_data) {
+#ifdef BCNN_USE_BLAS
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, batch_size, src_size, dst_size, 1.0f,
+            dst.grad_data, dst_size, layer->weight, src_size, 1.0f, src.grad_data, src_size);
+#else
         // Original
-        bcnn_gemm(0, 0, batch_size, src_size, dst_size, 1,
-            dst.grad_data, dst_size, layer->weight, src_size, 1, src.grad_data, src_size);
+        bcnn_gemm(0, 0, batch_size, src_size, dst_size, 1.0f,
+            dst.grad_data, dst_size, layer->weight, src_size, 1.0f, src.grad_data, src_size);
         // Transposed
         /*bcnn_gemm(0, 1, batch_size, src_size, dst_size, 1,
             dst.grad_data, dst_size, layer->weight, dst_size, 1, src.grad_data, src_size);*/
+#endif
     }
 
     if (layer->quantize && src.grad_data) {

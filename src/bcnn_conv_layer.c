@@ -20,12 +20,15 @@
 * SOFTWARE.
 */
 
+#include "bcnn/bcnn.h"
+
+#ifdef BCNN_USE_BLAS
+#include "cblas.h"
+#endif
 
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 #include <bh/bh_timer.h>
-
-#include "bcnn/bcnn.h"
 
 static bh_inline int is_a_positive_and_inferior_to_b(int a, int b)
 {
@@ -400,7 +403,11 @@ int bcnn_forward_conv_layer_cpu(bcnn_connection *conn)
             }
         }
         else {
+#if BCNN_USE_BLAS
+            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
+#else
             bcnn_gemm(0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
+#endif
         }
 
         c += n * m;
@@ -453,7 +460,11 @@ int bcnn_backward_conv_layer_cpu(bcnn_connection *conn)
             _bcnn_im2col(src.data + i * sz, src.c, src.h, src.w,
                 layer->size, layer->pad, layer->stride, b);
         }
-        bcnn_gemm(0, 1, m, n, k, 1, a, k, b, k, 1, c, n);
+#if BCNN_USE_BLAS
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, m, n, k, 1.0f, a, k, b, k, 1.0f, c, n);
+#else    
+        bcnn_gemm(0, 1, m, n, k, 1.0f, a, k, b, k, 1.0f, c, n);
+#endif
 
         if (src.grad_data) {
             a = layer->weight;
@@ -461,10 +472,19 @@ int bcnn_backward_conv_layer_cpu(bcnn_connection *conn)
             c = layer->conv_workspace;
             
             if (layer->size == 1) {
-                bcnn_gemm(1, 0, n, k, m, 1, a, n, b, k, 0, src.grad_data + i * sz, k);
+#if BCNN_USE_BLAS
+                cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, n, k, m, 1.0f,
+                     a, n, b, k, 0.0f, src.grad_data + i * sz, k);
+#else    
+                bcnn_gemm(1, 0, n, k, m, 1.0f, a, n, b, k, 0.0f, src.grad_data + i * sz, k);
+#endif
             }
             else {
-                bcnn_gemm(1, 0, n, k, m, 1, a, n, b, k, 0, c, k);
+#if BCNN_USE_BLAS
+                cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, n, k, m, 1.0f, a, n, b, k, 0.0f, c, k);
+#else
+                bcnn_gemm(1, 0, n, k, m, 1.0f, a, n, b, k, 0.0f, c, k);
+#endif
                 _bcnn_col2im(layer->conv_workspace, src.c, src.h, src.w,
                     layer->size, layer->pad, layer->stride, src.grad_data + i * sz);
             }

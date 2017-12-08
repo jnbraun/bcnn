@@ -1,26 +1,62 @@
 cmake_minimum_required (VERSION 2.9)
 project (bcnn)
 
-# Configuration settings
-set(USE_SSE2 1)
-set(USE_CUDA 1)
-set(USE_CUDNN 1)
+# User configuration settings
+option(USE_SSE2 "Build with SSE instructions" ON)
+option(USE_CUDA "Build with CUDA libraries" OFF)
+option(USE_CUDNN "Build with CuDNN library" OFF)
+option(USE_BLAS "Build with BLAS library" ON)
 # Building examples
-set(BUILD_EXAMPLES 1)
+option(BUILD_EXAMPLES "Build examples ON" ON)
 
 # Convenience stuff
 include(CMakeToolsHelpers OPTIONAL)
 
+# Build directories
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+# Blas backend
+if (USE_BLAS)
+    add_definitions(-DBCNN_USE_BLAS)
+    # Try to find openblas first
+    set(OpenBLAS_INC_PATHS /opt/OpenBLAS/include /usr/include /usr/include/openblas
+        /usr/local/include
+        /usr/local/include/openblas
+    )
+    set(OpenBLAS_LIB_PATHS /opt/OpenBLAS/lib /opt/OpenBLAS/lib64 /lib/ /lib64/ /usr/lib /usr/lib64
+        /usr/local/lib
+        /usr/local/lib64
+    )
+    find_path(OpenBLAS_INCLUDE NAMES cblas.h PATHS ${OpenBLAS_INC_PATHS})
+    find_library(OpenBLAS_LIB NAMES openblas PATHS ${OpenBLAS_LIB_PATHS})
+    if(OpenBLAS_INCLUDE AND OpenBLAS_LIB)
+        set(OpenBLAS_FOUND ON)
+        message(STATUS "Found OpenBlas " ${OpenBLAS_LIB})
+        set(BLAS_LIBRARY ${OpenBLAS_LIB})
+    endif()
+    # If OpenBlas is not found, try to find cblas
+    if(NOT OpenBLAS_FOUND)
+        find_package(BLAS QUIET)
+        find_library(CBLAS_LIB NAMES cblas PATHS)
+        if (BLAS_FOUND AND CBLAS_LIB)
+            message(STATUS "Found Blas " ${CBLAS_LIB})
+            set(BLAS_LIBRARY ${CBLAS_LIB})
+        elseif(NOT CBLAS_FOUND)
+            message(FATAL_ERROR "Can't find any Blas library")
+        endif()
+    endif()
+endif()
+
+# CUDA backend
 if (USE_CUDA)
-find_package(CUDA QUIET REQUIRED)
-add_definitions(-DBCNN_USE_CUDA)
-#set(CUDA_HOST_COMPILATION_CPP OFF)
-set(CUDA_NVCC_FLAGS "-arch=compute_50; -code=sm_50; -lcuda -lcudart -lcublas -lcurand")
-#list(APPEND CMAKE_CXX_SOURCE_FILE_EXTENSIONS c)
+    find_package(CUDA QUIET REQUIRED)
+    add_definitions(-DBCNN_USE_CUDA)
+    message(STATUS ${CUDA_CUBLAS_LIBRARIES})
+    #set(CUDA_HOST_COMPILATION_CPP OFF)
+    set(CUDA_NVCC_FLAGS "-arch=compute_50; -code=sm_50; -lcuda -lcudart -lcublas -lcurand")
+    #list(APPEND CMAKE_CXX_SOURCE_FILE_EXTENSIONS c)
     if (USE_CUDNN)
         set(CUDNN_ROOT_DIR "" CACHE PATH "Folder contains NVIDIA cuDNN")
         find_path(CUDNN_INCLUDE_DIR cudnn.h HINTS ${CUDNN_ROOT_DIR} ${CUDA_TOOLKIT_ROOT_DIR}
@@ -34,7 +70,8 @@ set(CUDA_NVCC_FLAGS "-arch=compute_50; -code=sm_50; -lcuda -lcudart -lcublas -lc
 endif()
 
 if (USE_SSE2)
-add_definitions(-DBCNN_USE_SSE2)
+    message(STATUS "Build with SSE instructions")
+    add_definitions(-DBCNN_USE_SSE2)
 endif()
 
 add_definitions(-DBIP_USE_STB_IMAGE)
@@ -73,8 +110,8 @@ file(GLOB SRC_LIB src/*.c)
 endif()
 list(REMOVE_ITEM SRC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/src/bcnn_cl.c)
 file(GLOB SRC_CLI src/bcnn_cl.c)
-MESSAGE(STATUS "${SRC_LIB}")
-MESSAGE(STATUS "${CMAKE_CURRENT_SOURCE_DIR}")
+#MESSAGE(STATUS "${SRC_LIB}")
+#MESSAGE(STATUS "${CMAKE_CURRENT_SOURCE_DIR}")
 
 if (USE_CUDA)
     cuda_add_library(libbcnn ${SRC_LIB} STATIC)
@@ -86,7 +123,7 @@ if (USE_CUDA)
     endif()
 else()
     add_library(libbcnn STATIC ${SRC_LIB})
-    target_link_libraries(libbcnn bip)
+    target_link_libraries(libbcnn bip ${BLAS_LIBRARY})
 endif()
 
 add_executable(bcnn-cl ${SRC_CLI})

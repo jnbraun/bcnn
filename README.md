@@ -12,8 +12,10 @@ It is aimed to be easy to build with a very limited number of dependencies (stan
 At the current state, it can run on CPU and Nvidia's GPU. CuDNN versions >= 5 (up to 7) are supported.
 
 ## Dependencies:
-### Minimal build (CPU with or without SSE2 acceleration):
-No external dependency (only requires bip (image processing library) and bh (helpers library) already included).
+### CPU build
+* Minimal build: no external dependency (only requires bip (image processing library) and bh (helpers library) already included).
+
+* Build with Blas: requires a blas library (OpenBLAS is preferred).
 
 ### GPU build: 
 Requires CUDA libraries (cudart, cublas, curand) and a GPU with compute capability 2.0 at least. CuDNN is optional but supported.
@@ -26,25 +28,29 @@ git clone --recursive https://github.com/jnbraun/bcnn.git
 
 ### Linux:
 * CMake build:
+* * User configuration: Depending on you build configuration, you may want to edit the following lines of ./CMakeLists.txt:
 ```
+# User configuration settings
+option(USE_SSE2 "Build with SSE instructions" ON)
+option(USE_CUDA "Build with CUDA libraries" OFF)
+option(USE_CUDNN "Build with CuDNN library" OFF)
+option(USE_BLAS "Build with BLAS library" ON)
+# Building examples
+option(BUILD_EXAMPLES "Build examples ON" ON)
+```
+
+* * [Optional] When building with CUDA and/or CuDNN, you may need to adjust the following line depending on the compute capability of your GPU:
+```
+set(CUDA_NVCC_FLAGS "-arch=compute_50; -code=sm_50; -lcuda -lcudart -lcublas -lcurand")
+```
+
+* * Build:
+```
+cd <bcnn-root-dir>
 mkdir build
 cd build/
 cmake ../
 cmake --build ./
-```
-
-* Provided Makefile: 
-```
-make
-```
-You may want to edit the following lines of the Makefile at your convenience:
-```
-CUDA=1
-CUDNN=0
-DEBUG=0
-USE_SSE2=1
-CUDA_PATH=/usr/local/cuda
-ARCH= --gpu-architecture=compute_50 --gpu-code=compute_50
 ```
 
 ### Windows:
@@ -54,15 +60,15 @@ Tested with msvc2010 and msvc2013 only.
 ## Features:
 
 * Currently implemented layers: 
-	- Convolution
-	- Transposed convolution (aka Deconvolution)
-	- Depthwise separable convolution
-	- Fully-connected
-	- Activation functions: relu, tanh, abs, ramp, softplus, leaky-relu, clamp.
-	- Softmax
-	- Max-pooling
-	- Dropout
-	- Batch normalization
+    - Convolution
+    - Transposed convolution (aka Deconvolution)
+    - Depthwise separable convolution
+    - Fully-connected
+    - Activation functions: relu, tanh, abs, ramp, softplus, leaky-relu, clamp.
+    - Softmax
+    - Max-pooling
+    - Dropout
+    - Batch normalization
 * Learning algorithms: SGD, Adam.
 * Online data augmentation (crop, rotation, distortion, flip)
 

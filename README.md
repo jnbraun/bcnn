@@ -27,8 +27,9 @@ git clone --recursive https://github.com/jnbraun/bcnn.git
 ```
 
 ### Linux:
-* CMake build:
-* * User configuration: Depending on you build configuration, you may want to edit the following lines of ./CMakeLists.txt:
+Install cmake.
+
+* User configuration: Depending on you build configuration, you may want to edit the following lines of ./CMakeLists.txt:
 ```
 # User configuration settings
 option(USE_SSE2 "Build with SSE instructions" ON)
@@ -39,12 +40,12 @@ option(USE_BLAS "Build with BLAS library" ON)
 option(BUILD_EXAMPLES "Build examples ON" ON)
 ```
 
-* * [Optional] When building with CUDA and/or CuDNN, you may need to adjust the following line depending on the compute capability of your GPU:
+* [Optional] When building with CUDA and/or CuDNN, you may need to adjust the following line depending on the compute capability of your GPU:
 ```
 set(CUDA_NVCC_FLAGS "-arch=compute_50; -code=sm_50; -lcuda -lcudart -lcublas -lcurand")
 ```
 
-* * Build:
+* Build:
 ```
 cd <bcnn-root-dir>
 mkdir build

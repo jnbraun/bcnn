@@ -1,9 +1,22 @@
+sudo: required
+dist: trusty
+
 language: c
 
 compiler:
   - clang
   - gcc
   
-script: make
+addons:
+  apt:
+    packages:
+    - cmake
+    - libopenblas-dev
+
+script:
+  - mkdir build
+  - cd build
+  - cmake ..
+  - cmake --build .
 
 

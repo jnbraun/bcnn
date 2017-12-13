@@ -34,6 +34,7 @@ if (USE_BLAS)
     if(OpenBLAS_INCLUDE AND OpenBLAS_LIB)
         set(OpenBLAS_FOUND ON)
         message(STATUS "Found OpenBlas " ${OpenBLAS_LIB})
+	include_directories(${OpenBLAS_INC_PATHS})
         set(BLAS_LIBRARY ${OpenBLAS_LIB})
     endif()
     # If OpenBlas is not found, try to find cblas

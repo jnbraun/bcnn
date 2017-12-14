@@ -276,4 +276,9 @@ void bcnn_cuda_memcpy_dev2host(float *x_gpu, float *x, int n)
     bcnn_cuda_check(status);
 }
 
+void bcnn_cuda_set_device(int id)
+{
+    bcnn_cuda_check(cudaSetDevice(id));
+}
+
 #endif

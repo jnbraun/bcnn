@@ -669,6 +669,10 @@ void bcnn_cuda_free(void *x_gpu);
 void bcnn_cuda_memcpy_host2dev(float *x_gpu, float *x, int n);
 void bcnn_cuda_memcpy_dev2host(float *x_gpu, float *x, int n);
 
+/* Wrapper to cudaSetDevice */
+void bcnn_cuda_set_device(int id);
+
+/* Math routines */
 void bcnn_cuda_gemm(int trans_a, int trans_b, int m, int n, int k, float alpha,
     float *a, int lda,
     float *b, int ldb,

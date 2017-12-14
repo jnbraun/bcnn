@@ -400,9 +400,19 @@ int run(char *config_file)
 int main(int argc, char **argv)
 {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <config>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <config> [gpu_device]\n", argv[0]);
+        fprintf(stderr, "\t Required:\n");
+        fprintf(stderr, "\t\t <config>: configuration file. See example here: ");
+        fprintf(stderr, "https://github.com/jnbraun/bcnn/blob/master/examples/mnist_cl/mnist.cfg\n");
+        fprintf(stderr, "\t Optional:\n");
+        fprintf(stderr, "\t\t [gpu_device]: Gpu device id. Default: 0.\n");
         return -1;
     }
+#ifdef BCNN_USE_CUDA
+    if (argc == 3) {
+        bcnn_cuda_set_device(atoi(argv[2]));
+    }
+#endif
     run(argv[1]);
     return 0;
 }

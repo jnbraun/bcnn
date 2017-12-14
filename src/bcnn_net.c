@@ -698,6 +698,7 @@ int bcnn_write_model(bcnn_net *net, char *filename)
         layer = net->connections[i].layer;
         if (layer->type == CONVOLUTIONAL ||
             layer->type == DECONVOLUTIONAL ||
+            layer->type == DEPTHWISE_CONV ||
             layer->type == FULL_CONNECTED) {
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_dev2host(layer->weight_gpu, layer->weight, layer->weights_size);
@@ -754,6 +755,7 @@ int bcnn_load_model(bcnn_net *net, char *filename)
         }
         if ((layer->type == CONVOLUTIONAL ||
             layer->type == DECONVOLUTIONAL ||
+            layer->type == DEPTHWISE_CONV ||
             layer->type == FULL_CONNECTED) && is_ft == 0) {
             nb_read = fread(layer->bias, sizeof(float), layer->bias_size, fp);
             fprintf(stderr, "layer= %d nbread_bias= %lu bias_size_expected= %d\n", i, (unsigned long)nb_read, layer->bias_size);

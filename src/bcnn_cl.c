@@ -123,7 +123,10 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
             bh_assert(n_tok == 2, "Wrong format option in config file", BCNN_INVALID_PARAMETER);
             if (strcmp(tok[0], "task") == 0) {
                 if (strcmp(tok[1], "train") == 0) param->task = TRAIN;
-                else if (strcmp(tok[1], "predict") == 0)  param->task = PREDICT;
+                else if (strcmp(tok[1], "predict") == 0) {
+                     param->task = PREDICT;
+                     net->task = PREDICT;
+                }
                 else bh_error("Invalid parameter for task, available parameters: TRAIN, PREDICT", BCNN_INVALID_PARAMETER);
             }
             else if (strcmp(tok[0], "data_format") == 0) bh_fill_option(&param->data_format, tok[1]);

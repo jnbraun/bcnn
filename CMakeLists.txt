@@ -7,7 +7,9 @@ option(USE_CUDA "Build with CUDA libraries" OFF)
 option(USE_CUDNN "Build with CuDNN library" OFF)
 option(USE_BLAS "Build with BLAS library" ON)
 # Building examples
-option(BUILD_EXAMPLES "Build examples ON" ON)
+option(BUILD_EXAMPLES "Build examples" ON)
+# Building tools
+option(BUILD_TOOLS "Build tools" OFF)
 
 # Convenience stuff
 include(CMakeToolsHelpers OPTIONAL)
@@ -55,8 +57,17 @@ if (USE_CUDA)
     find_package(CUDA QUIET REQUIRED)
     add_definitions(-DBCNN_USE_CUDA)
     message(STATUS ${CUDA_CUBLAS_LIBRARIES})
-    #set(CUDA_HOST_COMPILATION_CPP OFF)
-    set(CUDA_NVCC_FLAGS "-arch=compute_50; -code=sm_50; -lcuda -lcudart -lcublas -lcurand")
+    # Uncomment the proper line according to the system cuda arch
+    set(CUDA_ARCH 
+        #"-gencode arch=compute_30,code=sm_30;"
+        #"-gencode arch=compute_35,code=sm_35;"
+        "-gencode arch=compute_50,code=sm_50;"
+        #"-gencode arch=compute_50,code=compute_50;"
+        #"-gencode arch=compute_52,code=sm_52;"
+        #"-gencode arch=compute_60,code=sm_60;"
+        #"-gencode arch=compute_61,code=sm_61;"
+    )
+    set(CUDA_NVCC_FLAGS ${CUDA_ARCH} "-lcuda -lcudart -lcublas -lcurand")
     #list(APPEND CMAKE_CXX_SOURCE_FILE_EXTENSIONS c)
     if (USE_CUDNN)
         set(CUDNN_ROOT_DIR "" CACHE PATH "Folder contains NVIDIA cuDNN")
@@ -144,3 +155,8 @@ if (BUILD_EXAMPLES)
 add_subdirectory(examples/mnist)
 add_subdirectory(examples/cifar10)
 endif()
+
+if (BUILD_TOOLS)
+    add_subdirectory(tools/caffe_converter)
+endif()
+

@@ -191,6 +191,7 @@ typedef struct {
     float       mean_g;
     float       mean_b;
     int         swap_to_bgr;
+    int         no_input_norm;    /**< If set to 1, Input data range is not normalized between [-1;1] */
 } bcnn_data_augment;
 
 
@@ -610,7 +611,7 @@ void get_binary_col_unrolled(float *col, uint32_t *bin_col, int n, int k);
 
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter);
 
-int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_to_bgr, 
+int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int no_input_norm, int swap_to_bgr, 
     float mean_r, float mean_g, float mean_b, float *dst);
 
 typedef struct {

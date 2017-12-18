@@ -225,6 +225,9 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val)
     else if (strcmp(name, "swap_to_bgr") == 0) {
         net->data_aug.swap_to_bgr = atoi(val);
     }
+    else if (strcmp(name, "no_input_norm") == 0) {
+        net->data_aug.no_input_norm = atoi(val);
+    }
     else if (strcmp(name, "prediction_type") == 0) {
         if (strcmp(val, "classif") == 0 || strcmp(val, "classification") == 0) {
             net->prediction_type = CLASSIFICATION;
@@ -493,12 +496,12 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
                 bip_crop_image(iter->input_uchar, iter->input_width, iter->input_height, iter->input_width * iter->input_depth,
                     (iter->input_width - net->input_node.w) / 2, (iter->input_height - net->input_node.h) / 2,
                     net->input_buffer, net->input_node.w, net->input_node.h, net->input_node.w * net->input_node.c, net->input_node.c);
-                bcnn_convert_img_to_float(net->input_buffer, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
-                    param->mean_r, param->mean_g, param->mean_b, x);
+                bcnn_convert_img_to_float(net->input_buffer, net->input_node.w, net->input_node.h, net->input_node.c, param->no_input_norm,
+                    param->swap_to_bgr, param->mean_r, param->mean_g, param->mean_b, x);
             }
             else
-                bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
-                    param->mean_r, param->mean_g, param->mean_b, x);	
+                bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->no_input_norm,
+                    param->swap_to_bgr, param->mean_r, param->mean_g, param->mean_b, x);	
             //bip_write_image("test1.png", tmp_buf, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c);
             x += sz;
             if (net->task != PREDICT) {
@@ -515,8 +518,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
             // Data augmentation
             if (net->task == TRAIN && net->state)
                 bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-            bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
-                param->mean_r, param->mean_g, param->mean_b, x);
+            bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->no_input_norm,
+                param->swap_to_bgr, param->mean_r, param->mean_g, param->mean_b, x);
             x += sz;
             if (net->task != PREDICT) {
                 // Load truth
@@ -573,8 +576,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
             // Online data augmentation
             if (net->task == TRAIN && net->state)
                 bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-            bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->swap_to_bgr, 
-                param->mean_r, param->mean_g, param->mean_b, x);
+            bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->no_input_norm, 
+                param->swap_to_bgr, param->mean_r, param->mean_g, param->mean_b, x);
             x += sz;
             if (net->task != PREDICT) {
                 // Load truth

@@ -120,14 +120,19 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
 }
 
 
-int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_to_bgr, 
+int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int no_input_norm, int swap_to_bgr, 
     float mean_r, float mean_g, float mean_b, float *dst)
 {
     int x, y, k;
     float m = 0.0f;
+    float sn = 1.0f, sd = 1.0f; 
     
+    if (!no_input_norm) {
+        sn = 2.0f;
+        sd = 1 / 255.0f;
+    }
     if (swap_to_bgr) {
-        for (k = 0; k < c; ++k){
+        for (k = 0; k < c; ++k) {
             switch (k) {
             case 0:
                 m = mean_r;
@@ -141,7 +146,7 @@ int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_
             }
             for (y = 0; y < h; ++y) {
                 for (x = 0; x < w; ++x) {
-                    dst[w * (h * (2 - k) + y) + x] = ((float)src[c * (x + w * y) + k] / 255.0f - m) * 2.0f;
+                    dst[w * (h * (2 - k) + y) + x] = ((float)src[c * (x + w * y) + k] * sd - m) * sn;
                 }
             }
         }
@@ -150,7 +155,7 @@ int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int swap_
         for (k = 0; k < c; ++k) {
             for (y = 0; y < h; ++y) {
                 for (x = 0; x < w; ++x) {
-                    dst[w * (h * k + y) + x] = ((float)src[c * (x + w * y) + k] / 255.0f - 0.5f) * 2.0f;
+                    dst[w * (h * k + y) + x] = ((float)src[c * (x + w * y) + k] * sd - 0.5f) * sn;
                 }
             }
         }
@@ -588,7 +593,7 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
             else {
                 bcnn_load_image_from_csv(tok[i], out_w, out_h, out_c, &img);
             }
-            bcnn_convert_img_to_float(img, out_w, out_h, out_c, 0, 0, 0, 0, iter->label_float);
+            bcnn_convert_img_to_float(img, out_w, out_h, out_c, 0, 0, 0, 0, 0, iter->label_float);
             bh_free(img);
         }
     }

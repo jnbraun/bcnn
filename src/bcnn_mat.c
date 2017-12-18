@@ -376,7 +376,7 @@ int bcnn_add_scalar(int n, float a, float *x)
     int data_is_aligned = bh_is_aligned32(x);
 
     if (a == 0.0f) {
-        memset(x, 0, n * sizeof(float));
+        return 0;
     }
     else if (a != 1.0f) {
         nd = n / 8 * 8;

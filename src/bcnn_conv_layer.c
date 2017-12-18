@@ -116,10 +116,9 @@ static int _bcnn_add_bias(float *output, float *bias, int batch_size, int n, int
 
     for (b = 0; b < batch_size; ++b) {
         for (i = 0; i < n; ++i) {
-            for (j = 0; j < size; ++j) {
-                output[(b * n + i) * size + j] += bias[i];
-            }
+            bcnn_add_scalar(size, bias[i], output + i * size);
         }
+        output += n * size;
     }
     return 0;
 }

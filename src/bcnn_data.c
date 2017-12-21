@@ -188,8 +188,8 @@ int bcnn_load_image_from_csv(char *str, int w, int h, int c, unsigned char **img
     return BCNN_SUCCESS;
 }
 
-
-int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **img, int state,
+/* Load image from disk, performs crop to fit the required size if needed and copy in pre-allocated memory */
+int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char *img, int state,
     int *x_shift, int *y_shift)
 {
     int w_img, h_img, c_img, x_ul = 0, y_ul = 0;
@@ -217,12 +217,13 @@ int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **i
         pimg = (unsigned char*)calloc(w * h * c, sizeof(unsigned char));
         bip_crop_image(buf, w_img, h_img, w_img * c_img, x_ul, y_ul,
             pimg, w, h, w * c, c);
-        *img = pimg;
-        bh_free(buf);
+        memcpy(img, pimg, w * h * c);
+        bh_free(pimg);
     }
     else {
-        *img = buf;
+        memcpy(img, buf, w * h * c);
     }
+    bh_free(buf);
     *x_shift = x_ul;
     *y_shift = y_ul;
 
@@ -520,16 +521,13 @@ static int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *pat
         return BCNN_INVALID_PARAMETER;
     }
 
-    line = bh_fgetline(f_list);
-    n_tok = bh_strsplit(line, ' ', &tok);
-    bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &img, net->state,
-        &net->data_aug.shift_x, &net->data_aug.shift_y);
     iter->input_width = net->input_node.w;
     iter->input_height = net->input_node.w;
     iter->input_depth = net->input_node.c;
     iter->input_uchar = (unsigned char *)calloc(iter->input_width * iter->input_height * iter->input_depth,
         sizeof(unsigned char));
-    
+    line = bh_fgetline(f_list);
+    n_tok = bh_strsplit(line, ' ', &tok);
     if (net->prediction_type != SEGMENTATION) {
         iter->label_width = n_tok - 1;
     }
@@ -571,7 +569,7 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
             "Wrong data format for classification", BCNN_INVALID_DATA);
     }
     if (iter->type == ITER_LIST) {
-        bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, &iter->input_uchar, net->state,
+        bcnn_load_image_from_path(tok[0], net->input_node.w, net->input_node.h, net->input_node.c, iter->input_uchar, net->state,
             &net->data_aug.shift_x, &net->data_aug.shift_y);
     }
     else {
@@ -587,7 +585,7 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
     else {
         for (i = 0; i < iter->label_width; ++i) {
             if (iter->type == ITER_LIST) {
-                bcnn_load_image_from_path(tok[i], out_w, out_h, out_c, &img, net->state,
+                bcnn_load_image_from_path(tok[i], out_w, out_h, out_c, img, net->state,
                     &tmp_x, &tmp_y);
             }
             else {

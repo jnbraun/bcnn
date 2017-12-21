@@ -598,7 +598,7 @@ int bcnn_free_net(bcnn_net *cnn);
 /* Helpers */
 int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_pack);
 int bcnn_load_image_from_csv(char *str, int w, int h, int c, unsigned char **img);
-int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char **img, int state, int *x_shift, int *y_shift);
+int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char *img, int state, int *x_shift, int *y_shift);
 int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, int h, int c, unsigned char **img, int state,
     int *x_shift, int *y_shift);
 int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth, bcnn_data_augment *param,

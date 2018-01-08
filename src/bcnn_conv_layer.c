@@ -338,12 +338,9 @@ int bcnn_forward_conv_layer_cpu(bcnn_connection *conn)
     bcnn_tensor src = conn->src_tensor;
     bcnn_tensor dst = conn->dst_tensor;
     int batch_size = src.b;
-    /*bh_timer t = { 0 };
-    bh_timer_start(&t);*/
     
     sz = bcnn_get_tensor_size(&dst);
 
-    //bcnn_fill_f32(sz, 0.0f, dst.data);
     memset(dst.data, 0, sz * sizeof(float));
 
     // Binarize weights
@@ -419,9 +416,6 @@ int bcnn_forward_conv_layer_cpu(bcnn_connection *conn)
 
     sz = dst.w * dst.h * dst.c * batch_size;
     bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
-    
-    /*bh_timer_stop(&t);
-    fprintf(stderr, "conv-forward-time %lf sec\n", bh_timer_get_msec(&t) / 1000);*/
 
     return BCNN_SUCCESS;
 }

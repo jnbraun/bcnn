@@ -25,6 +25,7 @@
 #include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
+#include "bh_log.h"
 
 int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id)
 {
@@ -32,8 +33,8 @@ int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id)
     int nb_connections = net->nb_connections + 1;
     bcnn_connection conn = { 0 };
 
-    bh_assert(nb_connections > 2,
-        "Dropout layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);
+    bh_check(nb_connections > 2,
+        "Dropout layer can't be the first layer of the network");
 
     if (id != NULL) {
         bh_fill_option(&conn.id, id);
@@ -68,7 +69,7 @@ int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id)
     net->nb_connections = nb_connections;
     bcnn_net_add_connection(net, conn);
 
-    fprintf(stderr, "[Dropout] input_shape= %dx%dx%d rate= %f output_shape= %dx%dx%d\n",
+    bh_log_info("[Dropout] input_shape= %dx%dx%d rate= %f output_shape= %dx%dx%d",
         conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, rate,
         conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
     return 0;

@@ -31,7 +31,7 @@
 #include <bip/bip.h>
 
 #include "bcnn/bcnn.h"
-
+#include "bh_log.h"
 
 int bcnn_init_net(bcnn_net **net)
 {
@@ -124,7 +124,7 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val)
             net->loss_metric = COST_DICE;
         }
         else {
-            fprintf(stderr, "[WARNING] Unknown cost metric %s, going with sse\n", val);
+            bh_log_warning("Unknown cost metric %s, going with sse", val);
             net->loss_metric = COST_SSE;
         }
     }
@@ -332,7 +332,7 @@ int bcnn_compile_net(bcnn_net *net, char *phase)
         net->state = 0;
     }
     else {
-        fprintf(stderr, "[ERROR] bcnn_compile_net: Available option are 'train' and 'predict'");
+        bh_log_error("bcnn_compile_net: Available option are 'train' and 'predict'");
         return BCNN_INVALID_PARAMETER;
     }
     // State propagation through connections
@@ -688,8 +688,7 @@ int bcnn_write_model(bcnn_net *net, char *filename)
 
     FILE *fp = fopen(filename, "wb");
     if (!fp) {
-        fprintf(stderr, "ERROR: can't open file %s\n", filename);
-        return -1;
+        bh_log_error("Can not open file %s\n", filename);
     }
 
     fwrite(&net->learner.learning_rate, sizeof(float), 1, fp);
@@ -734,18 +733,17 @@ int bcnn_load_model(bcnn_net *net, char *filename)
     float tmp = 0.0f;
     
     if (!fp) {
-        fprintf(stderr, "[ERROR] can't open file %s\n", filename);
-        return -1;
+        bh_log_error("Can not open file %s\n", filename);
     }
 
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&net->seen, sizeof(int), 1, fp);
-    fprintf(stderr, "lr= %f ", net->learner.learning_rate);
-    fprintf(stderr, "m= %f ", net->learner.momentum);
-    fprintf(stderr, "decay= %f ", net->learner.decay);
-    fprintf(stderr, "seen= %d\n", net->seen);
+    bh_log_info("lr= %f ", net->learner.learning_rate);
+    bh_log_info("m= %f ", net->learner.momentum);
+    bh_log_info("decay= %f ", net->learner.decay);
+    bh_log_info("seen= %d\n", net->seen);
 
     for (i = 0; i < net->nb_connections; ++i) {
         layer = net->connections[i].layer;
@@ -761,9 +759,9 @@ int bcnn_load_model(bcnn_net *net, char *filename)
             layer->type == DEPTHWISE_CONV ||
             layer->type == FULL_CONNECTED) && is_ft == 0) {
             nb_read = fread(layer->bias, sizeof(float), layer->bias_size, fp);
-            fprintf(stderr, "layer= %d nbread_bias= %lu bias_size_expected= %d\n", i, (unsigned long)nb_read, layer->bias_size);
+            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d\n", i, (unsigned long)nb_read, layer->bias_size);
             nb_read = fread(layer->weight, sizeof(float), layer->weights_size, fp);
-            fprintf(stderr, "layer= %d nbread_weight= %lu weight_size_expected= %d\n", i, (unsigned long)nb_read, layer->weights_size);
+            bh_log_info("layer= %d nbread_weight= %lu weight_size_expected= %d\n", i, (unsigned long)nb_read, layer->weights_size);
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(layer->weight_gpu, layer->weight, layer->weights_size);
             bcnn_cuda_memcpy_host2dev(layer->bias_gpu, layer->bias, layer->bias_size);
@@ -771,10 +769,10 @@ int bcnn_load_model(bcnn_net *net, char *filename)
         }
         if (layer->type == BATCHNORM) {
             nb_read = fread(layer->global_mean, sizeof(float), net->connections[i].dst_tensor.c, fp);
-            fprintf(stderr, "batchnorm layer= %d nbread_mean= %lu mean_size_expected= %d\n",
+            bh_log_info("batchnorm layer= %d nbread_mean= %lu mean_size_expected= %d\n",
                 i, (unsigned long)nb_read, net->connections[i].dst_tensor.c);
             nb_read = fread(layer->global_variance, sizeof(float), net->connections[i].dst_tensor.c, fp);
-            fprintf(stderr, "batchnorm layer= %d nbread_variance= %lu variance_size_expected= %d\n",
+            bh_log_info("batchnorm layer= %d nbread_variance= %lu variance_size_expected= %d\n",
                 i, (unsigned long)nb_read, net->connections[i].dst_tensor.c);
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(layer->global_mean_gpu, layer->global_mean, net->connections[i].dst_tensor.c);
@@ -785,7 +783,7 @@ int bcnn_load_model(bcnn_net *net, char *filename)
     if (fp != NULL)
         fclose(fp);
 
-    fprintf(stderr, "[INFO] Model %s loaded succesfully\n", filename);
+    bh_log_info("Model %s loaded succesfully\n", filename);
     fflush(stdout);
 
     return BCNN_SUCCESS;

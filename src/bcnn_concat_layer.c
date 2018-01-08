@@ -20,13 +20,12 @@
 * SOFTWARE.
 */
 
-
 #include <bh/bh_error.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
-
+#include "bh_log.h"
 
 int bcnn_add_concat_layer(bcnn_net *net, char *concat, char *id)
 {
@@ -34,8 +33,8 @@ int bcnn_add_concat_layer(bcnn_net *net, char *concat, char *id)
     int i, sz, ind_concat = -1;
     bcnn_connection conn = { 0 };
 
-    bh_assert(nb_connections >= 2,
-        "Concat layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);
+    bh_check(nb_connections >= 2,
+        "Concat layer can't be the first layer of the network");
 
     if (id != NULL)
         bh_fill_option(&conn.id, id);
@@ -54,12 +53,11 @@ int bcnn_add_concat_layer(bcnn_net *net, char *concat, char *id)
         }
     }
     
-    bh_assert(ind_concat != -1, "Unknown id layer used in concat layer", BCNN_INVALID_PARAMETER);
+    bh_check(ind_concat != -1, "Concat layer: Unknown id layer");
 
-    bh_assert(conn.src_tensor.w == net->connections[ind_concat].dst_tensor.w &&
+    bh_check(conn.src_tensor.w == net->connections[ind_concat].dst_tensor.w &&
         conn.src_tensor.h == net->connections[ind_concat].dst_tensor.h,
-        "Concat layer: concatenated features maps must have the same spatial dimension",
-        BCNN_INVALID_PARAMETER);
+        "Concat layer: concatenated features maps must have the same spatial dimension");
 
     conn.layer->concat_index = ind_concat;
 
@@ -78,7 +76,7 @@ int bcnn_add_concat_layer(bcnn_net *net, char *concat, char *id)
     net->nb_connections = nb_connections;
     bcnn_net_add_connection(net, conn);
 
-    fprintf(stderr, "[Concat] input_shape= %dx%dx%d output_shape= %dx%dx%d\n",
+    bh_log_info("[Concat] input_shape= %dx%dx%d output_shape= %dx%dx%d",
         conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c,
         conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
 

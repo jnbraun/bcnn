@@ -25,7 +25,7 @@
 #include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
-
+#include "bh_log.h"
 
 int bcnn_add_softmax_layer(bcnn_net *net, char *id)
 {
@@ -60,7 +60,7 @@ int bcnn_add_softmax_layer(bcnn_net *net, char *id)
     net->nb_connections = nb_connections;
     bcnn_net_add_connection(net, conn);
 
-    fprintf(stderr, "[Softmax] input_shape= %dx%dx%d output_shape= %dx%dx%d\n",
+    bh_log_info("[Softmax] input_shape= %dx%dx%d output_shape= %dx%dx%d",
         conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c,
         conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
 

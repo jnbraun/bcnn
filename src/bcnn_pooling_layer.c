@@ -24,6 +24,7 @@
 #include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
+#include "bh_log.h"
 
 int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *id)
 {
@@ -81,7 +82,7 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *id)
     net->nb_connections = nb_connections;
     bcnn_net_add_connection(net, conn);
 
-    fprintf(stderr, "[Maxpool] input_shape= %dx%dx%d size= %d stride= %d ouput_shape= %dx%dx%d\n",
+    bh_log_info("[Maxpool] input_shape= %dx%dx%d size= %d stride= %d ouput_shape= %dx%dx%d",
         conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, size, stride,
         conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
     return 0;

@@ -28,6 +28,7 @@
 
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
+#include "bh_log.h"
 
 int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation, int quantize, char *id)
 {
@@ -68,7 +69,7 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
 
     conn.layer->quantize = quantize;
     if (conn.layer->quantize == 1) {
-        bh_assert((input_size % BITS_IN_UINT32 == 0), "Number of channels in input must be a multiple of 32", BCNN_INVALID_PARAMETER);
+        bh_check((input_size % BITS_IN_UINT32 == 0), "Number of channels in input must be a multiple of 32");
         conn.layer->binary_workspace = (uint32_t *)calloc(input_size * conn.src_tensor.b / (sizeof(float) * 8), sizeof(float));
         conn.layer->binary_weight = (uint32_t *)calloc(conn.layer->weights_size / BITS_IN_UINT32, sizeof(uint32_t));
     }
@@ -113,7 +114,7 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
     net->nb_connections = nb_connections;
     bcnn_net_add_connection(net, conn);
     
-    fprintf(stderr, "[Connected] input_shape= %dx%dx%d output_shape= %dx%dx%d\n",
+    bh_log_info("[Connected] input_shape= %dx%dx%d output_shape= %dx%dx%d",
         conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c,
         conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
 

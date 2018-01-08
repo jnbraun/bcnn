@@ -10,6 +10,8 @@ option(USE_BLAS "Build with BLAS library" ON)
 option(BUILD_EXAMPLES "Build examples" ON)
 # Building tools
 option(BUILD_TOOLS "Build tools" OFF)
+# Setting log level: available options are 'INFO' 'WARNING' 'ERROR' 'SILENT'
+set(LOG_LEVEL "SILENT")
 
 # Convenience stuff
 include(CMakeToolsHelpers OPTIONAL)
@@ -85,6 +87,20 @@ if (USE_SSE2)
     message(STATUS "Build with SSE instructions")
     add_definitions(-DBCNN_USE_SSE2)
 endif()
+
+message(STATUS "Setting log level: " ${LOG_LEVEL})
+if (${LOG_LEVEL} STREQUAL "INFO")
+    add_definitions(-DBCNN_LOG_LEVEL=0)
+elseif(${LOG_LEVEL} STREQUAL "WARNING")
+    add_definitions(-DBCNN_LOG_LEVEL=1)
+elseif(${LOG_LEVEL} STREQUAL "ERROR")
+    add_definitions(-DBCNN_LOG_LEVEL=2)
+elseif(${LOG_LEVEL} STREQUAL "SILENT")
+    add_definitions(-DBCNN_LOG_LEVEL=3)
+else()
+    message(WARNING "Invalid log level. Available options are 'INFO' 'WARNING' 'ERROR' 'SILENT'")
+endif()
+
 
 add_definitions(-DBIP_USE_STB_IMAGE)
 

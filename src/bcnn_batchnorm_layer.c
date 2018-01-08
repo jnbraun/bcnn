@@ -20,12 +20,13 @@
 * SOFTWARE.
 */
 
+#include "bcnn/bcnn.h"
 
 #include <bh/bh_error.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
-#include "bcnn/bcnn.h"
+#include "bh_log.h"
 
 int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
 {
@@ -33,8 +34,8 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
     int i, sz;
     bcnn_connection conn = { 0 };
 
-    bh_assert(nb_connections >= 2,
-        "Batchnorm layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);
+    bh_check(nb_connections >= 2,
+        "Batchnorm layer can't be the first layer of the network");
 
     if (id != NULL) {
         bh_fill_option(&conn.id, id);
@@ -98,7 +99,7 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
     net->nb_connections = nb_connections;
     bcnn_net_add_connection(net, conn);
 
-    fprintf(stderr, "[Batchnorm] input_shape= %dx%dx%d output_shape= %dx%dx%d\n",
+    bh_log_info("[Batchnorm] input_shape= %dx%dx%d output_shape= %dx%dx%d",
         conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c,
         conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
 

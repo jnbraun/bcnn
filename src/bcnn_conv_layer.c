@@ -30,6 +30,8 @@
 #include <bh/bh_string.h>
 #include <bh/bh_timer.h>
 
+#include "bh_log.h"
+
 static bh_inline int is_a_positive_and_inferior_to_b(int a, int b)
 {
     return (unsigned int)a < (unsigned int)b;
@@ -320,7 +322,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
     net->nb_connections = nb_connections;
     bcnn_net_add_connection(net, conn);
 
-    fprintf(stderr, "[Convolutional] input_shape= %dx%dx%d nb_filters= %d kernel_size= %d stride= %d padding= %d output_shape= %dx%dx%d\n",
+    bh_log_info("[Convolutional] input_shape= %dx%dx%d nb_filters= %d kernel_size= %d stride= %d padding= %d output_shape= %dx%dx%d",
         conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, n, size, stride, pad,
         conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
 

@@ -20,12 +20,12 @@
 * SOFTWARE.
 */
 
+#include "bcnn/bcnn.h"
+
 #include <bh/bh_error.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
-
-#include "bcnn/bcnn.h"
-
+#include "bh_log.h"
 
 int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id)
 {
@@ -33,8 +33,10 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id)
     bcnn_connection conn = { 0 };
     char type_name[256];
 
-    bh_assert(nb_connections >= 2,
-        "Activation layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);
+    /*bh_assert(nb_connections >= 2,
+        "Activation layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);*/
+    bh_check(nb_connections >= 2,
+        "Activation layer can't be the first layer of the network");
 
     if (id != NULL) {
         bh_fill_option(&conn.id, id);
@@ -73,7 +75,7 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id)
     default:		sprintf(type_name, "None");			break;
     }
 
-    fprintf(stderr, "[Activation] input_shape= %dx%dx%d type= %s output_shape= %dx%dx%d\n",
+    bh_log_info("[Activation] input_shape= %dx%dx%d type= %s output_shape= %dx%dx%d",
         conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, type_name,
         conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
 

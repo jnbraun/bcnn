@@ -19,11 +19,13 @@
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 * SOFTWARE.
 */
+
+#include "bcnn/bcnn.h"
+
 #include <bh/bh.h>
 #include <bh/bh_string.h>
 #include <bh/bh_error.h>
 
-#include "bcnn/bcnn.h"
 
 int bcnn_get_tensor_size(bcnn_tensor *tensor)
 {

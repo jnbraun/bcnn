@@ -64,8 +64,8 @@ int bcnn_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
     float BETA,
     float *C, int ldc);
 int bcnn_xnor_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
-                        uint32_t *A, int lda,
-                        uint32_t *B, int ldb,
+                        unsigned int *A, int lda,
+                        unsigned int *B, int ldb,
                         float BETA,
                         float *C, int ldc);
 float bcnn_l2_distance(float *x, float *y, int n);

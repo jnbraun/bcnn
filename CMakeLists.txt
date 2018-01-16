@@ -143,28 +143,28 @@ file(GLOB SRC_CLI src/bcnn_cl.c)
 #MESSAGE(STATUS "${CMAKE_CURRENT_SOURCE_DIR}")
 
 if (USE_CUDA)
-    cuda_add_library(libbcnn ${SRC_LIB} STATIC)
+    cuda_add_library(bcnn ${SRC_LIB} STATIC)
     if (USE_CUDNN)
-        target_link_libraries(libbcnn bip ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDA_curand_LIBRARY}
+        target_link_libraries(bcnn bip ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDA_curand_LIBRARY}
             ${CUDNN_LIBRARIES})
     else()
-        target_link_libraries(libbcnn bip ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDA_curand_LIBRARY})
+        target_link_libraries(bcnn bip ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDA_curand_LIBRARY})
     endif()
 else()
-    add_library(libbcnn STATIC ${SRC_LIB})
-    target_link_libraries(libbcnn bip ${BLAS_LIBRARY})
+    add_library(bcnn STATIC ${SRC_LIB})
+    target_link_libraries(bcnn bip ${BLAS_LIBRARY})
 endif()
 
 add_executable(bcnn-cl ${SRC_CLI})
 
 if(NOT MSVC)
     if (USE_CUDA) 
-        target_link_libraries(bcnn-cl libbcnn bip -lstdc++ -lm)
+        target_link_libraries(bcnn-cl bcnn bip -lstdc++ -lm)
     else()
-        target_link_libraries(bcnn-cl libbcnn bip -lm)
+        target_link_libraries(bcnn-cl bcnn bip -lm)
     endif()
 else()
-    target_link_libraries(bcnn-cl libbcnn bip)
+    target_link_libraries(bcnn-cl bcnn bip)
 endif()
 
 

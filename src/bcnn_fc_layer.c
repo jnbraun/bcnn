@@ -42,7 +42,7 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
 
     if (net->nb_connections > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_nodes - 1; i >= 0 ; ++i) {
+        for (i = net->num_nodes - 1; i >= 0 ; --i) {
             if (strcmp(net->nodes[i].id, src_id) == 0) {
                 bcnn_connection_add_src_node(&conn, i);
                 is_src_node_found = 1;
@@ -59,7 +59,7 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
     conn.layer->type = FULL_CONNECTED;
 
     // Setup output node
-    dst_node.id = dst_id;
+    bh_strfill(&dst_node.id, dst_id);
     bcnn_tensor_set_shape(&dst_node.tensor,
         net->nodes[conn.src[0]].tensor.n,            // batch size
         output_size,                                // depth

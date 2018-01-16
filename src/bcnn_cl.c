@@ -30,6 +30,7 @@
 
 #include "bcnn/bcnn.h"
 #include "bcnn/bcnn_cl.h"
+#include "bh_log.h"
 
 
 int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *param)
@@ -60,21 +61,31 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
         case '{':
             if (nb_layers > 0) {
                 if (nb_layers == 1) {
-                    bh_assert(net->input_width > 0 &&
+                    bh_check(net->input_width > 0 &&
                         net->input_height > 0 && net->input_channels > 0,
-                        "Input's width, height and channels must be > 0", BCNN_INVALID_PARAMETER);
-                    bh_assert(net->batch_size > 0, "Batch size must be > 0", BCNN_INVALID_PARAMETER);
+                        "Input's width, height and channels must be > 0");
+                    bh_check(net->batch_size > 0, "Batch size must be > 0");
+                    bcnn_net_set_input_shape(net, net->input_width, net->input_height,
+                        net->input_channels, net->batch_size);
                 }
+                bh_check(src_id != NULL, "Invalid input node name. "
+                    "Hint: Are you sure that 'src' field is correctly setup?");
                 if (strcmp(curr_layer, "{conv}") == 0 ||
                     strcmp(curr_layer, "{convolutional}") == 0) {
+                    bh_check(dst_id != NULL, "Invalid output node name. "
+                        "Hint: Are you sure that 'dst' field is correctly setup?");
                     bcnn_add_convolutional_layer(net, n_filts, size, stride, pad, 0, init, a, 0, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{deconv}") == 0 ||
                     strcmp(curr_layer, "{deconvolutional}") == 0) {
+                    bh_check(dst_id != NULL, "Invalid output node name. "
+                        "Hint: Are you sure that 'dst' field is correctly setup?");
                     bcnn_add_deconvolutional_layer(net, n_filts, size, stride, pad, init, a, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{depthwise-conv}") == 0 ||
                     strcmp(curr_layer, "{dw-conv}") == 0) {
+                    bh_check(dst_id != NULL, "Invalid output node name. "
+                        "Hint: Are you sure that 'dst' field is correctly setup?");
                     bcnn_add_depthwise_sep_conv_layer(net, size, stride, pad, 0, init, a, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{activation}") == 0 ||
@@ -83,19 +94,27 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
                 }
                 else if (strcmp(curr_layer, "{batchnorm}") == 0 ||
                     strcmp(curr_layer, "{bn}") == 0) {
+                    bh_check(dst_id != NULL, "Invalid output node name. "
+                        "Hint: Are you sure that 'dst' field is correctly setup?");
                     bcnn_add_batchnorm_layer(net, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{connected}") == 0 ||
                     strcmp(curr_layer, "{fullconnected}") == 0 ||
                     strcmp(curr_layer, "{fc}") == 0 ||
                     strcmp(curr_layer, "{ip}") == 0) {
+                    bh_check(dst_id != NULL, "Invalid output node name. "
+                        "Hint: Are you sure that 'dst' field is correctly setup?");
                     bcnn_add_fullc_layer(net, outputs, init, a, 0, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{softmax}") == 0) {
+                    bh_check(dst_id != NULL, "Invalid output node name. "
+                        "Hint: Are you sure that 'dst' field is correctly setup?");
                     bcnn_add_softmax_layer(net, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{max}") == 0 ||
                     strcmp(curr_layer, "{maxpool}") == 0) {
+                    bh_check(dst_id != NULL, "Invalid output node name. "
+                        "Hint: Are you sure that 'dst' field is correctly setup?");
                     bcnn_add_maxpool_layer(net, size, stride, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{dropout}") == 0) {
@@ -195,6 +214,8 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
     }
     // Add cost layer
     if (strcmp(curr_layer, "{cost}") == 0) {
+        bh_check(src_id != NULL, "Invalid input node name. "
+            "Hint: Are you sure that 'src' field is correctly setup?");
         bcnn_add_cost_layer(net, cost, 1.0f, src_id, "label", dst_id);
     }
     else {

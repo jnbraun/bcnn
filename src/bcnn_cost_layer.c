@@ -40,7 +40,7 @@ int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric loss_metric, float scale
     bh_check(net->nb_connections >= 1,
         "Cost layer can't be the first layer of the network");
     int is_src_node_found = 0;
-    for (i = net->num_nodes - 1; i >= 0 ; ++i) {
+    for (i = net->num_nodes - 1; i >= 0 ; --i) {
         if (strcmp(net->nodes[i].id, src_id) == 0) {
             bcnn_connection_add_src_node(&conn, i);
             is_src_node_found = 1;
@@ -64,7 +64,7 @@ int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric loss_metric, float scale
     bcnn_connection_add_src_node(&conn,1);
     
     // Create output node
-    dst_node.id = dst_id;
+    bh_strfill(&dst_node.id, dst_id);
     bcnn_tensor_set_shape(&dst_node.tensor,
         net->nodes[conn.src[0]].tensor.n,
         net->nodes[conn.src[0]].tensor.c,

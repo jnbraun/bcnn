@@ -35,12 +35,11 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *src_id)
 
     bh_check(net->nb_connections >= 1,
         "Activation layer can't be the first layer of the network");
-
     conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     conn.layer->type = ACTIVATION;
 
     int is_src_node_found = 0;
-    for (i = net->num_nodes - 1; i >= 0 ; ++i) {
+    for (i = net->num_nodes - 1; i >= 0 ; --i) {
         if (strcmp(net->nodes[i].id, src_id) == 0) {
             bcnn_connection_add_src_node(&conn, i);
             bcnn_connection_add_dst_node(&conn, i);
@@ -51,7 +50,6 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *src_id)
     bh_check(is_src_node_found, "Activation layer: invalid input node name %s", src_id);
     
     conn.layer->activation = type;
-
     bcnn_net_add_connection(net, conn);
 
     switch (type) {

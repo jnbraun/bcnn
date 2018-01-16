@@ -41,7 +41,7 @@ int bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2, char *dst
     conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     conn.layer->type = CONCAT;
 
-    for (i = net->num_nodes - 1; i >= 0 ; ++i) {
+    for (i = net->num_nodes - 1; i >= 0 ; --i) {
         if (strcmp(net->nodes[i].id, src_id1) == 0) {
             bcnn_connection_add_src_node(&conn, i);
             is_src_node1_found = 1;
@@ -65,7 +65,7 @@ int bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2, char *dst
         src_id1, net->nodes[conn.src[0]].tensor.h, src_id2, net->nodes[conn.src[1]].tensor.h);
 
     // Setup output node
-    dst_node.id = dst_id;
+    bh_strfill(&dst_node.id, dst_id);
     bcnn_tensor_set_shape(&dst_node.tensor,
         net->nodes[conn.src[0]].tensor.n,
         net->nodes[conn.src[0]].tensor.c + net->nodes[conn.src[1]].tensor.c,

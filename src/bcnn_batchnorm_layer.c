@@ -38,7 +38,7 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id)
         "Batchnorm layer can't be the first layer of the network");
 
     int is_src_node_found = 0;
-    for (i = net->num_nodes - 1; i >= 0 ; ++i) {
+    for (i = net->num_nodes - 1; i >= 0 ; --i) {
         if (strcmp(net->nodes[i].id, src_id) == 0) {
             bcnn_connection_add_src_node(&conn, i);
             is_src_node_found = 1;
@@ -47,7 +47,7 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id)
     }
     bh_check(is_src_node_found, "Batchnorm layer: invalid input node name %s", src_id);
 
-    dst_node.id = dst_id;
+    bh_strfill(&dst_node.id, dst_id);
     bcnn_tensor_set_shape(&dst_node.tensor,
         net->nodes[conn.src[0]].tensor.n,
         net->nodes[conn.src[0]].tensor.c,

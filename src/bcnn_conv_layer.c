@@ -156,7 +156,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
 
     if (net->nb_connections > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_nodes - 1; i >= 0 ; ++i) {
+        for (i = net->num_nodes - 1; i >= 0 ; --i) {
             if (strcmp(net->nodes[i].id, src_id) == 0) {
                 bcnn_connection_add_src_node(&conn, i);
                 is_src_node_found = 1;
@@ -205,7 +205,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int
         conn.layer->adam_v = (float *)calloc(conn.layer->weights_size, sizeof(float));
     }
     
-    dst_node.id = dst_id;
+    bh_strfill(&dst_node.id, dst_id);
     bcnn_tensor_set_shape(&dst_node.tensor,
         net->nodes[conn.src[0]].tensor.n,
         conn.layer->num,
@@ -538,7 +538,7 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, i
 
     if (net->nb_connections > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_nodes - 1; i >= 0 ; ++i) {
+        for (i = net->num_nodes - 1; i >= 0 ; --i) {
             if (strcmp(net->nodes[i].id, src_id) == 0) {
                 bcnn_connection_add_src_node(&conn, i);
                 is_src_node_found = 1;
@@ -585,6 +585,7 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, i
         conn.layer->adam_v = (float *)calloc(conn.layer->weights_size, sizeof(float));
     }
 
+    bh_strfill(&dst_node.id, dst_id);
     bcnn_tensor_set_shape(&dst_node.tensor,
         net->nodes[conn.src[0]].tensor.n,
         conn.layer->num,
@@ -727,7 +728,7 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride, int p
 
     if (net->nb_connections > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_nodes - 1; i >= 0 ; ++i) {
+        for (i = net->num_nodes - 1; i >= 0 ; --i) {
             if (strcmp(net->nodes[i].id, src_id) == 0) {
                 bcnn_connection_add_src_node(&conn, i);
                 is_src_node_found = 1;
@@ -772,7 +773,7 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride, int p
         conn.layer->adam_v = (float *)calloc(conn.layer->weights_size, sizeof(float));
     }
 
-
+    bh_strfill(&dst_node.id, dst_id);
     bcnn_tensor_set_shape(&dst_node.tensor,
         net->nodes[conn.src[0]].tensor.n,
         net->nodes[conn.src[0]].tensor.c,

@@ -36,7 +36,7 @@ int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id)
         "Dropout layer can't be the first layer of the network");
 
     int is_src_node_found = 0;
-    for (i = net->num_nodes - 1; i >= 0 ; ++i) {
+    for (i = net->num_nodes - 1; i >= 0 ; --i) {
         if (strcmp(net->nodes[i].id, src_id) == 0) {
             bcnn_connection_add_src_node(&conn, i);
             bcnn_connection_add_dst_node(&conn, i);

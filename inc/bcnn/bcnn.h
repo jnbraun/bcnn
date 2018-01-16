@@ -465,10 +465,6 @@ int bcnn_write_model(bcnn_net *net, char *filename);
 int bcnn_init_workload(bcnn_net *net);
 int bcnn_free_workload(bcnn_net *net);
 
-/* Network allocation routines */
-int bcnn_alloc(bcnn_net *net, int nb_layers);
-int bcnn_realloc(bcnn_net *net, int nb_layers);
-
 /* Conv layer */
 int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int pad,
     int batch_norm, bcnn_weights_init init, bcnn_activation activation, int quantize,
@@ -638,10 +634,7 @@ int bcnn_forward_deconv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_n
 int bcnn_backward_deconv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
 int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
 int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
-int bcnn_forward_concat_layer_gpu(bcnn_node *src0_node, bcnn_node *src1_node, bcnn_node *dst_node);
-int bcnn_backward_concat_layer_gpu(bcnn_node *src0_node, bcnn_node *src1_node, bcnn_node *dst_node);
-int bcnn_forward_fullc_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
-int bcnn_backward_fullc_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+
 int bcnn_forward_maxpool_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
 int bcnn_backward_maxpool_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
 int bcnn_forward_dropout_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);

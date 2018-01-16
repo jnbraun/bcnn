@@ -240,6 +240,58 @@ int bcnn_backward_fullc_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_n
     return BCNN_SUCCESS;
 }
 
+#ifdef BCNN_USE_CUDA
+
+int bcnn_forward_fullc_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
+{
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
+    int i, batch_size = dst.n;
+    int src_size = bcnn_tensor_get_size3d(&src);
+    int dst_size = bcnn_tensor_get_size3d(&dst);
+    int sz = bcnn_tensor_get_size(&dst);
+    
+    bcnn_cuda_fill_f32(dst_size * batch_size, 0.0f, dst.data_gpu, 1);
+
+    bcnn_cuda_gemm(0, 1, batch_size, dst_size, src_size, 1,
+        src.data_gpu, src_size, layer->weight_gpu, src_size, 1, dst.data_gpu, dst_size);
+
+    for (i = 0; i < batch_size; ++i){
+        bcnn_cuda_axpy(dst_size, 1, layer->bias_gpu, 1, dst.data_gpu + i * dst_size, 1);
+    }
+    bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
+
+    return BCNN_SUCCESS;
+}
+
+
+int bcnn_backward_fullc_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
+{
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
+    int i, batch_size = dst.n;
+    int src_size = bcnn_tensor_get_size3d(&src);
+    int dst_size = bcnn_tensor_get_size3d(&dst);
+    int sz = bcnn_tensor_get_size(&dst);
+
+    bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu, sz, layer->activation);
+
+    for (i = 0; i < batch_size; ++i) {
+        bcnn_cuda_axpy(dst_size, 1, dst.grad_data_gpu + i * dst_size, 1, layer->bias_diff_gpu, 1);
+    }
+
+    bcnn_cuda_gemm(1, 0, dst_size, src_size, batch_size, 1,
+        dst.grad_data_gpu, dst_size, src.data_gpu, src_size, 1,
+        layer->weight_diff_gpu, src_size);
+    if (src.grad_data_gpu) {
+        bcnn_cuda_gemm(0, 0, batch_size, src_size, dst_size, 1,
+            dst.grad_data_gpu, dst_size, layer->weight_gpu, src_size, 1, src.grad_data_gpu, src_size);
+    }
+
+    return BCNN_SUCCESS;
+}
+#endif
+
 int bcnn_forward_fullc_layer(bcnn_net *net, bcnn_connection *conn)
 {
     bcnn_node *src = &net->nodes[conn->src[0]];

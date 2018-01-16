@@ -11,7 +11,7 @@ option(BUILD_EXAMPLES "Build examples" ON)
 # Building tools
 option(BUILD_TOOLS "Build tools" OFF)
 # Setting log level: available options are 'INFO' 'WARNING' 'ERROR' 'SILENT'
-set(LOG_LEVEL "SILENT")
+set(LOG_LEVEL "INFO")
 
 # Convenience stuff
 include(CMakeToolsHelpers OPTIONAL)
@@ -123,6 +123,7 @@ if(MSVC)
 endif()
 
 include_directories (
+    ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/inc
     ${PROJECT_SOURCE_DIR}/bip/inc
     ${PROJECT_SOURCE_DIR}/bh/inc

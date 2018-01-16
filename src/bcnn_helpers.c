@@ -26,12 +26,6 @@
 #include <bh/bh_string.h>
 #include <bh/bh_error.h>
 
-
-int bcnn_get_tensor_size(bcnn_tensor *tensor)
-{
-    return tensor->w * tensor->h * tensor->c * tensor->b;
-}
-
 float bcnn_rng_gaussian(bcnn_gauss_gen *g)
 {
     float v1, v2, s, m;
@@ -231,7 +225,6 @@ float *bcnn_cuda_memcpy_f32(float *x, int n)
 
     cudaError_t status = cudaMalloc((void **)&x_gpu, size);
     bcnn_cuda_check(status);
-
     if (x) {
         status = cudaMemcpy(x_gpu, x, size, cudaMemcpyHostToDevice);
         bcnn_cuda_check(status);

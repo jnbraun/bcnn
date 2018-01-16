@@ -35,9 +35,20 @@
 
 int bcnn_init_net(bcnn_net **net)
 {
+    bcnn_net *p_net = NULL;
     if (*net == NULL) {
         *net = (bcnn_net *)calloc(1, sizeof(bcnn_net));
     }
+    // Create input node
+    bcnn_node input = { 0 };
+    bh_strfill(&input.id, "input");
+    // Input node is set to be the first node
+    bcnn_net_add_node(*net, input);
+    // Create label node
+    bcnn_node label = { 0 };
+    bh_strfill(&label.id, "label");
+    // Input node is set to be the second node
+    bcnn_net_add_node(*net, label);
 
     return BCNN_SUCCESS;
 }
@@ -45,7 +56,7 @@ int bcnn_init_net(bcnn_net **net)
 int bcnn_end_net(bcnn_net **net)
 {
     bcnn_free_net(*net);
-    bh_free(*net);		
+    bh_free(*net);
 
     return BCNN_SUCCESS;
 }
@@ -61,16 +72,6 @@ int bcnn_free_tensor(bcnn_tensor *tensor)
     return BCNN_SUCCESS;
 }
 
-int bcnn_free_connection(bcnn_connection *conn)
-{
-    if (conn->layer->type != ACTIVATION && 
-        conn->layer->type != DROPOUT) {
-        bcnn_free_tensor(&conn->dst_tensor);
-    }
-    bh_free(conn->id);
-    bcnn_free_layer(&conn->layer);
-    return BCNN_SUCCESS;
-}
 
 int bcnn_free_net(bcnn_net *net)
 {
@@ -84,22 +85,23 @@ int bcnn_free_net(bcnn_net *net)
         bh_free(net->finetune_id[i]);
     }
     bh_free(net->finetune_id);
+    bcnn_net_free_nodes(net);
     return BCNN_SUCCESS;
 }
 
 int bcnn_set_param(bcnn_net *net, char *name, char *val)
 {
     if (strcmp(name, "input_width") == 0) {
-        net->input_node.w = atoi(val);
+        net->input_width = atoi(val);
     }
     else if (strcmp(name, "input_height") == 0) {
-        net->input_node.h = atoi(val);
+        net->input_height = atoi(val);
     }
     else if (strcmp(name, "input_channels") == 0) {
-        net->input_node.c = atoi(val);
+        net->input_channels = atoi(val);
     }
     else if (strcmp(name, "batch_size") == 0) {
-        net->input_node.b = atoi(val);
+         net->batch_size = atoi(val);
     }
     else if (strcmp(name, "max_batches") == 0) {
         net->max_batches = atoi(val);
@@ -255,46 +257,105 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val)
     return BCNN_SUCCESS;
 }
 
-int bcnn_net_add_connection(bcnn_net *net, bcnn_connection conn)
+void bcnn_net_add_connection(bcnn_net *net, bcnn_connection conn)
 {
-    net->connections = (bcnn_connection *)realloc(net->connections,
+    bcnn_connection *p_conn = NULL;
+    net->nb_connections++;
+    p_conn = (bcnn_connection *)realloc(net->connections,
         net->nb_connections * sizeof(bcnn_connection));
+    bh_check((p_conn != NULL), "Internal allocation error");
+    net->connections = p_conn;
     net->connections[net->nb_connections - 1] = conn;
+}
+
+int bcnn_free_connection(bcnn_connection *conn)
+{
+    if (conn->layer->type != ACTIVATION && 
+        conn->layer->type != DROPOUT) {
+        //bcnn_free_tensor(&conn->dst_tensor);
+    }
+    bcnn_free_layer(&conn->layer);
+    bh_free(conn->src);
+    bh_free(conn->dst);
     return BCNN_SUCCESS;
 }
+
+void bcnn_net_add_node(bcnn_net *net, bcnn_node node)
+{
+    bcnn_node *p_nodes = NULL;
+    net->num_nodes++;
+    p_nodes = (bcnn_node *)realloc(net->nodes,
+        net->num_nodes * sizeof(bcnn_node));
+    bh_check((p_nodes != NULL), "Internal allocation error");
+    net->nodes = p_nodes;
+    net->nodes[net->num_nodes - 1] = node;
+}
+
+void bcnn_net_free_nodes(bcnn_net *net)
+{
+    int i;
+    for (i = 0; i < net->num_nodes; ++i) {
+        bcnn_tensor_free(&net->nodes[i].tensor);
+    }
+    bh_free(net->nodes);
+}
+
+void bcnn_connection_add_dst_node(bcnn_connection *conn, int index)
+{
+    int *p_dst = NULL;
+    conn->num_dst++;
+    p_dst = (int *)realloc(conn->dst, conn->num_dst * sizeof(int));
+    bh_check((p_dst != NULL), "Internal allocation error");
+    conn->dst = p_dst;
+    conn->dst[conn->num_dst - 1] = index;
+}
+
+void bcnn_connection_add_src_node(bcnn_connection *conn, int index)
+{
+    int *p_src = NULL;
+    conn->num_src++;
+    p_src = (int *)realloc(conn->src, conn->num_src * sizeof(int));
+    bh_check((p_src != NULL), "Internal allocation error");
+    conn->src = p_src;
+    conn->src[conn->num_src - 1] = index;
+}
+
+void bcnn_net_set_input_shape(bcnn_net *net,
+    int input_width, int input_height, int input_channels, int batch_size)
+{
+    net->input_width = input_width;
+    net->input_height = input_height;
+    net->input_channels = input_channels;
+    net->batch_size = batch_size;
+    bcnn_tensor_set_shape(&net->nodes[0].tensor,
+        batch_size,
+        input_channels,
+        input_height,
+        input_width,
+        0);
+}
+
 
 int bcnn_init_workload(bcnn_net *net)
 {
     int i;
-    int sz = bcnn_get_tensor_size(&net->input_node);
     int n = net->nb_connections;
     int k = (net->connections[n - 1].layer->type == COST ? (n - 2) : (n - 1));
-    int output_size = bcnn_get_tensor_size(&net->connections[k].dst_tensor);
 
-    net->input_buffer = (unsigned char *)calloc(net->input_node.w * net->input_node.h * net->input_node.c, 1);
-    net->input_node.data = (float *)calloc(sz, sizeof(float));
-    for (i = 0; i < n; ++i) {
-        if (net->connections[i].layer->type == COST) {
-            net->connections[i].label = (float *)calloc(output_size, sizeof(float));
-        }
-    }
-    net->input_node.grad_data = NULL;
-    net->connections[0].src_tensor.data = net->input_node.data;
-    net->connections[0].src_tensor.grad_data = net->input_node.grad_data;
+    net->input_buffer = (unsigned char *)calloc(net->input_width *
+        net->input_height *
+        net->input_channels, 1);
+
+    // Allocate tensor for input node
+    bcnn_tensor_allocate(&net->nodes[0].tensor);
+
 #ifdef BCNN_USE_CUDA
-    net->input_node.data_gpu = bcnn_cuda_malloc_f32(sz);
     net->workspace_gpu = bcnn_cuda_malloc_f32(net->workspace_size);
     for (i = 0; i < n; ++i) {
         if (net->connections[i].layer->type == CONVOLUTIONAL) {
             net->connections[i].layer->conv_workspace_gpu = net->workspace_gpu;
         }
-        if (net->connections[i].layer->type == COST) {
-            net->connections[i].label_gpu = bcnn_cuda_malloc_f32(output_size);
-        }
     }
-    net->input_node.grad_data_gpu = NULL;
-    net->connections[0].src_tensor.data_gpu = net->input_node.data_gpu;
-    net->connections[0].src_tensor.grad_data_gpu = net->input_node.grad_data_gpu;
 #endif
 
     return BCNN_SUCCESS;
@@ -306,17 +367,10 @@ int bcnn_free_workload(bcnn_net *net)
     int i;
     int n = net->nb_connections;
 
+    bcnn_tensor_free(&net->nodes[0].tensor);
     bh_free(net->input_buffer);
-    bh_free(net->input_node.data);
-    for (i = 0; i < n; ++i) {
-        if (net->connections[i].layer->type == COST) bh_free(net->connections[i].label);
-    }
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_free(net->input_node.data_gpu);
     bcnn_cuda_free(net->workspace_gpu);
-    for (i = 0; i < n; ++i) {
-        if (net->connections[i].layer->type == COST) bcnn_cuda_free(net->connections[i].label);
-    }
 #endif
     return 0;
 }
@@ -336,8 +390,9 @@ int bcnn_compile_net(bcnn_net *net, char *phase)
         return BCNN_INVALID_PARAMETER;
     }
     // State propagation through connections
-    for (i = 0; i < net->nb_connections; ++i)
-        net->connections[i].state = net->state;
+    for (i = 0; i < net->nb_connections; ++i) {
+        net->connections[i].layer->net_state = net->state;
+    }
 
     bcnn_free_workload(net);
     bcnn_init_workload(net);
@@ -348,54 +403,56 @@ int bcnn_compile_net(bcnn_net *net, char *phase)
 
 int bcnn_forward(bcnn_net *net)
 {
-     int i;
-     int output_size = 0;
-     bcnn_connection conn = { 0 };
-
+    int i, j;
+    int output_size = 0;
+    bcnn_connection conn = { 0 };
 
      for (i = 0; i < net->nb_connections; ++i) {
         conn = net->connections[i];
-        output_size = bcnn_get_tensor_size(&conn.dst_tensor);
+        for (j = 0; j < conn.num_dst; ++j) {
+            output_size = bcnn_tensor_get_size(&net->nodes[conn.dst[j]].tensor);
 #ifdef BCNN_USE_CUDA
-        if (conn.dst_tensor.grad_data_gpu != NULL)
-            bcnn_cuda_fill_f32(output_size, 0.0f, conn.dst_tensor.grad_data_gpu, 1);
+            if (net->nodes[conn.dst[j]].tensor.grad_data_gpu != NULL)
+                bcnn_cuda_fill_f32(output_size, 0.0f, net->nodes[conn.dst[j]].tensor.grad_data_gpu, 1);
 #else
-        if (conn.dst_tensor.grad_data != NULL)
-            memset(conn.dst_tensor.grad_data, 0, output_size * sizeof(float));
+            if (net->nodes[conn.dst[j]].tensor.grad_data != NULL)
+                memset(net->nodes[conn.dst[j]].tensor.grad_data, 0, output_size * sizeof(float));
 #endif
+        }
+        
         switch (conn.layer->type) {
         case CONVOLUTIONAL:
-            bcnn_forward_conv_layer(&conn);
+            bcnn_forward_conv_layer(net, &conn);
             break;
         case DECONVOLUTIONAL:
-            bcnn_forward_deconv_layer(&conn);
+            bcnn_forward_deconv_layer(net, &conn);
             break;
         case DEPTHWISE_CONV:
-            bcnn_forward_depthwise_sep_conv_layer(&conn);
+            bcnn_forward_depthwise_sep_conv_layer(net, &conn);
             break;
         case ACTIVATION:
-            bcnn_forward_activation_layer(&conn);
+            bcnn_forward_activation_layer(net, &conn);
             break;
         case BATCHNORM:
-            bcnn_forward_batchnorm_layer(&conn);
+            bcnn_forward_batchnorm_layer(net, &conn);
             break;
         case FULL_CONNECTED:
-            bcnn_forward_fullc_layer(&conn);
+            bcnn_forward_fullc_layer(net, &conn);
             break;
         case MAXPOOL:
-            bcnn_forward_maxpool_layer(&conn);
+            bcnn_forward_maxpool_layer(net, &conn);
             break;
         case SOFTMAX:
-            bcnn_forward_softmax_layer(&conn);
+            bcnn_forward_softmax_layer(net, &conn);
             break;
         case DROPOUT:
-            bcnn_forward_dropout_layer(&conn);
+            bcnn_forward_dropout_layer(net, &conn);
             break;
         case CONCAT:
             bcnn_forward_concat_layer(net, &conn);
             break;
         case COST:
-            bcnn_forward_cost_layer(&conn);
+            bcnn_forward_cost_layer(net, &conn);
             break;
         default:
             break;
@@ -415,37 +472,37 @@ int bcnn_backward(bcnn_net *net)
         conn = net->connections[i];
         switch (conn.layer->type) {
         case CONVOLUTIONAL:
-            bcnn_backward_conv_layer(&conn);
+            bcnn_backward_conv_layer(net, &conn);
             break;
         case DECONVOLUTIONAL:
-            bcnn_backward_deconv_layer(&conn);
+            bcnn_backward_deconv_layer(net, &conn);
             break;
         case DEPTHWISE_CONV:
-            bcnn_backward_depthwise_sep_conv_layer(&conn);
+            bcnn_backward_depthwise_sep_conv_layer(net, &conn);
             break;
         case ACTIVATION:
-            bcnn_backward_activation_layer(&conn);
+            bcnn_backward_activation_layer(net, &conn);
             break;
         case BATCHNORM:
-            bcnn_backward_batchnorm_layer(&conn);
+            bcnn_backward_batchnorm_layer(net, &conn);
             break;
         case FULL_CONNECTED:
-            bcnn_backward_fullc_layer(&conn);
+            bcnn_backward_fullc_layer(net, &conn);
             break;
         case MAXPOOL:
-            bcnn_backward_maxpool_layer(&conn);
+            bcnn_backward_maxpool_layer(net, &conn);
             break;
         case SOFTMAX:
-            bcnn_backward_softmax_layer(&conn);
+            bcnn_backward_softmax_layer(net, &conn);
             break;
         case DROPOUT:
-            bcnn_backward_dropout_layer(&conn);
+            bcnn_backward_dropout_layer(net, &conn);
             break;
         case CONCAT:
             bcnn_backward_concat_layer(net, &conn);
             break;
         case COST:
-            bcnn_backward_cost_layer(&conn);
+            bcnn_backward_cost_layer(net, &conn);
             break;
         default:
             break;
@@ -457,27 +514,31 @@ int bcnn_backward(bcnn_net *net)
 
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
 {
-    int i, j, sz = net->input_node.w * net->input_node.h * net->input_node.c, n, offset;
+    int i, j, n, offset;
+    int sz = net->input_width * net->input_height * net->input_channels;
     int sz_img = iter->input_width * iter->input_height * iter->input_depth;
     int nb = net->nb_connections;
     int w, h, c;
+    int w_in = net->input_width;
+    int h_in = net->input_height;
+    int c_in = net->input_channels;
+    int batch_size = net->batch_size;
     unsigned char *img_tmp = NULL;
-    float *x = net->input_node.data;
-    float *y = net->connections[nb - 1].label;
+    float *x = net->nodes[0].tensor.data;
+    float *y = net->nodes[1].tensor.data;
     float x_scale, y_scale;
     int x_pos, y_pos;
     int use_buffer_img = (net->task == TRAIN && net->state != 0 &&
         (net->data_aug.range_shift_x != 0 || net->data_aug.range_shift_y != 0 ||
         net->data_aug.rotation_range != 0 || net->data_aug.random_fliph != 0));
     bcnn_data_augment *param = &(net->data_aug);
-    int input_size = bcnn_get_tensor_size(&net->input_node);
-    int output_size = net->connections[nb - 2].dst_tensor.w * 
-        net->connections[nb - 2].dst_tensor.h *
-        net->connections[nb - 2].dst_tensor.c;
+    int input_size = bcnn_tensor_get_size(&net->nodes[0].tensor);
+    int en = (net->connections[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
+    int output_size = bcnn_tensor_get_size3d(&net->nodes[net->connections[en].dst[0]].tensor);
 
-    memset(x, 0, sz * net->input_node.b * sizeof(float));
+    memset(x, 0, sz * net->batch_size * sizeof(float));
     if (net->task != PREDICT) {
-        memset(y, 0, output_size * net->input_node.b * sizeof(float));
+        memset(y, 0, output_size * net->batch_size * sizeof(float));
     }
 
     if (use_buffer_img) {
@@ -485,24 +546,24 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
     }
     
     if (iter->type == ITER_MNIST || iter->type == ITER_CIFAR10) {
-        for (i = 0; i < net->input_node.b; ++i) {
+        for (i = 0; i < net->batch_size; ++i) {
             //bcnn_mnist_next_iter(net, iter);
             bcnn_advance_iterator(net, iter);
             // Data augmentation
             if (net->task == TRAIN && net->state)
                 bcnn_data_augmentation(iter->input_uchar, iter->input_width, iter->input_height, iter->input_depth, param, img_tmp);
             //bip_write_image("test.png", iter->input_uchar, iter->input_width, iter->input_height, iter->input_depth, iter->input_width * iter->input_depth);
-            if (net->input_node.w < iter->input_width || net->input_node.h < iter->input_height) {
+            if (w_in < iter->input_width || h_in < iter->input_height) {
                 bip_crop_image(iter->input_uchar, iter->input_width, iter->input_height, iter->input_width * iter->input_depth,
-                    (iter->input_width - net->input_node.w) / 2, (iter->input_height - net->input_node.h) / 2,
-                    net->input_buffer, net->input_node.w, net->input_node.h, net->input_node.w * net->input_node.c, net->input_node.c);
-                bcnn_convert_img_to_float(net->input_buffer, net->input_node.w, net->input_node.h, net->input_node.c, param->no_input_norm,
+                    (iter->input_width - w_in) / 2, (iter->input_height - h_in) / 2,
+                    net->input_buffer, w_in, h_in, w_in * c_in, c_in);
+                bcnn_convert_img_to_float(net->input_buffer, w_in, h_in, c_in, param->no_input_norm,
                     param->swap_to_bgr, param->mean_r, param->mean_g, param->mean_b, x);
             }
             else
-                bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->no_input_norm,
+                bcnn_convert_img_to_float(iter->input_uchar, w_in, h_in, c_in, param->no_input_norm,
                     param->swap_to_bgr, param->mean_r, param->mean_g, param->mean_b, x);	
-            //bip_write_image("test1.png", tmp_buf, net->input_node.w, net->input_node.h, net->input_node.c, net->input_node.w * net->input_node.c);
+            //bip_write_image("test1.png", tmp_buf, w_in, h_in, c_in, w_in * c_in);
             x += sz;
             if (net->task != PREDICT) {
                 // Load truth
@@ -512,13 +573,13 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
         }
     }
     else if (iter->type == ITER_BIN) {
-        for (i = 0; i < net->input_node.b; ++i) {
+        for (i = 0; i < batch_size; ++i) {
             //bcnn_bin_iter(net, iter);
             bcnn_advance_iterator(net, iter);
             // Data augmentation
             if (net->task == TRAIN && net->state)
-                bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-            bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->no_input_norm,
+                bcnn_data_augmentation(iter->input_uchar, w_in, h_in, c_in, param, img_tmp);
+            bcnn_convert_img_to_float(iter->input_uchar, w_in, h_in, c_in, param->no_input_norm,
                 param->swap_to_bgr, param->mean_r, param->mean_g, param->mean_b, x);
             x += sz;
             if (net->task != PREDICT) {
@@ -536,11 +597,11 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
                     break;
                 case HEATMAP_REGRESSION:
                     // Load truth
-                    w = net->connections[net->nb_connections - 2].dst_tensor.w;
-                    h = net->connections[net->nb_connections - 2].dst_tensor.h;
-                    c = net->connections[net->nb_connections - 2].dst_tensor.c;
-                    x_scale = (float)w / (float)net->input_node.w;
-                    y_scale = (float)h / (float)net->input_node.h;
+                    w = net->nodes[net->connections[en].dst[0]].tensor.w;
+                    h = net->nodes[net->connections[en].dst[0]].tensor.h;
+                    c = net->nodes[net->connections[en].dst[0]].tensor.c;
+                    x_scale = (float)w / (float)w_in;
+                    y_scale = (float)h / (float)h_in;
                     for (j = 0; j < iter->label_width; j += 2) {
                         if (iter->label_float[j] >= 0 && iter->label_float[j + 1] >= 0) {
                             x_pos = (int)((iter->label_float[j] - net->data_aug.shift_x) * x_scale + 0.5f);
@@ -570,13 +631,13 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
         }
     }
     else if (iter->type == ITER_LIST || iter->type == ITER_CSV) {
-        for (i = 0; i < net->input_node.b; ++i) {
+        for (i = 0; i < batch_size; ++i) {
             //bcnn_list_iter(net, iter);
             bcnn_advance_iterator(net, iter);
             // Online data augmentation
             if (net->task == TRAIN && net->state)
-                bcnn_data_augmentation(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param, img_tmp);
-            bcnn_convert_img_to_float(iter->input_uchar, net->input_node.w, net->input_node.h, net->input_node.c, param->no_input_norm, 
+                bcnn_data_augmentation(iter->input_uchar, w_in, h_in, c_in, param, img_tmp);
+            bcnn_convert_img_to_float(iter->input_uchar, w_in, h_in, c_in, param->no_input_norm, 
                 param->swap_to_bgr, param->mean_r, param->mean_g, param->mean_b, x);
             x += sz;
             if (net->task != PREDICT) {
@@ -594,11 +655,11 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
                     break;
                 case HEATMAP_REGRESSION:
                     // Load truth
-                    w = net->connections[net->nb_connections - 2].dst_tensor.w;
-                    h = net->connections[net->nb_connections - 2].dst_tensor.h;
-                    c = net->connections[net->nb_connections - 2].dst_tensor.c;
-                    x_scale = (float)w / (float)net->input_node.w;
-                    y_scale = (float)h / (float)net->input_node.h;
+                    w = net->nodes[net->connections[en].dst[0]].tensor.w;
+                    h = net->nodes[net->connections[en].dst[0]].tensor.h;
+                    c = net->nodes[net->connections[en].dst[0]].tensor.c;
+                    x_scale = (float)w / (float)w_in;
+                    y_scale = (float)h / (float)h_in;
                     for (j = 0; j < iter->label_width; j += 2) {
                         if (iter->label_float[j] >= 0 && iter->label_float[j + 1] >= 0) {
                             x_pos = (int)((iter->label_float[j] - net->data_aug.shift_x) * x_scale + 0.5f);
@@ -636,10 +697,12 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
         bh_free(img_tmp);
 
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_host2dev(net->input_node.data_gpu, net->input_node.data, input_size);
-    if (net->task != PREDICT)
-        bcnn_cuda_memcpy_host2dev(net->connections[nb - 1].label_gpu, net->connections[nb - 1].label, output_size
-        * net->connections[nb - 1].src_tensor.b);
+    bcnn_cuda_memcpy_host2dev(net->nodes[0].tensor.data_gpu, net->nodes[0].tensor.data, input_size);
+    if (net->task != PREDICT) {
+        bcnn_cuda_memcpy_host2dev(net->nodes[1].tensor.data_gpu,
+            net->nodes[1].tensor.data,
+            bcnn_tensor_get_size(&net->nodes[net->connections[en].dst[0]].tensor));
+    }
 #endif
     return BCNN_SUCCESS;
 }
@@ -648,14 +711,14 @@ int bcnn_train_on_batch(bcnn_net *net, bcnn_iterator *iter, float *loss)
 {
     bcnn_iter_batch(net, iter);
 
-    net->seen += net->input_node.b;
+    net->seen += net->batch_size;
     // Forward
     bcnn_forward(net);
     // Back prop
     bcnn_backward(net);
     // Update network weight
     bcnn_update(net);
-    *loss = net->connections[net->nb_connections - 1].dst_tensor.data[0];
+    *loss = net->nodes[net->connections[net->nb_connections - 1].dst[0]].tensor.data[0];
 
     return BCNN_SUCCESS;
 }
@@ -664,18 +727,19 @@ int bcnn_predict_on_batch(bcnn_net *net, bcnn_iterator *iter, float **pred, floa
 {
     int nb = net->nb_connections;
     int en = (net->connections[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
-    int output_size = bcnn_get_tensor_size(&net->connections[en].dst_tensor);
+    int output_size = bcnn_tensor_get_size3d(&net->nodes[net->connections[en].dst[0]].tensor);
 
     bcnn_iter_batch(net, iter);
 
     bcnn_forward(net);
 
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_dev2host(net->connections[en].dst_tensor.data_gpu, net->connections[en].dst_tensor.data,
+    bcnn_cuda_memcpy_dev2host(net->nodes[net->connections[en].dst[0]].tensor.data_gpu,
+        net->nodes[net->connections[en].dst[0]].tensor.data,
         output_size);
 #endif
-    (*pred) = net->connections[en].dst_tensor.data;
-    *error = *(net->connections[nb - 1].dst_tensor.data);
+    (*pred) = net->nodes[net->connections[en].dst[0]].tensor.data;
+    *error = *(net->nodes[net->connections[nb - 1].dst[0]].tensor.data);
 
     return BCNN_SUCCESS;
 }
@@ -712,12 +776,12 @@ int bcnn_write_model(bcnn_net *net, char *filename)
         if (layer->type == BATCHNORM) {
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_dev2host(layer->global_mean_gpu, layer->global_mean,
-                net->connections[i].dst_tensor.c);
+                net->nodes[net->connections[i].dst[0]].tensor.c);
             bcnn_cuda_memcpy_dev2host(layer->global_variance_gpu, layer->global_variance,
-                net->connections[i].dst_tensor.c);
+                net->nodes[net->connections[i].dst[0]].tensor.c);
 #endif
-            fwrite(layer->global_mean, sizeof(float), net->connections[i].dst_tensor.c, fp);
-            fwrite(layer->global_variance, sizeof(float), net->connections[i].dst_tensor.c, fp);
+            fwrite(layer->global_mean, sizeof(float), net->nodes[net->connections[i].dst[0]].tensor.c, fp);
+            fwrite(layer->global_variance, sizeof(float), net->nodes[net->connections[i].dst[0]].tensor.c, fp);
         }
     }
     fclose(fp);
@@ -748,12 +812,12 @@ int bcnn_load_model(bcnn_net *net, char *filename)
     for (i = 0; i < net->nb_connections; ++i) {
         layer = net->connections[i].layer;
         is_ft = 0;
-        if (net->connections[i].id != NULL) {
+        /*if (net->connections[i].id != NULL) {
             for (j = 0; j < net->nb_finetune; ++j) {
                 if (strcmp(net->connections[i].id, net->finetune_id[j]) == 0)
                     is_ft = 1;
             }
-        }
+        }*/
         if ((layer->type == CONVOLUTIONAL ||
             layer->type == DECONVOLUTIONAL ||
             layer->type == DEPTHWISE_CONV ||
@@ -768,15 +832,16 @@ int bcnn_load_model(bcnn_net *net, char *filename)
 #endif	
         }
         if (layer->type == BATCHNORM) {
-            nb_read = fread(layer->global_mean, sizeof(float), net->connections[i].dst_tensor.c, fp);
+            int sz = net->nodes[net->connections[i].dst[0]].tensor.c;
+            nb_read = fread(layer->global_mean, sizeof(float), sz, fp);
             bh_log_info("batchnorm layer= %d nbread_mean= %lu mean_size_expected= %d\n",
-                i, (unsigned long)nb_read, net->connections[i].dst_tensor.c);
-            nb_read = fread(layer->global_variance, sizeof(float), net->connections[i].dst_tensor.c, fp);
+                i, (unsigned long)nb_read, sz);
+            nb_read = fread(layer->global_variance, sizeof(float), sz, fp);
             bh_log_info("batchnorm layer= %d nbread_variance= %lu variance_size_expected= %d\n",
-                i, (unsigned long)nb_read, net->connections[i].dst_tensor.c);
+                i, (unsigned long)nb_read, sz);
 #ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_host2dev(layer->global_mean_gpu, layer->global_mean, net->connections[i].dst_tensor.c);
-            bcnn_cuda_memcpy_host2dev(layer->global_variance_gpu, layer->global_variance, net->connections[i].dst_tensor.c);
+            bcnn_cuda_memcpy_host2dev(layer->global_mean_gpu, layer->global_mean, sz);
+            bcnn_cuda_memcpy_host2dev(layer->global_variance_gpu, layer->global_variance, sz);
 #endif
         }
     }
@@ -801,46 +866,47 @@ int bcnn_visualize_network(bcnn_net *net)
         
     for (j = 0; j < net->nb_connections; ++j) {
         if (net->connections[j].layer->type == CONVOLUTIONAL) {
-            w = net->connections[j].dst_tensor.w;
-            h = net->connections[j].dst_tensor.h;
-            c = net->connections[j].dst_tensor.c;
+            w = net->nodes[net->connections[j].dst[0]].tensor.w;
+            h = net->nodes[net->connections[j].dst[0]].tensor.h;
+            c = net->nodes[net->connections[j].dst[0]].tensor.c;
             sz = w * h * c;
 #ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_dev2host(net->connections[j].dst_tensor.data_gpu,
-                    net->connections[j].dst_tensor.data, sz * net->input_node.b);
+            bcnn_cuda_memcpy_dev2host(net->nodes[net->connections[j].dst[0]].tensor.data_gpu,
+                    net->nodes[net->connections[j].dst[0]].tensor.data,
+                    bcnn_tensor_get_size(&net->nodes[net->connections[j].dst[0]].tensor));
 #endif
-            for (i = 0; i < net->input_node.b / 8; ++i) {	
+            for (i = 0; i < net->nodes[net->connections[j].dst[0]].tensor.n / 8; ++i) {	
                 layer = net->connections[j].layer;
-                for (k = 0; k < net->connections[j].dst_tensor.c / 16; ++k) {
+                for (k = 0; k < net->nodes[net->connections[j].dst[0]].tensor.c / 16; ++k) {
                     sprintf(name, "sample%d_layer%d_fmap%d.png", i, j, k);
-                    bip_write_float_image_norm(name, net->connections[j].dst_tensor.data +
+                    bip_write_float_image_norm(name, net->nodes[net->connections[j].dst[0]].tensor.data +
                         i * sz + k * w * h, w, h, 1, w * sizeof(float));
                 }
             }
         }
         else if (net->connections[j].layer->type == FULL_CONNECTED || 
             net->connections[j].layer->type == SOFTMAX) {
-            w = net->connections[j].dst_tensor.w;
-            h = net->connections[j].dst_tensor.h;
-            c = net->connections[j].dst_tensor.c;
+            w = net->nodes[net->connections[j].dst[0]].tensor.w;
+            h = net->nodes[net->connections[j].dst[0]].tensor.h;
+            c = net->nodes[net->connections[j].dst[0]].tensor.c;
             sz = w * h * c;
 #ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_dev2host(net->connections[j].dst_tensor.data_gpu,
-                    net->connections[j].dst_tensor.data, sz * net->input_node.b);
+            bcnn_cuda_memcpy_dev2host(net->nodes[net->connections[j].dst[0]].tensor.data_gpu,
+                    net->nodes[net->connections[j].dst[0]].tensor.data,
+                    bcnn_tensor_get_size(&net->nodes[net->connections[j].dst[0]].tensor));
 #endif
             sprintf(name, "ip_%d.txt", j);
             ftmp = fopen(name, "wt");
-            for (i = 0; i < net->input_node.b; ++i) {
+            for (i = 0; i < net->nodes[net->connections[j].dst[0]].tensor.n; ++i) {
                 layer = net->connections[j].layer;
                 for (k = 0; k < sz; ++k) {
-                    fprintf(ftmp, "%f ", net->connections[j].dst_tensor.data[i * sz + k]);
+                    fprintf(ftmp, "%f ", net->nodes[net->connections[j].dst[0]].tensor.data[i * sz + k]);
                 }
                 fprintf(ftmp, "\n");
             }
             fclose(ftmp);
             if (sz == 2 && net->connections[j].layer->type == FULL_CONNECTED) {
-                sz = sz * net->connections[j].src_tensor.w * net->connections[j].src_tensor.h
-                    *net->connections[j].src_tensor.c;
+                sz = bcnn_tensor_get_size(&net->nodes[net->connections[j].src[0]].tensor);
 #ifdef BCNN_USE_CUDA
                 bcnn_cuda_memcpy_dev2host(net->connections[j].layer->weight_gpu,
                     net->connections[j].layer->weight, sz);

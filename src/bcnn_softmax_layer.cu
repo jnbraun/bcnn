@@ -52,12 +52,12 @@ __global__ void _bcnn_forward_softmax_layer_kernel(int n, int batch, float *inpu
     }
 }
 
-int bcnn_forward_softmax_layer_gpu(bcnn_connection *conn)
+int bcnn_forward_softmax_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
 {
-    int src_size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c;
-    int batch_size = conn->dst_tensor.b;
-    bcnn_tensor src = conn->src_tensor;
-    bcnn_tensor dst = conn->dst_tensor;
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
+    int src_size = bcnn_tensor_get_size3d(&src);
+    int batch_size = dst.n;
 
     _bcnn_forward_softmax_layer_kernel<<<bcnn_cuda_gridsize(batch_size), BCNN_CUDA_THREADS>>>(src_size,
         batch_size, src.data_gpu, dst.data_gpu);
@@ -66,12 +66,11 @@ int bcnn_forward_softmax_layer_gpu(bcnn_connection *conn)
     return BCNN_SUCCESS;
 }
 
-int bcnn_backward_softmax_layer_gpu(bcnn_connection *conn)
+int bcnn_backward_softmax_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
 {
-    int size = conn->src_tensor.w * conn->src_tensor.h * conn->src_tensor.c
-        * conn->dst_tensor.b;
-    bcnn_tensor src = conn->src_tensor;
-    bcnn_tensor dst = conn->dst_tensor;
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
+    int size = bcnn_tensor_get_size(&src);
 
     bcnn_cuda_axpy(size, 1, dst.grad_data_gpu, 1, src.grad_data_gpu, 1);
 

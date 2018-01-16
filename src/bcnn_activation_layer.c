@@ -27,57 +27,48 @@
 #include <bh/bh_string.h>
 #include "bh_log.h"
 
-int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id)
+int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *src_id)
 {
-    int nb_connections = net->nb_connections + 1;
     bcnn_connection conn = { 0 };
     char type_name[256];
+    int i;
 
-    /*bh_assert(nb_connections >= 2,
-        "Activation layer can't be the first layer of the network", BCNN_INTERNAL_ERROR);*/
-    bh_check(nb_connections >= 2,
+    bh_check(net->nb_connections >= 1,
         "Activation layer can't be the first layer of the network");
 
-    if (id != NULL) {
-        bh_fill_option(&conn.id, id);
-    }
     conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     conn.layer->type = ACTIVATION;
-    if (nb_connections > 1) {
-        conn.src_tensor = net->connections[nb_connections - 2].dst_tensor;
+
+    int is_src_node_found = 0;
+    for (i = net->num_nodes - 1; i >= 0 ; ++i) {
+        if (strcmp(net->nodes[i].id, src_id) == 0) {
+            bcnn_connection_add_src_node(&conn, i);
+            bcnn_connection_add_dst_node(&conn, i);
+            is_src_node_found = 1;
+            break;
+        }
     }
-    else {
-        conn.src_tensor = net->input_node;
-    }
-    conn.dst_tensor.w = conn.src_tensor.w;
-    conn.dst_tensor.h = conn.src_tensor.h;
-    conn.dst_tensor.c = conn.src_tensor.c;
-    conn.dst_tensor.b = conn.src_tensor.b;
+    bh_check(is_src_node_found, "Activation layer: invalid input node name %s", src_id);
+    
     conn.layer->activation = type;
 
-    conn.dst_tensor.data = conn.src_tensor.data;
-    conn.dst_tensor.grad_data = conn.src_tensor.grad_data;
-#ifdef BCNN_USE_CUDA
-    conn.dst_tensor.data_gpu = conn.src_tensor.data_gpu;
-    conn.dst_tensor.grad_data_gpu = conn.src_tensor.grad_data_gpu;
-#endif
-    net->nb_connections = nb_connections;
     bcnn_net_add_connection(net, conn);
 
     switch (type) {
-    case TANH:		sprintf(type_name, "Tanh");			break;
-    case RELU:		sprintf(type_name, "Relu");			break;
-    case RAMP:		sprintf(type_name, "Ramp");			break;
-    case SOFTPLUS:	sprintf(type_name, "Softplus");		break;
-    case LRELU:		sprintf(type_name, "Leaky-Relu");	break;
-    case ABS:		sprintf(type_name, "AbsVal");		break;
-    case CLAMP:		sprintf(type_name, "Clamp");		break;
-    default:		sprintf(type_name, "None");			break;
+    case TANH:      sprintf(type_name, "Tanh");         break;
+    case RELU:      sprintf(type_name, "Relu");         break;
+    case RAMP:      sprintf(type_name, "Ramp");         break;
+    case SOFTPLUS:  sprintf(type_name, "Softplus");     break;
+    case LRELU:     sprintf(type_name, "Leaky-Relu");   break;
+    case ABS:       sprintf(type_name, "AbsVal");       break;
+    case CLAMP:     sprintf(type_name, "Clamp");        break;
+    default:        sprintf(type_name, "None");         break;
     }
 
-    bh_log_info("[Activation] input_shape= %dx%dx%d type= %s output_shape= %dx%dx%d",
-        conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c, type_name,
-        conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
+    bh_log_info("[Activation] input_shape= %dx%dx%d function= %s output_shape= %dx%dx%d",
+        net->nodes[conn.src[0]].tensor.w, net->nodes[conn.src[0]].tensor.h, net->nodes[conn.src[0]].tensor.c,
+        type_name,
+        net->nodes[conn.dst[0]].tensor.w, net->nodes[conn.dst[0]].tensor.h, net->nodes[conn.dst[0]].tensor.c);
 
     return BCNN_SUCCESS;
 }
@@ -132,12 +123,11 @@ int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a)
     return BCNN_SUCCESS;
 }
 
-int bcnn_forward_activation_layer_cpu(bcnn_connection *conn)
+int bcnn_forward_activation_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
 {
-    bcnn_layer *layer = conn->layer;
-    bcnn_tensor src = conn->src_tensor;
-    bcnn_tensor dst = conn->dst_tensor;
-    int sz = bcnn_get_tensor_size(&dst);
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
+    int sz = bcnn_tensor_get_size(&dst);
 
     dst.data = src.data;
     bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
@@ -194,12 +184,11 @@ int bcnn_backward_activation_cpu(float *x, float *dx, int sz, bcnn_activation a)
     return 0;
 }
 
-int bcnn_backward_activation_layer_cpu(bcnn_connection *conn)
+int bcnn_backward_activation_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
 {
-    bcnn_layer *layer = conn->layer;
-    bcnn_tensor src = conn->src_tensor;
-    bcnn_tensor dst = conn->dst_tensor;
-    int sz = bcnn_get_tensor_size(&dst);
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
+    int sz = bcnn_tensor_get_size(&dst);
     
     bcnn_backward_activation_cpu(dst.data, dst.grad_data, sz, layer->activation);
     src.grad_data = dst.grad_data;
@@ -208,20 +197,24 @@ int bcnn_backward_activation_layer_cpu(bcnn_connection *conn)
 }
 
 
-int bcnn_forward_activation_layer(bcnn_connection *conn)
+int bcnn_forward_activation_layer(bcnn_net *net, bcnn_connection *conn)
 {
+    bcnn_node *src = &net->nodes[conn->src[0]];
+    bcnn_node *dst = &net->nodes[conn->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_activation_layer_gpu(conn);
+    return bcnn_forward_activation_layer_gpu(conn->layer, src, dst);
 #else
-    return bcnn_forward_activation_layer_cpu(conn);
+    return bcnn_forward_activation_layer_cpu(conn->layer, src, dst);
 #endif
 }
 
-int bcnn_backward_activation_layer(bcnn_connection *conn)
+int bcnn_backward_activation_layer(bcnn_net *net, bcnn_connection *conn)
 {
+    bcnn_node *src = &net->nodes[conn->src[0]];
+    bcnn_node *dst = &net->nodes[conn->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_activation_layer_gpu(conn);
+    return bcnn_backward_activation_layer_gpu(conn->layer, src, dst);
 #else
-    return bcnn_backward_activation_layer_cpu(conn);
+    return bcnn_backward_activation_layer_cpu(conn->layer, src, dst);
 #endif
 }

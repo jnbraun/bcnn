@@ -31,8 +31,6 @@
 
 int create_network(bcnn_net *net, int binarize)
 {
-    net->input_node.w = 28; net->input_node.h = 28; net->input_node.c = 1;
-    net->input_node.b = 16;
     net->learner.optimizer = SGD;
     net->learner.learning_rate = 0.003f;
     net->learner.gamma = 0.00002f;
@@ -44,27 +42,23 @@ int create_network(bcnn_net *net, int binarize)
     net->learner.beta2 = 0.999f;
     net->max_batches = 50000;
 
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "conv1");
-    bcnn_add_batchnorm_layer(net, "bn1");
-    bcnn_add_maxpool_layer(net, 2, 2, "pool1");
+    bcnn_net_set_input_shape(net, 28, 28, 1, 16);
 
-    if (binarize)
-        bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 1, "conv2");
-    else
-        bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "conv2");
-    bcnn_add_batchnorm_layer(net, "bn2");
-    bcnn_add_maxpool_layer(net, 2, 2, "pool2");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "input", "conv1");
+    bcnn_add_batchnorm_layer(net, "conv1", "bn1");
+    bcnn_add_maxpool_layer(net, 2, 2, "bn1", "pool1");
 
-    if (binarize)
-        bcnn_add_fullc_layer(net, 256, XAVIER, RELU, 0, "fc1");
-    else
-        bcnn_add_fullc_layer(net, 256, XAVIER, RELU, 0, "fc1");
-    bcnn_add_batchnorm_layer(net, "bn3");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "pool1", "conv2");
+    bcnn_add_batchnorm_layer(net, "conv2", "bn2");
+    bcnn_add_maxpool_layer(net, 2, 2, "bn2", "pool2");
 
-    bcnn_add_fullc_layer(net, 10, XAVIER, RELU, 0, "fc2");
+    bcnn_add_fullc_layer(net, 256, XAVIER, RELU, 0, "pool2", "fc1");
+    bcnn_add_batchnorm_layer(net, "fc1", "bn3");
 
-    bcnn_add_softmax_layer(net, "softmax");
-    bcnn_add_cost_layer(net, COST_ERROR, 1.0f);
+    bcnn_add_fullc_layer(net, 10, XAVIER, RELU, 0, "bn3", "fc2");
+
+    bcnn_add_softmax_layer(net, "fc2", "softmax");
+    bcnn_add_cost_layer(net, COST_ERROR, 1.0f, "softmax", "label", "cost");
 
     // Data augmentation
     net->data_aug.range_shift_x = 5;
@@ -87,8 +81,7 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
     FILE *f = NULL;
     bcnn_iterator data_mnist = { 0 };
     int nb = net->nb_connections;
-    int output_size = net->connections[nb - 2].dst_tensor.w *
-        net->connections[nb - 2].dst_tensor.h * net->connections[nb - 2].dst_tensor.c;
+    int output_size = bcnn_tensor_get_size3d(&net->nodes[net->connections[nb - 2].dst[0]].tensor);
 
     //bcnn_init_mnist_iterator(&data_mnist, test_img, test_label);
     bcnn_init_iterator(net, &data_mnist, test_img, test_label, "mnist");
@@ -101,12 +94,12 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
 
     bcnn_compile_net(net, "predict");
 
-    n = nb_pred / net->input_node.b;
+    n = nb_pred / net->batch_size;
     for (i = 0; i < n; ++i) {
         bcnn_predict_on_batch(net, &data_mnist, &out, &error_batch);
         err += error_batch;
         // Save predictions
-        for (j = 0; j < net->input_node.b; ++j) {
+        for (j = 0; j < net->batch_size; ++j) {
             for (k = 0; k < output_size; ++k)
                 fprintf(f, "%f ", out[j * output_size + k]);
             fprintf(f, "\n");
@@ -115,7 +108,7 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
     }
     // Last predictions (Have to do this because batch_size is set to 16 yet the
     // number of samples of mnist test data is not a multiple of 16)
-    n = nb_pred % net->input_node.b;
+    n = nb_pred % net->batch_size;
     if (n > 0) {
         for (i = 0; i < n; ++i) {
             bcnn_predict_on_batch(net, &data_mnist, &out, &error_batch);
@@ -160,7 +153,7 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
             predict_mnist(net, test_img, test_label, &error_valid, 10000, "pred_mnist.txt");
             bh_timer_stop(&tp);
             fprintf(stderr, "iter= %d train-error= %f test-error= %f training-time= %lf sec inference-time= %lf sec\n", i,
-                sum_error / (eval_period * net->input_node.b), error_valid,
+                sum_error / (eval_period * net->batch_size), error_valid,
                 bh_timer_get_msec(&t) / 1000, bh_timer_get_msec(&tp) / 1000);
             fflush(stderr);
             bh_timer_start(&t);
@@ -172,7 +165,7 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
     }
 
     bcnn_free_iterator(&data_mnist);
-    *error = (float)sum_error / (eval_period * net->input_node.b);
+    *error = (float)sum_error / (eval_period * net->batch_size);
 
     return 0;
 }

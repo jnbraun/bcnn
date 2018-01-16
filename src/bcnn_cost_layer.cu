@@ -26,30 +26,30 @@
 
 #include "bcnn/bcnn.h"
 
-int bcnn_forward_cost_layer_gpu(bcnn_connection *conn)
+int bcnn_forward_cost_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *label_node, bcnn_node *dst_node)
 {
     int i, j, offset, j_best, n, d;
-    bcnn_layer *layer = conn->layer;
-    bcnn_tensor src = conn->src_tensor;
-    bcnn_tensor dst = conn->dst_tensor;
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
+    bcnn_tensor label = label_node->tensor;
     int input_size = src.w * src.h * src.c;
-    int batch_size = src.b;
-    int sz = src.b * input_size;
+    int batch_size = src.n;
+    int sz = src.n * input_size;
     float p_max;
     float *src_data_cpu = NULL;
     // If no truth available, do nothing
-    if (!conn->label)
+    if (!label.data)
         return 0;
 
     bcnn_cuda_copy_f32(sz, src.data_gpu, 1, dst.grad_data_gpu, 1);
-    bcnn_cuda_axpy(sz, -1, conn->label_gpu, 1, dst.grad_data_gpu, 1);
+    bcnn_cuda_axpy(sz, -1, label.data_gpu, 1, dst.grad_data_gpu, 1);
 
     switch (layer->loss_metric) {
     case COST_ERROR:
         *(dst.data) = 0.0f;
         src_data_cpu = (float *)calloc(sz, sizeof(float));
         bcnn_cuda_memcpy_dev2host(src.data_gpu, src_data_cpu, sz);
-        bcnn_cuda_memcpy_dev2host(conn->label_gpu, conn->label, sz);
+        bcnn_cuda_memcpy_dev2host(label.data_gpu, label.data, sz);
         for (i = 0; i < batch_size; ++i) {
             offset = i * input_size;
             p_max = FLT_MIN;
@@ -60,7 +60,7 @@ int bcnn_forward_cost_layer_gpu(bcnn_connection *conn)
                     j_best = j;
                 }
             }
-            if (conn->label[offset + j_best] == 0)
+            if (label.data[offset + j_best] == 0)
                 *(dst.data) += 1.0f;
         }
         bh_free(src_data_cpu);
@@ -78,7 +78,7 @@ int bcnn_forward_cost_layer_gpu(bcnn_connection *conn)
         *(dst.data) = 0.0f;
         src_data_cpu = (float *)calloc(sz, sizeof(float));
         bcnn_cuda_memcpy_dev2host(src.data_gpu, src_data_cpu, sz);
-        bcnn_cuda_memcpy_dev2host(conn->label_gpu, conn->label, sz);
+        bcnn_cuda_memcpy_dev2host(label.data_gpu, label.data, sz);
         for (i = 0; i < batch_size; ++i) {
             offset = i * input_size;
             for (j = 1; j < input_size; ++j) {
@@ -87,7 +87,7 @@ int bcnn_forward_cost_layer_gpu(bcnn_connection *conn)
                 }
             }
         }
-        bcnn_axpy(sz, -1, conn->label, src_data_cpu);
+        bcnn_axpy(sz, -1, label.data, src_data_cpu);
         *(dst.data) = bcnn_dot(sz, src_data_cpu, src_data_cpu);
         bh_free(src_data_cpu);
         break;
@@ -95,11 +95,11 @@ int bcnn_forward_cost_layer_gpu(bcnn_connection *conn)
         *(dst.data) = 0.0f;
         src_data_cpu = (float *)calloc(sz, sizeof(float));
         bcnn_cuda_memcpy_dev2host(src.data_gpu, src_data_cpu, sz);
-        bcnn_cuda_memcpy_dev2host(conn->label_gpu, conn->label, sz);
+        bcnn_cuda_memcpy_dev2host(label.data_gpu, label.data, sz);
         for (i = 0; i < batch_size; ++i) {
             offset = i * input_size;
             for (j = 0; j < input_size; ++j) {
-                if (conn->label[offset + j] > 0.0f) {
+                if (label.data[offset + j] > 0.0f) {
                     *(dst.data) += (float)-log(bh_clamp(src_data_cpu[offset + j], 1e-8f, 1.0f - 1e-8f));
                 }
             }
@@ -110,15 +110,15 @@ int bcnn_forward_cost_layer_gpu(bcnn_connection *conn)
     case COST_DICE:
         src_data_cpu = (float *)calloc(sz, sizeof(float));
         bcnn_cuda_memcpy_dev2host(src.data_gpu, src_data_cpu, sz);
-        bcnn_cuda_memcpy_dev2host(conn->label_gpu, conn->label, sz);
+        bcnn_cuda_memcpy_dev2host(label.data_gpu, label.data, sz);
         *(dst.data) = 0.0f;
         for (i = 0; i < batch_size; ++i) {
             offset = i * input_size;
             n = 0;
             d = 0;
             for (j = 0; j < input_size; ++j) {
-                n += conn->label[offset + j] * (src_data_cpu[offset + j] > 0.5f);
-                d += conn->label[offset + j] + (src_data_cpu[offset + j] > 0.5f);
+                n += label.data[offset + j] * (src_data_cpu[offset + j] > 0.5f);
+                d += label.data[offset + j] + (src_data_cpu[offset + j] > 0.5f);
             }
             *(dst.data) += (float)(2.0f * n + 1.0f) / (d + 1.0f);
         }
@@ -131,13 +131,12 @@ int bcnn_forward_cost_layer_gpu(bcnn_connection *conn)
 }
 
 
-int bcnn_backward_cost_layer_gpu(bcnn_connection *conn)
+int bcnn_backward_cost_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
 {
-    bcnn_layer *layer = conn->layer;
-    bcnn_tensor src = conn->src_tensor;
-    bcnn_tensor dst = conn->dst_tensor;
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
     int input_size = src.w * src.h * src.c;
-    int sz = src.b * input_size;
+    int sz = src.n * input_size;
 
     bcnn_cuda_axpy(sz, layer->scale, dst.grad_data_gpu, 1, src.grad_data_gpu, 1);
 

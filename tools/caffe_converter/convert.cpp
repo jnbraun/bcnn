@@ -49,7 +49,8 @@ static int _init_from_config(bcnn_net *net, char *config_file, bcnncl_param *par
     bcnn_loss_metric cost = COST_SSE;
     float rate = 1.0f;
     int n_tok;
-    char *layer_id = NULL;
+    char *src_id = NULL;
+    char *dst_id = NULL;
 
     file = fopen(config_file, "rt");
     if (file == 0) {
@@ -65,56 +66,57 @@ static int _init_from_config(bcnn_net *net, char *config_file, bcnncl_param *par
         case '{':
             if (nb_layers > 0) {
                 if (nb_layers == 1) {
-                    bh_assert(net->input_node.w > 0 &&
-                        net->input_node.h > 0 && net->input_node.c > 0,
+                    bh_assert(net->input_width > 0 &&
+                        net->input_height > 0 && net->input_channels > 0,
                         "Input's width, height and channels must be > 0", BCNN_INVALID_PARAMETER);
-                    bh_assert(net->input_node.b > 0, "Batch size must be > 0", BCNN_INVALID_PARAMETER);
+                    bh_assert(net->batch_size > 0, "Batch size must be > 0", BCNN_INVALID_PARAMETER);
                 }
                 if (strcmp(curr_layer, "{conv}") == 0 ||
                     strcmp(curr_layer, "{convolutional}") == 0) {
-                    bcnn_add_convolutional_layer(net, n_filts, size, stride, pad, 0, init, a, 0, layer_id);
+                    bcnn_add_convolutional_layer(net, n_filts, size, stride, pad, 0, init, a, 0, src_id, dst_id);
                     /*fprintf(stderr, "out_c= %d %d %d %d\n", n_filts, size, net->connections[net->nb_connections - 1].src_tensor.c,
                         net->connections[net->nb_connections - 1].layer->weights_size);*/
                 }
                 else if (strcmp(curr_layer, "{deconv}") == 0 ||
                     strcmp(curr_layer, "{deconvolutional}") == 0) {
-                    bcnn_add_deconvolutional_layer(net, n_filts, size, stride, pad, init, a, layer_id);
+                    bcnn_add_deconvolutional_layer(net, n_filts, size, stride, pad, init, a, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{depthwise-conv}") == 0 ||
                     strcmp(curr_layer, "{dw-conv}") == 0) {
-                    //bcnn_add_deconvolutional_layer(net, n_filts, size, stride, pad, init, a, layer_id);
-                    bcnn_add_depthwise_sep_conv_layer(net, size, stride, pad, 0, init, a, layer_id);
+                    //bcnn_add_deconvolutional_layer(net, n_filts, size, stride, pad, init, a, src_id);
+                    bcnn_add_depthwise_sep_conv_layer(net, size, stride, pad, 0, init, a, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{activation}") == 0 ||
                     strcmp(curr_layer, "{nl}") == 0) {
-                    bcnn_add_activation_layer(net, a, layer_id);
+                    bcnn_add_activation_layer(net, a, src_id);
                 }
                 else if (strcmp(curr_layer, "{batchnorm}") == 0 ||
                     strcmp(curr_layer, "{bn}") == 0) {
-                    bcnn_add_batchnorm_layer(net, layer_id);
+                    bcnn_add_batchnorm_layer(net, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{connected}") == 0 ||
                     strcmp(curr_layer, "{fullconnected}") == 0 ||
                     strcmp(curr_layer, "{fc}") == 0 ||
                     strcmp(curr_layer, "{ip}") == 0) {
-                    bcnn_add_fullc_layer(net, outputs, init, a, 0, layer_id);
+                    bcnn_add_fullc_layer(net, outputs, init, a, 0, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{softmax}") == 0) {
-                    bcnn_add_softmax_layer(net, layer_id);
+                    bcnn_add_softmax_layer(net, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{max}") == 0 ||
                     strcmp(curr_layer, "{maxpool}") == 0) {
-                    bcnn_add_maxpool_layer(net, size, stride, layer_id);
+                    bcnn_add_maxpool_layer(net, size, stride, src_id, dst_id);
                 }
                 else if (strcmp(curr_layer, "{dropout}") == 0) {
-                    bcnn_add_dropout_layer(net, rate, layer_id);
+                    bcnn_add_dropout_layer(net, rate, src_id);
                 }
                 else {
                     fprintf(stderr, "[ERROR] Unknown Layer %s\n", curr_layer);
                     return BCNN_INVALID_PARAMETER;
                 }
                 bh_free(curr_layer);
-                bh_free(layer_id);
+                bh_free(src_id);
+                bh_free(dst_id);
                 a = NONE;
             }
             curr_layer = line;
@@ -150,7 +152,8 @@ static int _init_from_config(bcnn_net *net, char *config_file, bcnncl_param *par
             else if (strcmp(tok[0], "size") == 0) size = atoi(tok[1]);
             else if (strcmp(tok[0], "stride") == 0) stride = atoi(tok[1]);
             else if (strcmp(tok[0], "pad") == 0) pad = atoi(tok[1]);
-            else if (strcmp(tok[0], "id") == 0) bh_fill_option(&layer_id, tok[1]);
+            else if (strcmp(tok[0], "src") == 0) bh_fill_option(&src_id, tok[1]);
+            else if (strcmp(tok[0], "dst") == 0) bh_fill_option(&dst_id, tok[1]);
             else if (strcmp(tok[0], "output") == 0) outputs = atoi(tok[1]);
             else if (strcmp(tok[0], "function") == 0) {
                 if (strcmp(tok[1], "relu") == 0) a = RELU;
@@ -198,11 +201,14 @@ static int _init_from_config(bcnn_net *net, char *config_file, bcnncl_param *par
     }
     // Add cost layer
     if (strcmp(curr_layer, "{cost}") == 0) {
-        bcnn_add_cost_layer(net, cost, 1.0f);
+        std::string label_id = "label";
+        bcnn_add_cost_layer(net, cost, 1.0f, src_id, (char *)label_id.c_str(), dst_id);
     }
     else
         bh_error("Error in config file: last layer must be a cost layer", BCNN_INVALID_PARAMETER);
     bh_free(curr_layer);
+    bh_free(src_id);
+    bh_free(dst_id);
     fclose(file);
 
     param->eval_period = (param->eval_period > 0 ? param->eval_period : 100);
@@ -251,8 +257,8 @@ static int _write_model(bcnn_net *net, char *filename)
             fwrite(layer->weight, sizeof(float), layer->weights_size, fp);
         }
         if (layer->type == BATCHNORM) {
-            fwrite(layer->global_mean, sizeof(float), net->connections[i].dst_tensor.c, fp);
-            fwrite(layer->global_variance, sizeof(float), net->connections[i].dst_tensor.c, fp);
+            fwrite(layer->global_mean, sizeof(float), net->nodes[net->connections[i].dst[0]].tensor.c, fp);
+            fwrite(layer->global_variance, sizeof(float), net->nodes[net->connections[i].dst[0]].tensor.c, fp);
         }
     }
     fclose(fp);

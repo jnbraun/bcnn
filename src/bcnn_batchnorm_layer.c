@@ -28,80 +28,89 @@
 
 #include "bh_log.h"
 
-int bcnn_add_batchnorm_layer(bcnn_net *net, char *id)
+int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id)
 {
-    int nb_connections = net->nb_connections + 1;
-    int i, sz;
+    int i, sz, channels;
     bcnn_connection conn = { 0 };
+    bcnn_node dst_node = { 0 };
 
-    bh_check(nb_connections >= 2,
+    bh_check(net->nb_connections >= 1,
         "Batchnorm layer can't be the first layer of the network");
 
-    if (id != NULL) {
-        bh_fill_option(&conn.id, id);
+    int is_src_node_found = 0;
+    for (i = net->num_nodes - 1; i >= 0 ; ++i) {
+        if (strcmp(net->nodes[i].id, src_id) == 0) {
+            bcnn_connection_add_src_node(&conn, i);
+            is_src_node_found = 1;
+            break;
+        }
     }
+    bh_check(is_src_node_found, "Batchnorm layer: invalid input node name %s", src_id);
+
+    dst_node.id = dst_id;
+    bcnn_tensor_set_shape(&dst_node.tensor,
+        net->nodes[conn.src[0]].tensor.n,
+        net->nodes[conn.src[0]].tensor.c,
+        net->nodes[conn.src[0]].tensor.h,
+        net->nodes[conn.src[0]].tensor.w,
+        1);
+    bcnn_tensor_allocate(&dst_node.tensor);
+    // Add node to net
+    bcnn_net_add_node(net, dst_node);
+    // Add node pointer to connection
+    bcnn_connection_add_dst_node(&conn, net->num_nodes - 1);
+
+    sz = bcnn_tensor_get_size(&net->nodes[conn.dst[0]].tensor);
+    // Setup layer
     conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     conn.layer->type = BATCHNORM;
-    if (nb_connections > 1) {
-        conn.src_tensor = net->connections[nb_connections - 2].dst_tensor;
-    }
-    else {
-        conn.src_tensor = net->input_node;
-    }
-
-    conn.dst_tensor.w = conn.src_tensor.w;
-    conn.dst_tensor.h = conn.src_tensor.h;
-    conn.dst_tensor.c = conn.src_tensor.c;
-    conn.dst_tensor.b = conn.src_tensor.b;
-
-    sz = bcnn_get_tensor_size(&conn.dst_tensor);
-
-    conn.dst_tensor.data = (float *)calloc(sz, sizeof(float));
-    conn.dst_tensor.grad_data = (float *)calloc(sz, sizeof(float));
-    conn.layer->mean = (float *)calloc(conn.dst_tensor.c, sizeof(float));
-    conn.layer->variance = (float *)calloc(conn.dst_tensor.c, sizeof(float));
-    conn.layer->global_mean = (float *)calloc(conn.dst_tensor.c, sizeof(float));
-    conn.layer->global_variance = (float *)calloc(conn.dst_tensor.c, sizeof(float));
-    conn.layer->diff_mean = (float *)calloc(conn.dst_tensor.c, sizeof(float));
-    conn.layer->diff_variance = (float *)calloc(conn.dst_tensor.c, sizeof(float));
+    channels = net->nodes[conn.dst[0]].tensor.c;
+    conn.layer->mean = (float *)calloc(channels, sizeof(float));
+    conn.layer->variance = (float *)calloc(channels, sizeof(float));
+    conn.layer->global_mean = (float *)calloc(channels, sizeof(float));
+    conn.layer->global_variance = (float *)calloc(channels, sizeof(float));
+    conn.layer->diff_mean = (float *)calloc(channels, sizeof(float));
+    conn.layer->diff_variance = (float *)calloc(channels, sizeof(float));
     conn.layer->x_norm = (float *)calloc(sz, sizeof(float));
     conn.layer->bn_workspace = (float *)calloc(sz, sizeof(float));
-    conn.layer->bn_scale = (float *)calloc(conn.dst_tensor.c, sizeof(float));
-    for (i = 0; i < conn.dst_tensor.c; ++i) {
+    conn.layer->bn_scale = (float *)calloc(channels, sizeof(float));
+    for (i = 0; i < channels; ++i) {
         conn.layer->bn_scale[i] = 1.0f;
     }
-    conn.layer->bn_scale_diff = (float *)calloc(conn.dst_tensor.c, sizeof(float));
-    conn.layer->bias = (float *)calloc(conn.dst_tensor.c, sizeof(float));
-    conn.layer->bias_diff = (float *)calloc(conn.dst_tensor.c, sizeof(float));
+    conn.layer->bn_scale_diff = (float *)calloc(channels, sizeof(float));
+    conn.layer->bias = (float *)calloc(channels, sizeof(float));
+    conn.layer->bias_diff = (float *)calloc(channels, sizeof(float));
 #ifdef BCNN_USE_CUDA
-    conn.dst_tensor.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.data, sz);
-    conn.dst_tensor.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.grad_data, sz);
-    conn.layer->mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->mean, conn.dst_tensor.c);
-    conn.layer->variance_gpu = bcnn_cuda_memcpy_f32(conn.layer->variance, conn.dst_tensor.c);
-    conn.layer->global_mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->global_mean, conn.dst_tensor.c);
-    conn.layer->global_variance_gpu = bcnn_cuda_memcpy_f32(conn.layer->global_variance, conn.dst_tensor.c);
-    conn.layer->diff_mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->diff_mean, conn.dst_tensor.c);
-    conn.layer->diff_variance_gpu = bcnn_cuda_memcpy_f32(conn.layer->diff_variance, conn.dst_tensor.c);
-    conn.layer->x_norm_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.data, sz);
+    //conn.dst_tensor.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.data, sz);
+    //conn.dst_tensor.grad_data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.grad_data, sz);
+    conn.layer->mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->mean, channels);
+    conn.layer->variance_gpu = bcnn_cuda_memcpy_f32(conn.layer->variance, channels);
+    conn.layer->global_mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->global_mean, channels);
+    conn.layer->global_variance_gpu = bcnn_cuda_memcpy_f32(conn.layer->global_variance, channels);
+    conn.layer->diff_mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->diff_mean, channels);
+    conn.layer->diff_variance_gpu = bcnn_cuda_memcpy_f32(conn.layer->diff_variance, channels);
+    conn.layer->x_norm_gpu = bcnn_cuda_memcpy_f32(net->nodes[conn.dst[0]].tensor.data, sz);
     conn.layer->bn_workspace_gpu = bcnn_cuda_memcpy_f32(conn.layer->bn_workspace, sz);
-    conn.layer->bn_scale_gpu = bcnn_cuda_memcpy_f32(conn.layer->bn_scale, conn.dst_tensor.c);
-    conn.layer->bn_scale_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bn_scale_diff, conn.dst_tensor.c);
-    conn.layer->bias_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias, conn.dst_tensor.c);
-    conn.layer->bias_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias_diff, conn.dst_tensor.c);
+    conn.layer->bn_scale_gpu = bcnn_cuda_memcpy_f32(conn.layer->bn_scale, channels);
+    conn.layer->bn_scale_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bn_scale_diff, channels);
+    conn.layer->bias_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias, channels);
+    conn.layer->bias_diff_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias_diff, channels);
 #ifdef BCNN_USE_CUDNN
     bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->src_tensor_desc)); // same desc for x, dx, dy
     bcnn_cudnn_check(cudnnCreateTensorDescriptor(&conn.layer->dst_tensor_desc)); 
     bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->src_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-        conn.dst_tensor.b, conn.dst_tensor.c, conn.dst_tensor.h, conn.dst_tensor.w)); 
-    bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, conn.dst_tensor.c, 1, 1)); 
+        net->nodes[conn.dst[0]].tensor.n, channels, net->nodes[conn.dst[0]].tensor.h, net->nodes[conn.dst[0]].tensor.w)); 
+    bcnn_cudnn_check(cudnnSetTensor4dDescriptor(conn.layer->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+        1, channels, 1, 1)); 
 #endif
 #endif
-    net->nb_connections = nb_connections;
+
+    // Add connection to net
     bcnn_net_add_connection(net, conn);
 
     bh_log_info("[Batchnorm] input_shape= %dx%dx%d output_shape= %dx%dx%d",
-        conn.src_tensor.w, conn.src_tensor.h, conn.src_tensor.c,
-        conn.dst_tensor.w, conn.dst_tensor.h, conn.dst_tensor.c);
+        net->nodes[conn.src[0]].tensor.w, net->nodes[conn.src[0]].tensor.h, net->nodes[conn.src[0]].tensor.c,
+        net->nodes[conn.dst[0]].tensor.w, net->nodes[conn.dst[0]].tensor.h, net->nodes[conn.dst[0]].tensor.c);
 
     return BCNN_SUCCESS;
 }
@@ -143,19 +152,20 @@ static void _norm_forward(float *x, float *mean, float *variance, int b, int c, 
     }
 }
 
-
-int bcnn_forward_batchnorm_layer_cpu(bcnn_connection *conn)
+//int bcnn_forward_batchnorm_layer_cpu(bcnn_connection *conn)
+int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer,
+                    bcnn_node *src_node,
+                    bcnn_node *dst_node)
 {
-    bcnn_layer *layer = conn->layer;
-    bcnn_tensor src = conn->src_tensor;
-    bcnn_tensor dst = conn->dst_tensor;
-    int batch_size = src.b;
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
+    int batch_size = src.n;
     int sz = dst.w * dst.h * dst.c;
     
     bcnn_copy_f32(sz * batch_size, src.data, dst.data);
     bcnn_copy_f32(sz * batch_size, dst.data, layer->bn_workspace);
 
-    if (conn->state) {
+    if (layer->net_state) {
         _mean_variance_forward(dst.data, batch_size, dst.c, dst.h * dst.w, layer->mean, layer->variance);
 
         bcnn_scal(dst.c, 0.9f, layer->global_mean);
@@ -163,7 +173,7 @@ int bcnn_forward_batchnorm_layer_cpu(bcnn_connection *conn)
         bcnn_scal(dst.c, 0.9f, layer->global_variance);
         bcnn_axpy(dst.c, 0.1f, layer->variance, layer->global_variance);
         
-        _norm_forward(dst.data, layer->mean, layer->variance, batch_size, dst.c, dst.h * dst.w);   
+        _norm_forward(dst.data, layer->mean, layer->variance, batch_size, dst.c, dst.h * dst.w);
         bcnn_copy_f32(batch_size * sz, dst.data, layer->x_norm);
     }
     else {
@@ -207,15 +217,14 @@ static void _normalize_backward(float *x, float *mean, float *var, float *mean_d
     }
 }
 
-int bcnn_backward_batchnorm_layer_cpu(bcnn_connection *conn)
+int bcnn_backward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
 {
-    bcnn_layer *layer = conn->layer;
-    bcnn_tensor src = conn->src_tensor;
-    bcnn_tensor dst = conn->dst_tensor;
-    int batch_size = src.b;
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
+    int batch_size = src.n;
     int sz = dst.w * dst.h * dst.c;
     
-    if (!conn->state) {
+    if (!layer->net_state) {
         layer->mean = layer->global_mean;
         layer->variance = layer->global_variance;
     }
@@ -230,20 +239,24 @@ int bcnn_backward_batchnorm_layer_cpu(bcnn_connection *conn)
 }
 
 
-int bcnn_forward_batchnorm_layer(bcnn_connection *conn)
+int bcnn_forward_batchnorm_layer(bcnn_net *net, bcnn_connection *conn)
 {
+    bcnn_node *src = &net->nodes[conn->src[0]];
+    bcnn_node *dst = &net->nodes[conn->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_batchnorm_layer_gpu(conn);
+    return bcnn_forward_batchnorm_layer_gpu(conn->layer, src, dst);
 #else
-    return bcnn_forward_batchnorm_layer_cpu(conn);
+    return bcnn_forward_batchnorm_layer_cpu(conn->layer, src, dst);
 #endif
 }
 
-int bcnn_backward_batchnorm_layer(bcnn_connection *conn)
+int bcnn_backward_batchnorm_layer(bcnn_net *net, bcnn_connection *conn)
 {
+    bcnn_node *src = &net->nodes[conn->src[0]];
+    bcnn_node *dst = &net->nodes[conn->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_batchnorm_layer_gpu(conn);
+    return bcnn_backward_batchnorm_layer_gpu(conn->layer, src, dst);
 #else
-    return bcnn_backward_batchnorm_layer_cpu(conn);
+    return bcnn_backward_batchnorm_layer_cpu(conn->layer, src, dst);
 #endif	
 }

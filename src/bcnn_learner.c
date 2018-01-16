@@ -36,7 +36,7 @@
 
 static float bcnn_update_learning_rate(bcnn_net *net)
 {
-    int iter = net->seen / net->input_node.b;
+    int iter = net->seen / net->batch_size;
 
     switch (net->learner.policy) {
         case CONSTANT:
@@ -143,7 +143,7 @@ int bcnn_update(bcnn_net *net)
                 type == DEPTHWISE_CONV ||
                 type == FULL_CONNECTED)) {
                 bcnn_sgd_optimizer(&net->connections[i],
-                        net->input_node.b, lr, net->learner.momentum, net->learner.decay);
+                        net->batch_size, lr, net->learner.momentum, net->learner.decay);
             }
         }
     }
@@ -154,7 +154,7 @@ int bcnn_update(bcnn_net *net)
                 type == DECONVOLUTIONAL || 
                 type == DEPTHWISE_CONV ||
                 type == FULL_CONNECTED)) {
-                bcnn_adam_optimizer(&net->connections[i], net->seen, net->input_node.b, net->learner.beta1, net->learner.beta2,
+                bcnn_adam_optimizer(&net->connections[i], net->seen, net->batch_size, net->learner.beta1, net->learner.beta2,
                     lr, net->learner.momentum, net->learner.decay);
             }
         }

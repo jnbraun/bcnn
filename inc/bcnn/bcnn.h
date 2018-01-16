@@ -59,7 +59,10 @@ extern "C" {
 #endif
 #endif
 
+#include "bh/bh.h"
 #include "bh/bh_error.h"
+
+#include "bcnn_tensor.h"
 
 #if defined(__GNUC__) || (defined(_MSC_VER) && (_MSC_VER >= 1600))
 #include <stdint.h>
@@ -232,7 +235,7 @@ typedef struct {
     bcnn_lr_policy  policy;                 /**< Learning rate policy */
 } bcnn_learner;
 
-
+#if 1
 /**
  * \brief Enum of available layers types.
  */
@@ -249,7 +252,9 @@ typedef enum {
     CONCAT,
     COST
 } bcnn_layer_type;
+#endif
 
+#if 1
 /**
  * \brief Enum of available activations functions (non-linearities).
  */
@@ -263,6 +268,7 @@ typedef enum {
     ABS,
     CLAMP
 } bcnn_activation;
+#endif
 
 /**
  * \brief Enum of available weight inializations modes.
@@ -311,6 +317,7 @@ typedef struct {
 
 
 /* Experimental */
+#if 0
 typedef struct {
     int     b;              /**< Batch size */
     int     w;
@@ -323,16 +330,25 @@ typedef struct {
     float   *grad_data_gpu;
 #endif
 } bcnn_tensor;
+#endif
 
+typedef struct {
+    bcnn_tensor tensor;
+    char        *id;
+    int         mem_chunk_id;           // reserved for memory manager handle
+} bcnn_node;
+
+#if 1
 /**
 * \brief Structure defining a generic layer.
 */
-typedef struct {
+typedef struct bcnn_layer {
     int                 num;
     int                 size;
     int                 stride;
     int                 pad;
     int                 quantize;
+    int                 net_state;
     bcnn_layer_type     type;
     bcnn_activation     activation;
     bcnn_loss_metric    loss_metric;
@@ -409,8 +425,17 @@ typedef struct {
     cudnnConvolutionBwdFilterAlgo_t     bwd_filter_algo;
 #endif
 #endif
+    void (*setup)(struct bcnn_layer *l);
+    void (*forward)(struct bcnn_layer *l,
+                    bcnn_node *src_nodes, int num_src_nodes,
+                    bcnn_node *dst_nodes, int num_dst_nodes);
+    void (*backward)(struct bcnn_layer *l,
+                    bcnn_node *src_nodes, int num_src_nodes,
+                    bcnn_node *dst_nodes, int num_dst_nodes);
 } bcnn_layer;
+#endif
 
+#if 0
 /**
 * \brief Structure handling the network architecture and generic parameters.
 */
@@ -425,7 +450,49 @@ typedef struct {
     float           *label_gpu;
 #endif
 } bcnn_connection;
+#endif
 
+
+
+typedef struct {
+    int             state;
+    int             num_src;
+    int             *src;         // 'num_src' nodes indexes (net->nodes array)
+    int             num_dst;
+    int             *dst;         // 'num_dst' nodes indexes (net->nodes array)
+    bcnn_layer      *layer;
+} bcnn_connection;
+
+
+typedef struct {
+    int                 input_width;
+    int                 input_height;
+    int                 input_channels;
+    int                 batch_size;
+    int                 max_batches;        /**< Maximum number of batches during training (=iterations) */ 
+    bcnn_loss_metric    loss_metric;        /**< Loss metric for evaluation */
+    bcnn_learner        learner;            /**< Learner/optimizer parameters */
+    int                 seen;               /**< Number of instances seen by the network */
+    int                 nb_connections;
+    bcnn_connection     *connections;
+    int                 num_nodes;          /**< Number of nodes hold in the network */
+    bcnn_node           *nodes;             /**< Array of nodes hold in the network */
+    bcnn_target         prediction_type;
+    bcnn_data_augment   data_aug;           /**< Parameters for online data augmentation */
+    bcnn_task           task;
+    int                 state;
+    int                 nb_finetune;
+    char                **finetune_id;
+    unsigned char       *input_buffer;
+    int                 workspace_size;
+    float               *workspace;
+#ifdef BCNN_USE_CUDA
+    float               *workspace_gpu;
+#endif
+} bcnn_net;
+
+
+#if 0
 /**
 * \brief Structure handling the network architecture and generic parameters.
 */
@@ -450,15 +517,34 @@ typedef struct {
     float               *workspace_gpu;
 #endif
 } bcnn_net;
+#endif
+
+static bh_inline int bh_strfill(char **option, char *argv)
+{
+    size_t length;
+    bh_free(*option);
+    length = strlen(argv) + 1;
+    *option = (char *)calloc(length, sizeof(char));
+    memcpy(*option, argv, length);
+    return 0;
+}
 
 /* Define for binarized layers */
 #define BITS_IN_CHAR 8
 #define BITS_IN_UINT32 (sizeof(uint32_t) * BITS_IN_CHAR)
 #define BIT_SET(var, pos, val) var |= (val << pos)
 
-int bcnn_net_add_connection(bcnn_net *net, bcnn_connection conn);
+void bcnn_net_set_input_shape(bcnn_net *net,
+    int input_width, int input_height, int input_channels, int batch_size);
 
-int bcnn_get_tensor_size(bcnn_tensor *tensor);
+void bcnn_net_add_connection(bcnn_net *net, bcnn_connection conn);
+int bcnn_free_connection(bcnn_connection *conn);
+
+void bcnn_net_add_node(bcnn_net *net, bcnn_node node);
+void bcnn_net_free_nodes(bcnn_net *net);
+
+void bcnn_connection_add_src_node(bcnn_connection *conn, int index);
+void bcnn_connection_add_dst_node(bcnn_connection *conn, int index);
 
 int bcnn_init_net(bcnn_net **net);
 int bcnn_end_net(bcnn_net **net);
@@ -522,63 +608,66 @@ int bcnn_realloc(bcnn_net *net, int nb_layers);
 
 /* Conv layer */
 int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride, int pad,
-    int batch_norm, bcnn_weights_init init, bcnn_activation activation, int quantize, char *id);
-int bcnn_forward_conv_layer(bcnn_connection *conn);
-int bcnn_backward_conv_layer(bcnn_connection *conn);
+    int batch_norm, bcnn_weights_init init, bcnn_activation activation, int quantize,
+    char *src_id, char *dst_id);
+int bcnn_forward_conv_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_conv_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Deconv layer */
 int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride, int pad,
-    bcnn_weights_init init, bcnn_activation activation, char *id);
-int bcnn_forward_deconv_layer(bcnn_connection *conn);
-int bcnn_backward_deconv_layer(bcnn_connection *conn);
+    bcnn_weights_init init, bcnn_activation activation, char *src_id, char *dst_id);
+int bcnn_forward_deconv_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_deconv_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Depthwise separable conv layer */
 int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride, int pad,
-    int batch_norm, bcnn_weights_init init, bcnn_activation activation, char *id);
-int bcnn_forward_depthwise_sep_conv_layer(bcnn_connection *conn);
-int bcnn_backward_depthwise_sep_conv_layer(bcnn_connection *conn);
+    int batch_norm, bcnn_weights_init init, bcnn_activation activation, char *src_id, char *dst_id);
+int bcnn_forward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Batchnorm layer */
-int bcnn_add_batchnorm_layer(bcnn_net *net, char *id);
-int bcnn_forward_batchnorm_layer(bcnn_connection *conn);
-int bcnn_backward_batchnorm_layer(bcnn_connection *conn);
+int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id);
+int bcnn_forward_batchnorm_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_batchnorm_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Full-connected layer */
-int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation, int quantize, char *id);
-int bcnn_forward_fullc_layer(bcnn_connection *conn);
-int bcnn_backward_fullc_layer(bcnn_connection *conn);
+int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation,
+    int quantize, char *src_id, char *dst_id);
+int bcnn_forward_fullc_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_fullc_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Activation layer */
 int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id);
 int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a);
-int bcnn_forward_activation_layer(bcnn_connection *conn);
+int bcnn_forward_activation_layer(bcnn_net *net, bcnn_connection *conn);
 int bcnn_backward_activation_cpu(float *x, float *dx, int sz, bcnn_activation a);
-int bcnn_backward_activation_layer(bcnn_connection *conn);
+int bcnn_backward_activation_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Softmax layer */
-int bcnn_add_softmax_layer(bcnn_net *net, char *id);
-int bcnn_forward_softmax_layer(bcnn_connection *conn);
-int bcnn_backward_softmax_layer(bcnn_connection *conn);
+int bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id);
+int bcnn_forward_softmax_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_softmax_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Pooling layer */
-int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *id);
-int bcnn_forward_maxpool_layer(bcnn_connection *conn);
-int bcnn_backward_maxpool_layer(bcnn_connection *conn);
+int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *src_id, char *dst_id);
+int bcnn_forward_maxpool_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_maxpool_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Concat layer */
-int bcnn_add_concat_layer(bcnn_net *net, char *concat, char *id);
+int bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2, char *dst_id);
 int bcnn_forward_concat_layer(bcnn_net *net, bcnn_connection *conn);
 int bcnn_backward_concat_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Dropout layer */
 int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id);
-int bcnn_forward_dropout_layer(bcnn_connection *conn);
-int bcnn_backward_dropout_layer(bcnn_connection *conn);
+int bcnn_forward_dropout_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_dropout_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Cost layer */
-int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric loss_metric, float scale);
-int bcnn_forward_cost_layer(bcnn_connection *conn);
-int bcnn_backward_cost_layer(bcnn_connection *conn);
+int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric loss_metric, float scale,
+    char *src_id, char *label_id, char *dst_id);
+int bcnn_forward_cost_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_cost_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Core network routines */
 int bcnn_update(bcnn_net *net);
@@ -710,29 +799,29 @@ int bcnn_forward_bias_gpu(float *output, float *biases, int batch_size, int n, i
 int bcnn_backward_bias_gpu(float *bias_diff, float *diff, int batch_size, int n, int size);
 
 int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a);
-int bcnn_forward_activation_layer_gpu(bcnn_connection *conn);
+int bcnn_forward_activation_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
 int bcnn_backward_activation_gpu(float *x, float *dx, int sz, bcnn_activation a);
-int bcnn_backward_activation_layer_gpu(bcnn_connection *conn);
-int bcnn_forward_conv_layer_gpu(bcnn_connection *conn);
-int bcnn_backward_conv_layer_gpu(bcnn_connection *conn);
-int bcnn_forward_deconv_layer_gpu(bcnn_connection *conn);
-int bcnn_backward_deconv_layer_gpu(bcnn_connection *conn);
-int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_connection *conn);
-int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_connection *conn);
-int bcnn_forward_concat_layer_gpu(bcnn_net *net, bcnn_connection *conn);
-int bcnn_backward_concat_layer_gpu(bcnn_net *net, bcnn_connection *conn);
-int bcnn_forward_fullc_layer_gpu(bcnn_connection *conn);
-int bcnn_backward_fullc_layer_gpu(bcnn_connection *conn);
-int bcnn_forward_maxpool_layer_gpu(bcnn_connection *conn);
-int bcnn_backward_maxpool_layer_gpu(bcnn_connection *conn);
-int bcnn_forward_dropout_layer_gpu(bcnn_connection *conn);
-int bcnn_backward_dropout_layer_gpu(bcnn_connection *conn);
-int bcnn_forward_softmax_layer_gpu(bcnn_connection *conn);
-int bcnn_backward_softmax_layer_gpu(bcnn_connection *conn);
-int bcnn_forward_batchnorm_layer_gpu(bcnn_connection *conn);
-int bcnn_backward_batchnorm_layer_gpu(bcnn_connection *conn);
-int bcnn_forward_cost_layer_gpu(bcnn_connection *conn);
-int bcnn_backward_cost_layer_gpu(bcnn_connection *conn);
+int bcnn_backward_activation_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_forward_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_forward_deconv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_backward_deconv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_forward_concat_layer_gpu(bcnn_node *src0_node, bcnn_node *src1_node, bcnn_node *dst_node);
+int bcnn_backward_concat_layer_gpu(bcnn_node *src0_node, bcnn_node *src1_node, bcnn_node *dst_node);
+int bcnn_forward_fullc_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_backward_fullc_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_forward_maxpool_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_backward_maxpool_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_forward_dropout_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_backward_dropout_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_forward_softmax_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_backward_softmax_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_backward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+int bcnn_forward_cost_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *label_node, bcnn_node *dst_node);
+int bcnn_backward_cost_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
 #endif
 
 

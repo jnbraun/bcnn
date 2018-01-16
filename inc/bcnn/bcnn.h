@@ -86,11 +86,6 @@ typedef signed __int64    int64_t;
 typedef unsigned __int64  uint64_t;
 #endif
 
-/*typedef struct bcnn_context {
-    bh_logctx *log_hdl;
-} bcnn_context;*/
-
-//typedef struct bcnn_context *bcnn_context_handle;
 
 /**
 * \brief Enum of error codes.
@@ -156,14 +151,6 @@ typedef enum {
     LABEL_FLOAT,
     LABEL_IMG
 } bcnn_label_type;
-
-typedef struct {
-    int			n_samples;
-    int			width;
-    int			label_width;
-    bcnn_label_type		label_type;
-    unsigned char		*data;
-} bcnn_data;
 
 /**
  * \brief Structure for online data augmentation parameters.
@@ -235,7 +222,7 @@ typedef struct {
     bcnn_lr_policy  policy;                 /**< Learning rate policy */
 } bcnn_learner;
 
-#if 1
+
 /**
  * \brief Enum of available layers types.
  */
@@ -252,9 +239,9 @@ typedef enum {
     CONCAT,
     COST
 } bcnn_layer_type;
-#endif
 
-#if 1
+
+
 /**
  * \brief Enum of available activations functions (non-linearities).
  */
@@ -268,7 +255,7 @@ typedef enum {
     ABS,
     CLAMP
 } bcnn_activation;
-#endif
+
 
 /**
  * \brief Enum of available weight inializations modes.
@@ -297,48 +284,13 @@ typedef enum {
     COST_DICE           /**< Sørensen–Dice index: metric for image segmentation */
 } bcnn_loss_metric;
 
-/**
- * \brief Structure for handling the current workload through the network (data batch).
- */
-typedef struct {
-    float	*input;
-    float	*input2;
-    float	*truth;
-#ifdef BCNN_USE_CUDA
-    float	*input_gpu;
-    float	*input2_gpu;
-    float	*truth_gpu;
-#endif
-    float	*diff;
-    float	*diff2;
-    int		train;
-    int		batch_size;
-} bcnn_workload;
-
-
-/* Experimental */
-#if 0
-typedef struct {
-    int     b;              /**< Batch size */
-    int     w;
-    int     h;
-    int     c;
-    float   *data;
-    float   *grad_data;
-#ifdef BCNN_USE_CUDA
-    float   *data_gpu;
-    float   *grad_data_gpu;
-#endif
-} bcnn_tensor;
-#endif
-
 typedef struct {
     bcnn_tensor tensor;
     char        *id;
     int         mem_chunk_id;           // reserved for memory manager handle
 } bcnn_node;
 
-#if 1
+
 /**
 * \brief Structure defining a generic layer.
 */
@@ -426,7 +378,7 @@ typedef struct bcnn_layer {
 #endif
 #endif
 } bcnn_layer;
-#endif
+
 
 
 typedef struct {
@@ -500,51 +452,15 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val);
 
 int bcnn_compile_net(bcnn_net *net, char *phase);
 
-//int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *path_label);
-//int bcnn_free_mnist_iterator(bcnn_iterator *iter);
-
 int bcnn_init_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input, char *path_label, char *type);
 int bcnn_advance_iterator(bcnn_net *net, bcnn_iterator *iter);
 int bcnn_free_iterator(bcnn_iterator *iter);
 
-//int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input);
-//int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter);
 
 /* Load / Write model */
 int bcnn_load_model(bcnn_net *net, char *filename);
 int bcnn_write_model(bcnn_net *net, char *filename);
 
-/* Matrix computation routines */
-int bcnn_fill_f32(int n, float a, float *x);
-int bcnn_copy_f32(int n, float *x, float *y);
-int bcnn_axpy(int n, float a, float *x, float *y);
-int bcnn_scal(int n, float a, float *x);
-int bcnn_add_scalar(int n, float a, float *x);
-int bcnn_pow(int n, float *x, float a, float *y);
-float bcnn_dot(int n, float *x, float *y);
-int bcnn_vsum(int n, float *x, float *sum);
-int bcnn_vadd(int n, float *a, float *b, float *y);
-int bcnn_vsub(int n, float *a, float *b, float *y);
-int bcnn_vdiv(int n, float *a, float *b, float *y);
-int bcnn_vmul(int n, float *a, float *b, float *y);
-int bcnn_axpby(int n, float a, float *x, float b, float *y);
-int bcnn_gemv(int trans_a, int m, int n, float alpha, float *a, float *x,
-    float beta, float *y);
-int bcnn_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
-    float *A, int lda,
-    float *B, int ldb,
-    float BETA,
-    float *C, int ldc);
-int bcnn_xnor_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
-                        uint32_t *A, int lda,
-                        uint32_t *B, int ldb,
-                        float BETA,
-                        float *C, int ldc);
-float bcnn_l2_distance(float *x, float *y, int n);
-float bcnn_sqrdiff_vs(float *x, float a, int n);
-float bcnn_shiftdot(int n, float *x, float a, float *y, float b);
-int bcnn_varnorm(int n, float *a, float c, float *y);
-int bcnn_varmean(int n, float *m, float a, float *var);
 
 int bcnn_init_workload(bcnn_net *net);
 int bcnn_free_workload(bcnn_net *net);
@@ -708,39 +624,6 @@ void bcnn_cuda_memcpy_dev2host(float *x_gpu, float *x, int n);
 
 /* Wrapper to cudaSetDevice */
 void bcnn_cuda_set_device(int id);
-
-/* Math routines */
-void bcnn_cuda_gemm(int trans_a, int trans_b, int m, int n, int k, float alpha,
-    float *a, int lda,
-    float *b, int ldb,
-    float beta,
-    float *c, int ldc);
-void bcnn_cuda_gemv(int trans_a, const int m,
-    const int n, const float alpha, const float *a, const float *x,
-    const float beta, float *y);
-void bcnn_cuda_fill_f32(int n, float alpha, float *x, int incx);
-void bcnn_cuda_copy_f32(int n, float * x, int incx, float * y, int incy);
-void bcnn_cuda_axpy(int n, float alpha, float *x, int incx, float *y, int incy);
-void bcnn_cuda_scal(int n, float alpha, float *x, int incx);
-void bcnn_cuda_pow(int n, float *x, float a, float *y);
-void bcnn_cuda_axpby(int n, float a, float *x, float b, float *y);
-void bcnn_cuda_add_scalar(int n, float a, float* y);
-void bcnn_cuda_vadd(int n, float *a, float *b, float *y);
-void bcnn_cuda_vsub(int n, float *a, float *b, float *y);
-void bcnn_cuda_vmul(int n, float *a, float *b, float *y);
-void bcnn_cuda_vdiv(int n, float *a, float *b, float *y);
-
-void bcnn_cuda_mean_variance_forward(float *x, int b, int c, int wxh, float *mean, float *var);
-void bcnn_cuda_norm_forward(float *x, float *mean, float *variance, int b, int c, int wxh);
-void bcnn_cuda_mean_variance_backward(float *x, float *grad, float *mean, float *var, int b, int c, int wxh, float *mean_diff, float *var_diff);
-void bcnn_cuda_norm_backward(float *x, float *mean, float *var, float *mean_diff, float *var_diff, int b, int c, int wxh, float *grad);
-
-void bcnn_im2col_gpu(float *im,
-    int channels, int height, int width,
-    int ksize, int stride, int pad, float *data_col);
-void bcnn_col2im_gpu(float *data_col,
-    int channels, int height, int width,
-    int ksize, int stride, int pad, float *data_im);
 
 int bcnn_forward_bias_gpu(float *output, float *biases, int batch_size, int n, int size);
 int bcnn_backward_bias_gpu(float *bias_diff, float *diff, int batch_size, int n, int size);

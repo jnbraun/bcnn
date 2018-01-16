@@ -23,6 +23,7 @@
 
 #ifdef BCNN_USE_CUDA
 
+#include "bcnn_mat.h"
 #include "bcnn/bcnn.h"
 
 void bcnn_cuda_gemm(int TA, int TB, int M, int N, int K, float ALPHA, 

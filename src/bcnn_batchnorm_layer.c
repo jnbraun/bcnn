@@ -21,6 +21,7 @@
 */
 
 #include "bcnn/bcnn.h"
+#include "bcnn_mat.h"
 
 #include <bh/bh_error.h>
 #include <bh/bh_mem.h>

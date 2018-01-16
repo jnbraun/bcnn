@@ -21,6 +21,7 @@
 */
 
 #include "bcnn/bcnn.h"
+#include "bcnn_mat.h"
 
 #ifdef BCNN_USE_BLAS
 #include "cblas.h"

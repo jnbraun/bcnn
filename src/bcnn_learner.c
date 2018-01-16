@@ -31,7 +31,7 @@
 #include <bip/bip.h>
 
 #include "bcnn/bcnn.h"
-
+#include "bcnn_mat.h"
 
 
 static float bcnn_update_learning_rate(bcnn_net *net)

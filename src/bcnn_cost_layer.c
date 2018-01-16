@@ -24,6 +24,7 @@
 #include <bh/bh_mem.h>
 
 #include "bcnn/bcnn.h"
+#include "bcnn_mat.h"
 #include "bh_log.h"
 
 int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric loss_metric, float scale,

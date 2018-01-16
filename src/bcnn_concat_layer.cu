@@ -24,6 +24,7 @@
 #ifdef BCNN_USE_CUDA
 
 #include "bcnn/bcnn.h"
+#include "bcnn_mat.h"
 
 int bcnn_forward_concat_layer_gpu(bcnn_node *src0_node, bcnn_node *src1_node,
     bcnn_node *dst_node)

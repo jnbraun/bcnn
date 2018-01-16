@@ -24,6 +24,7 @@
 #ifdef BCNN_USE_CUDA
 
 #include "bcnn/bcnn.h"
+#include "bcnn_mat.h"
 
 int bcnn_forward_fullc_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
 {

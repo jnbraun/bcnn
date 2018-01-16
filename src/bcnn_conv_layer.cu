@@ -23,8 +23,9 @@
 
 #ifdef BCNN_USE_CUDA
 
-#include "bcnn/bcnn.h"
 #include <bh/bh_timer.h>
+#include "bcnn/bcnn.h"
+#include "bcnn_mat.h"
 
 bh_inline int bcnn_cuda_blocks(int n)
 {

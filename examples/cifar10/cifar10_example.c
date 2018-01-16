@@ -42,16 +42,15 @@ int create_network(bcnn_net *net)
     net->max_batches = 50000;
 
     bcnn_net_set_input_shape(net, 28, 28, 3, 128);
-    fprintf(stderr, "r0\n");
+    
     bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "input", "conv1_1");
-    fprintf(stderr, "r01\n");
     bcnn_add_batchnorm_layer(net, "conv1_1", "bn1_1");
     bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "bn1_1", "conv1_2");
     bcnn_add_batchnorm_layer(net, "conv1_2", "bn1_2");
     bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "bn1_2", "conv1_3");
     bcnn_add_batchnorm_layer(net, "conv1_3", "bn1_3");
     bcnn_add_maxpool_layer(net, 2, 2, "bn1_3", "pool1");
-    fprintf(stderr, "r1\n");
+
     bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "pool1", "conv2_1");
     bcnn_add_batchnorm_layer(net, "conv2_1", "bn2_1");
     bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "bn2_1", "conv2_2");

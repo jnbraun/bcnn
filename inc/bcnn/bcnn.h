@@ -364,12 +364,8 @@ typedef struct bcnn_layer {
 #ifdef BCNN_USE_CUDNN
     cudnnTensorDescriptor_t             src_tensor_desc;
     cudnnTensorDescriptor_t             dst_tensor_desc;
-    cudnnTensorDescriptor_t             src_tensor_desc_diff;
-    cudnnTensorDescriptor_t             dst_tensor_desc_diff;
     cudnnFilterDescriptor_t             filter_desc;
-    cudnnFilterDescriptor_t             filter_desc_diff;
     cudnnTensorDescriptor_t             bias_desc;
-    cudnnTensorDescriptor_t             bias_desc_diff;
     cudnnConvolutionDescriptor_t        conv_desc;
     cudnnPoolingDescriptor_t            pooling_desc;
     cudnnConvolutionFwdAlgo_t           fwd_algo;

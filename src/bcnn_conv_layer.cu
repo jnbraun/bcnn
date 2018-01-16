@@ -287,28 +287,28 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_no
                                             &one,
                                             layer->src_tensor_desc,
                                             src.data_gpu,
-                                            layer->dst_tensor_desc_diff,
+                                            layer->dst_tensor_desc,
                                             dst.grad_data_gpu,
                                             layer->conv_desc,
                                             layer->bwd_filter_algo,
                                             layer->conv_workspace_gpu,
                                             layer->workspace_size,
                                             &one,
-                                            layer->filter_desc_diff,
+                                            layer->filter_desc,
                                             layer->weight_diff_gpu));
     if (src.grad_data_gpu) {
         bcnn_cudnn_check(cudnnConvolutionBackwardData(bcnn_cudnn_handle(),
                                             &one,
                                             layer->filter_desc,
                                             layer->weight_gpu,
-                                            layer->dst_tensor_desc_diff,
+                                            layer->dst_tensor_desc,
                                             dst.grad_data_gpu,
                                             layer->conv_desc,
                                             layer->bwd_data_algo,
                                             layer->conv_workspace_gpu,
                                             layer->workspace_size,
                                             &zero,
-                                            layer->src_tensor_desc_diff,
+                                            layer->src_tensor_desc,
                                             src.grad_data_gpu));
     }
 #else

@@ -214,8 +214,10 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
     }
     // Add cost layer
     if (strcmp(curr_layer, "{cost}") == 0) {
-        bh_check(src_id != NULL, "Invalid input node name. "
+        bh_check(src_id != NULL, "Cost layer: invalid input node name. "
             "Hint: Are you sure that 'src' field is correctly setup?");
+        bh_check(dst_id != NULL, "Cost layer: invalid input node name. "
+            "Hint: Are you sure that 'dst' field is correctly setup?");
         bcnn_add_cost_layer(net, cost, 1.0f, src_id, "label", dst_id);
     }
     else {

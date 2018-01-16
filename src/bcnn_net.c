@@ -550,8 +550,9 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter)
             //bcnn_mnist_next_iter(net, iter);
             bcnn_advance_iterator(net, iter);
             // Data augmentation
-            if (net->task == TRAIN && net->state)
+            if (net->task == TRAIN && net->state) {
                 bcnn_data_augmentation(iter->input_uchar, iter->input_width, iter->input_height, iter->input_depth, param, img_tmp);
+            }
             //bip_write_image("test.png", iter->input_uchar, iter->input_width, iter->input_height, iter->input_depth, iter->input_width * iter->input_depth);
             if (w_in < iter->input_width || h_in < iter->input_height) {
                 bip_crop_image(iter->input_uchar, iter->input_width, iter->input_height, iter->input_width * iter->input_depth,

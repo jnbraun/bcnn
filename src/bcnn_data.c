@@ -737,6 +737,7 @@ static int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *p
     n_img = _read_int(tmp + 4);
     iter->input_height = _read_int(tmp + 8);
     iter->input_width = _read_int(tmp + 12);
+    iter->input_depth = 1;
     nr = fread(tmp, 1, 8, iter->f_label);
     n_lab = _read_int(tmp + 4);
     bh_assert(n_img == n_lab, "Inconsistent MNIST data: number of images and labels must be the same",

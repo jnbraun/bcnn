@@ -425,33 +425,8 @@ typedef struct bcnn_layer {
     cudnnConvolutionBwdFilterAlgo_t     bwd_filter_algo;
 #endif
 #endif
-    void (*setup)(struct bcnn_layer *l);
-    void (*forward)(struct bcnn_layer *l,
-                    bcnn_node *src_nodes, int num_src_nodes,
-                    bcnn_node *dst_nodes, int num_dst_nodes);
-    void (*backward)(struct bcnn_layer *l,
-                    bcnn_node *src_nodes, int num_src_nodes,
-                    bcnn_node *dst_nodes, int num_dst_nodes);
 } bcnn_layer;
 #endif
-
-#if 0
-/**
-* \brief Structure handling the network architecture and generic parameters.
-*/
-typedef struct {
-    int             state; // 1: train / 0: predict
-    bcnn_tensor     src_tensor;
-    bcnn_tensor     dst_tensor;
-    bcnn_layer      *layer;
-    float           *label;
-    char            *id;
-#ifdef BCNN_USE_CUDA
-    float           *label_gpu;
-#endif
-} bcnn_connection;
-#endif
-
 
 
 typedef struct {
@@ -490,34 +465,6 @@ typedef struct {
     float               *workspace_gpu;
 #endif
 } bcnn_net;
-
-
-#if 0
-/**
-* \brief Structure handling the network architecture and generic parameters.
-*/
-typedef struct {
-    int                 max_batches;        /**< Maximum number of batches during training (=iterations) */ 
-    bcnn_loss_metric    loss_metric;        /**< Loss metric for evaluation */
-    bcnn_learner        learner;            /**< Learner/optimizer parameters */
-    int                 seen;               /**< Number of instances seen by the network */
-    int                 nb_connections;
-    bcnn_connection     *connections;
-    bcnn_target         prediction_type;
-    bcnn_data_augment   data_aug;           /**< Parameters for online data augmentation */
-    bcnn_task           task;
-    int                 state;
-    bcnn_tensor         input_node;
-    int                 nb_finetune;
-    char                **finetune_id;
-    unsigned char       *input_buffer;
-    int                 workspace_size;
-    float               *workspace;
-#ifdef BCNN_USE_CUDA
-    float               *workspace_gpu;
-#endif
-} bcnn_net;
-#endif
 
 static bh_inline int bh_strfill(char **option, char *argv)
 {

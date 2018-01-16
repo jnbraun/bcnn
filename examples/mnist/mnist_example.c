@@ -29,7 +29,7 @@
 #include "bcnn/bcnn.h"
 
 
-int create_network(bcnn_net *net, int binarize)
+int create_network(bcnn_net *net)
 {
     net->learner.optimizer = SGD;
     net->learner.learning_rate = 0.003f;
@@ -171,17 +171,14 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
 }
 
 
-int run(char *train_img, char *train_label, char *test_img, char *test_label, int do_binarize)
+int run(char *train_img, char *train_label, char *test_img, char *test_label)
 {
     float error_train = 0.0f, error_test = 0.0f;
     bcnn_net *net = NULL;
-    //bcnn_context_handle hdl = NULL;
-    
-    //bcnn_start(&hdl, BH_LOG_DEBUG, stderr);
+
     bcnn_init_net(&net);
     bh_info("Create Network...");
-    //bh_log(hdl->log_hdl, BH_LOG_INFO, "Create Network");
-    create_network(net, do_binarize);
+    create_network(net);
 
     bh_info("Start training...");
     if (train_mnist(net, train_img, train_label, test_img, test_label, 100000, 1000, &error_train) != 0)
@@ -193,18 +190,16 @@ int run(char *train_img, char *train_label, char *test_img, char *test_label, in
 
     bcnn_end_net(&net);
 
-    //bcnn_stop(&hdl);
-
     return 0;
 }
 
 
 int main(int argc, char **argv)
 {
-    if (argc < 6) {
-        fprintf(stderr, "Usage: %s <train_img> <train_label> <test_img> <test_label> <is_binarized>\n", argv[0]);
+    if (argc < 5) {
+        fprintf(stderr, "Usage: %s <train_img> <train_label> <test_img> <test_label>\n", argv[0]);
         return -1;
     }
-    run(argv[1], argv[2], argv[3], argv[4], atoi(argv[5]));
+    run(argv[1], argv[2], argv[3], argv[4]);
     return 0;
 }

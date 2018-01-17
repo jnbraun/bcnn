@@ -71,7 +71,12 @@ float bcnn_sqrdiff_vs(float *x, float a, int n);
 float bcnn_shiftdot(int n, float *x, float a, float *y, float b);
 int bcnn_varnorm(int n, float *a, float c, float *y);
 int bcnn_varmean(int n, float *m, float a, float *var);
-
+void bcnn_add_bias(float *output, float *bias, int batch_size, int num_channels, int spatial_size);
+void bcnn_grad_bias(float *grad_bias, float *grad_data, int batch_size, int num_channels, int spatial_size);
+void bcnn_im2col(const float *data_im, const int channels, const int height, const int width,
+    const int kernel_size, const int pad, const int stride, float *data_col);
+void bcnn_col2im(const float *data_col, const int channels, const int height, const int width,
+    const int kernel, const int pad, const int stride, float *data_im);
 
 /* Cuda kernels routines */
 #ifdef BCNN_USE_CUDA
@@ -102,13 +107,6 @@ void bcnn_cuda_norm_forward(float *x, float *mean, float *variance, int b, int c
 void bcnn_cuda_mean_variance_backward(float *x, float *grad, float *mean, float *var, int b, int c, int wxh, float *mean_diff, float *var_diff);
 void bcnn_cuda_norm_backward(float *x, float *mean, float *var, float *mean_diff, float *var_diff, int b, int c, int wxh, float *grad);
 
-void bcnn_im2col_gpu(float *im,
-    int channels, int height, int width,
-    int ksize, int stride, int pad, float *data_col);
-void bcnn_col2im_gpu(float *data_col,
-    int channels, int height, int width,
-    int ksize, int stride, int pad, float *data_im);
-
 void bcnn_op_cuda_tanh(int n, float *x, float *y);
 void bcnn_op_cuda_tanh_grad(int n, float *x, float *dx);
 void bcnn_op_cuda_relu(int n, float *x, float *y);
@@ -117,6 +115,16 @@ void bcnn_op_cuda_clamp(int n, float *x, float *y);
 void bcnn_op_cuda_clamp_grad(int n, float *x, float *dx);
 void bcnn_op_cuda_ramp(int n, float *x, float *y);
 void bcnn_op_cuda_ramp_grad(int n, float *x, float *dx);
+
+void bcnn_cuda_add_bias(float *output, float *bias, int batch_size, int num_channels, int spatial_size);
+void bcnn_cuda_grad_bias(float *grad_bias, float *grad_data, int batch_size, int num_channels, int spatial_size);
+
+void bcnn_cuda_im2col(float *im,
+         int channels, int height, int width,
+         int ksize, int stride, int pad, float *data_col);
+void bcnn_cuda_col2im(float *data_col,
+        int channels, int height, int width,
+        int ksize, int stride, int pad, float *data_im);
 
 #endif
 

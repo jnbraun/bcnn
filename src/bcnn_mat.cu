@@ -381,5 +381,154 @@ void bcnn_op_cuda_clamp_grad(int n, float *x, float *dx)
     bcnn_op_cuda_clamp_grad_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, dx);
 }
 
+__global__ void bcnn_cuda_add_bias_kernel(float *output, float *bias, int num_channels, int spatial_size)
+{
+    int offset = blockIdx.x * blockDim.x + threadIdx.x;
+    int channel = blockIdx.y;
+    int batch_size = blockIdx.z;
+
+    if (offset < spatial_size)
+        output[(batch_size * num_channels + channel) * spatial_size + offset] += bias[channel];
+}
+
+void bcnn_cuda_add_bias(float *output, float *bias, int batch_size, int num_channels, int spatial_size)
+{
+    dim3 dimGrid((spatial_size - 1) / BCNN_CUDA_THREADS + 1, num_channels, batch_size);
+    dim3 dimBlock(BCNN_CUDA_THREADS, 1, 1);
+
+    bcnn_cuda_add_bias_kernel<<<dimGrid, dimBlock>>>(output, bias, num_channels, spatial_size);
+    bcnn_cuda_check(cudaPeekAtLastError());
+}
+
+__global__ void bcnn_cuda_grad_bias_kernel(float *grad_bias, float *grad_data, int num_channels, int spatial_size)
+{
+    int offset = blockIdx.x * blockDim.x + threadIdx.x;
+    int channel = blockIdx.y;
+    int batch_size = blockIdx.z;
+
+    if (offset < spatial_size)
+        grad_bias[channel] += grad_data[(batch_size * num_channels + channel) * spatial_size + offset];
+}
+
+void bcnn_cuda_grad_bias(float *grad_bias, float *grad_data, int batch_size, int num_channels, int spatial_size)
+{
+    dim3 dimGrid((spatial_size - 1) / BCNN_CUDA_THREADS + 1, num_channels, batch_size);
+    dim3 dimBlock(BCNN_CUDA_THREADS, 1, 1);
+
+    bcnn_cuda_grad_bias_kernel<<<dimGrid, dimBlock>>>(grad_bias, grad_data, num_channels, spatial_size);
+    bcnn_cuda_check(cudaPeekAtLastError());
+}
+
+
+// im2col and col2im functions from caffe
+// Reference https://github.com/BVLC/caffe/blob/master/src/caffe/util/im2col.cu
+
+__global__ void bcnn_cuda_im2col_kernel(const int n, const float* data_im,
+        const int height, const int width, const int ksize,
+        const int pad,
+        const int stride,
+        const int height_col, const int width_col,
+        float *data_col) 
+{
+    int i, j, w, h, w_out, h_index, h_out, channel_in, channel_out;
+    int h_in, w_in;
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    float *data_col_ptr = NULL;
+    const float *data_im_ptr = NULL;
+
+    for(; index < n; index += blockDim.x * gridDim.x) {
+        w_out = index % width_col;
+        h_index = index / width_col;
+        h_out = h_index % height_col;
+        channel_in = h_index / height_col;
+        channel_out = channel_in * ksize * ksize;
+        h_in = h_out * stride - pad;
+        w_in = w_out * stride - pad;
+        data_col_ptr = data_col;
+        data_col_ptr += (channel_out * height_col + h_out) * width_col + w_out;
+        data_im_ptr = data_im;
+        data_im_ptr += (channel_in * height + h_in) * width + w_in;
+        for (i = 0; i < ksize; ++i) {
+            for (j = 0; j < ksize; ++j) {
+                h = h_in + i;
+                w = w_in + j;
+                *data_col_ptr = (h >= 0 && w >= 0 && h < height && w < width) ?
+                    data_im_ptr[i * width + j] : 0;
+                data_col_ptr += height_col * width_col;
+            }
+        }
+    }
+}
+
+void bcnn_cuda_im2col(float *im,
+         int channels, int height, int width,
+         int ksize, int stride, int pad, float *data_col)
+{
+    pad = pad ? ksize/2 : 0;
+    int height_col = (height + 2 * pad - ksize) / stride + 1;
+    int width_col = (width + 2 * pad - ksize) / stride + 1;
+    int num_kernels = channels * height_col * width_col;
+    bcnn_cuda_im2col_kernel<<<(num_kernels + BCNN_CUDA_THREADS - 1) / BCNN_CUDA_THREADS, BCNN_CUDA_THREADS>>>(
+                            num_kernels, im, height, width, ksize, pad,
+                            stride, height_col,
+                            width_col, data_col);
+}
+
+
+__global__ void bcnn_cuda_col2im_kernel(const int n, const float* data_col,
+        const int height, const int width, const int ksize,
+        const int pad,
+        const int stride,
+        const int height_col, const int width_col,
+        float *data_im)
+{
+    int w, h, c, w_col_start, w_col_end, h_col_start, h_col_end;
+    int offset, coeff_h_col, coeff_w_col, h_col, w_col;
+    int index = blockIdx.x*blockDim.x+threadIdx.x;
+    float val;
+
+    for (; index < n; index += blockDim.x * gridDim.x) {
+        val = 0;
+        w = index % width + pad;
+        h = (index / width) % height + pad;
+        c = index / (width * height);
+
+        // compute the start and end of the output
+        w_col_start = (w < ksize) ? 0 : (w - ksize) / stride + 1;
+        w_col_end = bh_min(w / stride + 1, width_col);
+        h_col_start = (h < ksize) ? 0 : (h - ksize) / stride + 1;
+        h_col_end = bh_min(h / stride + 1, height_col);
+
+        // equivalent implementation
+        offset = (c * ksize * ksize + h * ksize + w) * height_col * width_col;
+        coeff_h_col = (1 - stride * ksize * height_col) * width_col;
+        coeff_w_col = (1 - stride * height_col * width_col);
+        for (h_col = h_col_start; h_col < h_col_end; ++h_col) {
+            for (w_col = w_col_start; w_col < w_col_end; ++w_col) {
+                val += data_col[offset + h_col * coeff_h_col + w_col * coeff_w_col];
+            }
+        }
+        data_im[index] += val;
+    }
+}
+
+void bcnn_cuda_col2im(float *data_col,
+        int channels, int height, int width,
+        int ksize, int stride, int pad, float *data_im)
+{
+    int height_col, width_col, num_kernels;
+
+    pad = pad ? ksize/2 : 0;
+    height_col = (height + 2 * pad - ksize) / stride + 1;
+    width_col = (width + 2 * pad - ksize) / stride + 1;
+    num_kernels = channels * height * width;
+
+    bcnn_cuda_col2im_kernel<<<(num_kernels + BCNN_CUDA_THREADS - 1) / BCNN_CUDA_THREADS,
+                             BCNN_CUDA_THREADS>>>(
+                            num_kernels, data_col, height, width, ksize, pad,
+                            stride, height_col,
+                            width_col, data_im);
+}
+
 
 #endif

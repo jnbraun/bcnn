@@ -973,6 +973,112 @@ int bcnn_varmean(int n, float *m, float a, float *var)
 }
 
 
+void bcnn_add_bias(float *output, float *bias, int batch_size, int num_channels, int spatial_size)
+{
+    int i, j, b;
+    for (b = 0; b < batch_size; ++b) {
+        for (i = 0; i < num_channels; ++i) {
+            bcnn_add_scalar(spatial_size, bias[i], output + i * spatial_size);
+        }
+        output += num_channels * spatial_size;
+    }
+}
+
+void bcnn_grad_bias(float *grad_bias, float *grad_data, int batch_size, int num_channels, int spatial_size)
+{
+    int i, j, b;
+    float *p = NULL;
+
+    for (b = 0; b < batch_size; ++b) {
+        for (i = 0; i < num_channels; ++i) {
+            p = grad_data + spatial_size * (i + b * num_channels);
+            for (j = 0; j < spatial_size; ++j)
+                grad_bias[i] += p[j];
+        }
+    }
+}
+
+static bh_inline int is_a_positive_and_inferior_to_b(int a, int b)
+{
+    return (unsigned int)a < (unsigned int)b;
+}
+
+void bcnn_im2col(const float *data_im, const int channels, const int height, const int width,
+    const int kernel_size, const int pad, const int stride, float *data_col)
+{
+    int channel, kernel_row, kernel_col, output_rows, output_cols, input_col, input_row, output_col;
+    const int output_h = (height + 2 * pad - kernel_size) / stride + 1;
+    const int output_w = (width + 2 * pad - kernel_size) / stride + 1;
+    const int channel_size = height * width;
+
+    for (channel = channels; channel--; data_im += channel_size) {
+        for (kernel_row = 0; kernel_row < kernel_size; kernel_row++) {
+            for (kernel_col = 0; kernel_col < kernel_size; kernel_col++) {
+                input_row = -pad + kernel_row;
+                for (output_rows = output_h; output_rows; output_rows--) {
+                    if (!is_a_positive_and_inferior_to_b(input_row, height)) {
+                        for (output_cols = output_w; output_cols; output_cols--) {
+                            *(data_col++) = 0;
+                        }
+                    }
+                    else {
+                        input_col = -pad + kernel_col;
+                        for (output_col = output_w; output_col; output_col--) {
+                            if (is_a_positive_and_inferior_to_b(input_col, width)) {
+                                *(data_col++) = data_im[input_row * width + input_col];
+                            } 
+                            else {
+                                *(data_col++) = 0;
+                            }
+                            input_col += stride;
+                        }
+                    }
+                    input_row += stride;
+                }
+            }
+        }
+    }
+}
+
+
+void bcnn_col2im(const float *data_col, const int channels, const int height, const int width,
+    const int kernel, const int pad, const int stride, float *data_im) 
+{
+    int channel, kernel_row, kernel_col, output_rows, input_col, input_row, output_col;
+    const int output_h = (height + 2 * pad - kernel) / stride + 1;
+    const int output_w = (width + 2 * pad - kernel) / stride + 1;
+    const int channel_size = height * width;
+
+    bcnn_fill_f32(height * width * channels, 0.0f, data_im);
+    
+    for (channel = channels; channel--; data_im += channel_size) {
+        for (kernel_row = 0; kernel_row < kernel; kernel_row++) {
+            for (kernel_col = 0; kernel_col < kernel; kernel_col++) {
+                input_row = -pad + kernel_row;
+                for (output_rows = output_h; output_rows; output_rows--) {
+                    if (!is_a_positive_and_inferior_to_b(input_row, height)) {
+                        data_col += output_w;
+                    }
+                    else {
+                        input_col = -pad + kernel_col;
+                        for (output_col = output_w; output_col; output_col--) {
+                            if (is_a_positive_and_inferior_to_b(input_col, width)) {
+                                data_im[input_row * width + input_col] += *data_col;
+                            }
+                            data_col++;
+                            input_col += stride;
+                        }
+                    }
+                    input_row += stride;
+                }
+            }
+        }
+    }
+}
+
+
+
+
 
 
 

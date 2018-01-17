@@ -36,11 +36,9 @@
 #endif
 #endif
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 
 /* Matrix computation routines */
 int bcnn_fill_f32(int n, float a, float *x);
@@ -110,6 +108,15 @@ void bcnn_im2col_gpu(float *im,
 void bcnn_col2im_gpu(float *data_col,
     int channels, int height, int width,
     int ksize, int stride, int pad, float *data_im);
+
+void bcnn_op_cuda_tanh(int n, float *x, float *y);
+void bcnn_op_cuda_tanh_grad(int n, float *x, float *dx);
+void bcnn_op_cuda_relu(int n, float *x, float *y);
+void bcnn_op_cuda_relu_grad(int n, float *x, float *dx);
+void bcnn_op_cuda_clamp(int n, float *x, float *y);
+void bcnn_op_cuda_clamp_grad(int n, float *x, float *dx);
+void bcnn_op_cuda_ramp(int n, float *x, float *y);
+void bcnn_op_cuda_ramp_grad(int n, float *x, float *dx);
 
 #endif
 

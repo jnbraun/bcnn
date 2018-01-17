@@ -26,11 +26,7 @@
 #include <bh/bh_timer.h>
 #include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
-
-bh_inline int bcnn_cuda_blocks(int n)
-{
-  return (n - 1) / (BCNN_CUDA_THREADS) + 1;
-}
+#include "bcnn_utils.h"
 
 // im2col and col2im functions from caffe
 // Reference https://github.com/BVLC/caffe/blob/master/src/caffe/util/im2col.cu

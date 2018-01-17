@@ -25,6 +25,7 @@
 
 #include "bcnn_mat.h"
 #include "bcnn/bcnn.h"
+#include "bcnn_utils.h"
 
 void bcnn_cuda_gemm(int TA, int TB, int M, int N, int K, float ALPHA, 
         float *A_gpu, int lda, 
@@ -266,6 +267,118 @@ __global__ void _mean_variance_backward_kernel(float *x, float *grad, float *mea
 void bcnn_cuda_mean_variance_backward(float *x, float *grad, float *mean, float *var, int b, int c, int wxh, float *mean_diff, float *var_diff)
 {
     _mean_variance_backward_kernel<<<bcnn_cuda_gridsize(c), BCNN_CUDA_THREADS>>>(x, grad, mean, var, b, c, wxh, mean_diff, var_diff);
+}
+
+__global__ void bcnn_op_cuda_tanh_kernel(int n, float *x, float *y)
+{
+    int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
+    if (i < n) {
+        y[i] = (exp(2 * x[i]) - 1) / (exp(2 * x[i]) + 1);
+    }
+    return;
+}
+
+void bcnn_op_cuda_tanh(int n, float *x, float *y)
+{
+    bcnn_op_cuda_tanh_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, y);
+}
+
+__global__ void bcnn_op_cuda_tanh_grad_kernel(int n, float *x, float *dx)
+{
+    int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
+    if (i < n) {
+        dx[i] *= (1 - x[i] * x[i]);
+    }
+    return;
+}
+
+void bcnn_op_cuda_tanh_grad(int n, float *x, float *dx)
+{
+    bcnn_op_cuda_tanh_grad_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, dx);
+}
+
+__global__ void bcnn_op_cuda_relu_kernel(int n, float *x, float *y)
+{
+    int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
+    if (i < n) {
+        y[i] = x[i] * (x[i] > 0);
+    }
+    return;
+}
+
+void bcnn_op_cuda_relu(int n, float *x, float *y)
+{
+    bcnn_op_cuda_relu_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, y);
+}
+
+__global__ void bcnn_op_cuda_relu_grad_kernel(int n, float *x, float *dx)
+{
+    int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
+    if (i < n) {
+        dx[i] *= ((float)(x[i] > 0));
+    }
+    return;
+}
+
+void bcnn_op_cuda_relu_grad(int n, float *x, float *dx)
+{
+    bcnn_op_cuda_relu_grad_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, dx);
+}
+
+__global__ void bcnn_op_cuda_ramp_kernel(int n, float *x, float *y)
+{
+    int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
+    if (i < n) {
+        y[i] = x[i] * (x[i] > 0) + 0.1 * x[i];
+    }
+    return;
+}
+
+void bcnn_op_cuda_ramp(int n, float *x, float *y)
+{
+    bcnn_op_cuda_ramp_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, y);
+}
+
+__global__ void bcnn_op_cuda_ramp_grad_kernel(int n, float *x, float *dx)
+{
+    int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
+    if (i < n) {
+        dx[i] *= ((float)(x[i] > 0) + 0.1f);
+    }
+    return;
+}
+
+void bcnn_op_cuda_ramp_grad(int n, float *x, float *dx)
+{
+    bcnn_op_cuda_ramp_grad_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, dx);
+}
+
+__global__ void bcnn_op_cuda_clamp_kernel(int n, float *x, float *y)
+{
+    int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
+    if (i < n) {
+        y[i] = bh_clamp(x[i], 0, 1);
+    }
+    return;
+}
+
+void bcnn_op_cuda_clamp(int n, float *x, float *y)
+{
+    bcnn_op_cuda_clamp_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, y);
+}
+
+__global__ void bcnn_op_cuda_clamp_grad_kernel(int n, float *x, float *dx)
+{
+    int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
+    if (i < n) {
+        dx[i] *= (float)(x[i] > 0.0f && (x[i] < 1.0f));
+    }
+    return;
+}
+
+void bcnn_op_cuda_clamp_grad(int n, float *x, float *dx)
+{
+    bcnn_op_cuda_clamp_grad_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, dx);
 }
 
 

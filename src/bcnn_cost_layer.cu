@@ -26,6 +26,7 @@
 
 #include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
+#include "bcnn_utils.h"
 
 int bcnn_forward_cost_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *label_node, bcnn_node *dst_node)
 {

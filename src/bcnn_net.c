@@ -33,6 +33,7 @@
 #include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
 #include "bh_log.h"
+#include "bcnn_utils.h"
 
 int bcnn_init_net(bcnn_net **net)
 {

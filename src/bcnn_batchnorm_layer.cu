@@ -24,7 +24,7 @@
 #ifdef BCNN_USE_CUDA
 
 #include "bcnn/bcnn.h"
-
+#include "bcnn_utils.h"
 
 __global__ void  fast_mean_kernel(float *x, int batch, int filters, int spatial, float *mean)
 {

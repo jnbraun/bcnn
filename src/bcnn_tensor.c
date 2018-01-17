@@ -26,6 +26,7 @@
 #include <bh/bh_mem.h>
 
 #include "bcnn/bcnn.h"
+#include "bcnn_utils.h"
 
 void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w, int has_grad)
 {

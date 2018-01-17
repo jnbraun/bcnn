@@ -24,6 +24,7 @@
 #include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
+#include "bcnn_utils.h"
 #include "bh_log.h"
 
 int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *src_id, char *dst_id)

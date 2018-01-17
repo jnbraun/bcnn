@@ -30,6 +30,7 @@
 #include <bh/bh_string.h>
 #include "bh_log.h"
 #include "bcnn_mat.h"
+#include "bcnn_utils.h"
 
 int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init, bcnn_activation activation,
     int quantize, char *src_id, char *dst_id)

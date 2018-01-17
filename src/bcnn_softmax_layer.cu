@@ -25,6 +25,7 @@
 
 #include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
+#include "bcnn_utils.h"
 
 __global__ void _bcnn_forward_softmax_layer_kernel(int n, int batch, float *input, float *output)
 {

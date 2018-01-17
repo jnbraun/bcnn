@@ -558,11 +558,6 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter);
 int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int no_input_norm, int swap_to_bgr, 
     float mean_r, float mean_g, float mean_b, float *dst);
 
-typedef struct {
-    int state;
-    float r;
-} bcnn_gauss_gen;
-float bcnn_rng_gaussian(bcnn_gauss_gen *g);
 
 /* Cuda kernels routines */
 #ifdef BCNN_USE_CUDA
@@ -572,47 +567,12 @@ float bcnn_rng_gaussian(bcnn_gauss_gen *g);
 #define BCNN_CUDA_THREADS 512
 #endif
 
-#define bcnn_cuda_check(RET) {                                                  \
-    if ((RET) != cudaSuccess) {                                                 \
-        fprintf(stderr, "[ERROR] [CUDA] %s\n", cudaGetErrorString((RET)));      \
-        exit((RET));                                                            \
-    }                                                                           \
-}
-#define bcnn_cublas_check(RET) {                                                \
-    if ((RET) != CUBLAS_STATUS_SUCCESS) {                                       \
-        fprintf(stderr, "[ERROR] [CUBLAS] %d\n", (int)(RET));                   \
-        exit((RET));                                                            \
-    }                                                                           \
+static bh_inline int bcnn_cuda_blocks(int n)
+{
+  return (n - 1) / (BCNN_CUDA_THREADS) + 1;
 }
 
-#define bcnn_curand_check(RET) {                                                \
-    if ((RET) != CURAND_STATUS_SUCCESS) {                                       \
-        fprintf(stderr, "[ERROR] [CURAND] %d\n", (int)(RET));                   \
-        exit((RET));                                                            \
-    }                                                                           \
-}
 
-#ifdef BCNN_USE_CUDNN
-#define bcnn_cudnn_check(RET) {                                                 \
-    if ((RET) != CUDNN_STATUS_SUCCESS) {                                        \
-        fprintf(stderr, "[ERROR] [CUDNN] %s\n", cudnnGetErrorString((RET)));    \
-        exit((RET));                                                            \
-    }                                                                           \
-}
-
-cudnnHandle_t bcnn_cudnn_handle();
-#endif
-
-/* Cuda generic helpers */
-cublasHandle_t bcnn_cublas_handle();
-dim3 bcnn_cuda_gridsize(unsigned int n);
-int *bcnn_cuda_malloc_i32(int n);
-float *bcnn_cuda_malloc_f32(int n);
-float *bcnn_cuda_memcpy_f32(float *x, int n);
-void bcnn_cuda_fill_with_random(float *x_gpu, int n);
-void bcnn_cuda_free(void *x_gpu);
-void bcnn_cuda_memcpy_host2dev(float *x_gpu, float *x, int n);
-void bcnn_cuda_memcpy_dev2host(float *x_gpu, float *x, int n);
 
 /* Wrapper to cudaSetDevice */
 void bcnn_cuda_set_device(int id);
@@ -641,7 +601,7 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcn
 int bcnn_backward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
 int bcnn_forward_cost_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *label_node, bcnn_node *dst_node);
 int bcnn_backward_cost_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
-#endif
+#endif // BCNN_USE_CUDA
 
 
 #ifdef __cplusplus

@@ -56,6 +56,11 @@ int bcnn_tensor_get_size3d(bcnn_tensor *t)
     return t->w * t->h * t->c;
 }
 
+int bcnn_tensor_get_size2d(bcnn_tensor *t)
+{
+    return t->w * t->h;
+}
+
 void bcnn_tensor_allocate(bcnn_tensor *t)
 {
     int size = t->n * t->c * t->h * t->w;

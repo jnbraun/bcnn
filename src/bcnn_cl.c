@@ -175,6 +175,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file, bcnncl_param *para
                 else if (strcmp(tok[1], "clamp") == 0) a = CLAMP;
                 else if (strcmp(tok[1], "softplus") == 0) a = SOFTPLUS;
                 else if (strcmp(tok[1], "leaky_relu") == 0 || strcmp(tok[1], "lrelu") == 0) a = LRELU;
+                else if (strcmp(tok[1], "prelu") == 0) a = PRELU;
                 else if (strcmp(tok[1], "abs") == 0) a = ABS;
                 else if (strcmp(tok[1], "none") == 0) a = NONE;
                 else {

@@ -776,6 +776,9 @@ int bcnn_write_model(bcnn_net *net, char *filename)
             fwrite(layer->bias, sizeof(float), layer->bias_size, fp);
             fwrite(layer->weight, sizeof(float), layer->weights_size, fp);
         }
+        if (layer->type == ACTIVATION && layer->activation == PRELU) {
+            fwrite(layer->weight, sizeof(float), layer->weights_size, fp);
+        }
         if (layer->type == BATCHNORM) {
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_dev2host(layer->global_mean_gpu, layer->global_mean,
@@ -833,6 +836,11 @@ int bcnn_load_model(bcnn_net *net, char *filename)
             bcnn_cuda_memcpy_host2dev(layer->weight_gpu, layer->weight, layer->weights_size);
             bcnn_cuda_memcpy_host2dev(layer->bias_gpu, layer->bias, layer->bias_size);
 #endif	
+        }
+        if (layer->type == ACTIVATION && layer->activation == PRELU) {
+            nb_read = fread(layer->weight, sizeof(float), layer->weights_size, fp);
+            bh_log_info("PReLU layer= %d nbread_mean= %lu mean_size_expected= %d\n",
+                i, (unsigned long)nb_read, layer->weights_size);
         }
         if (layer->type == BATCHNORM) {
             int sz = net->nodes[net->connections[i].dst[0]].tensor.c;

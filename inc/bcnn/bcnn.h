@@ -253,7 +253,8 @@ typedef enum {
     SOFTPLUS,
     LRELU,              /**< Leaky relu (alpha (negative slope) set to 0.01) */
     ABS,
-    CLAMP
+    CLAMP,
+    PRELU               /**< Parametric ReLU */
 } bcnn_activation;
 
 

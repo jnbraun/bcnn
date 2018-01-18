@@ -141,7 +141,9 @@ int bcnn_update(bcnn_net *net)
             if ((type == CONVOLUTIONAL || 
                 type == DECONVOLUTIONAL ||
                 type == DEPTHWISE_CONV ||
-                type == FULL_CONNECTED)) {
+                type == FULL_CONNECTED ||
+                (type == ACTIVATION && net->connections[i].layer->activation == PRELU)
+                )) {
                 bcnn_sgd_optimizer(&net->connections[i],
                         net->batch_size, lr, net->learner.momentum, net->learner.decay);
             }
@@ -153,7 +155,9 @@ int bcnn_update(bcnn_net *net)
             if ((type == CONVOLUTIONAL || 
                 type == DECONVOLUTIONAL || 
                 type == DEPTHWISE_CONV ||
-                type == FULL_CONNECTED)) {
+                type == FULL_CONNECTED ||
+                (type == ACTIVATION && net->connections[i].layer->activation == PRELU)
+                )) {
                 bcnn_adam_optimizer(&net->connections[i], net->seen, net->batch_size, net->learner.beta1, net->learner.beta2,
                     lr, net->learner.momentum, net->learner.decay);
             }

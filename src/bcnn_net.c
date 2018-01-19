@@ -839,7 +839,7 @@ int bcnn_load_model(bcnn_net *net, char *filename)
         }
         if (layer->type == ACTIVATION && layer->activation == PRELU) {
             nb_read = fread(layer->weight, sizeof(float), layer->weights_size, fp);
-            bh_log_info("PReLU layer= %d nbread_mean= %lu mean_size_expected= %d\n",
+            bh_log_info("PReLU layer= %d nbread= %lu expected= %d\n",
                 i, (unsigned long)nb_read, layer->weights_size);
         }
         if (layer->type == BATCHNORM) {

@@ -50,6 +50,11 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *src_id)
     bh_check(is_src_node_found, "Activation layer: invalid input node name %s", src_id);
     
     conn.layer->activation = type;
+    if (type == PRELU) {
+        conn.layer->weights_size = net->nodes[conn.src[0]].tensor.c;
+        conn.layer->weight = (float *)calloc(conn.layer->weights_size, sizeof(float));
+    }
+    
     bcnn_net_add_connection(net, conn);
 
     switch (type) {

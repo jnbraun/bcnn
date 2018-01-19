@@ -32,7 +32,7 @@ include_directories (
     ${PROJECT_SOURCE_DIR}/../../bh/inc
     )
 
-add_executable(caffe2bcnn convert.cpp)
+add_executable(caffe2bcnn caffe2bcnn.cpp)
 
 if(NOT MSVC)
     if (USE_CUDA) 

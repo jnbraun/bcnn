@@ -84,24 +84,51 @@ int bcnn_forward_softmax_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_
     float vmax = -FLT_MAX;
     float sum = 0.0f;
 
-    for (b = 0; b < batch_size; ++b) {
-        vmax = -FLT_MAX;
-        sum = 0.0f;
-        for (i = 0; i < src_size; ++i) {
-            if (src.data[b * src_size + i] > vmax) {
-                vmax = src.data[b * src_size + i];
+    if (src.w * src.h == 1) {
+        for (b = 0; b < batch_size; ++b) {
+            vmax = -FLT_MAX;
+            sum = 0.0f;
+            for (i = 0; i < src_size; ++i) {
+                if (src.data[b * src_size + i] > vmax) {
+                    vmax = src.data[b * src_size + i];
+                }
+            }
+            for (i = 0; i < src_size; ++i){
+                sum += (float)exp(src.data[b * src_size + i] - vmax);
+            }
+            if (sum) {
+                sum = vmax + (float)log(sum);
+            }
+            else
+                sum = vmax - 100.0f;
+            for (i = 0; i < src_size; ++i){
+                dst.data[b * src_size + i] = (float)exp(src.data[b * src_size + i] - sum);
             }
         }
-        for (i = 0; i < src_size; ++i){
-            sum += (float)exp(src.data[b * src_size + i] - vmax);
-        }
-        if (sum) {
-            sum = vmax + (float)log(sum);
-        }
-        else
-            sum = vmax - 100.0f;
-        for (i = 0; i < src_size; ++i){
-            dst.data[b * src_size + i] = (float)exp(src.data[b * src_size + i] - sum);
+    }
+    else {
+        for (b = 0; b < batch_size; ++b) {
+            for (i = 0; i < src.w * src.h; ++i) {
+                int c;
+                vmax = -FLT_MAX;
+                sum = 0.0f;
+                for (c = 0; c < src.c; ++c) {
+                    vmax = bh_max(vmax, src.data[b * src_size + c * src.w * src.h + i]);
+                }
+                for (c = 0; c < src.c; ++c) {
+                    sum += (float)exp(src.data[b * src_size + c * src.w * src.h + i] - vmax);
+                }
+                if (sum) {
+                    sum = vmax + (float)log(sum);
+                }
+                else {
+                    sum = vmax - 100.0f;
+                }
+                for (c = 0; c < src.c; ++c) {
+                    dst.data[b * src_size + c * src.w * src.h + i] = 
+                        (float)exp(src.data[b * src_size + c * src.w * src.h + i] - sum);
+                }
+            }
         }
     }
     return BCNN_SUCCESS;

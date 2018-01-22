@@ -106,7 +106,6 @@ int bcnn_forward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_
     bcnn_tensor src = src_node->tensor;
     bcnn_tensor dst = dst_node->tensor;
     int batch_size = dst.n;
-    int offset_pool = (-layer->size - 1) / 2 + 1;
     int offset0, offset1, offset2;
 
     for (b = 0; b < batch_size; ++b) { // batch_size
@@ -121,8 +120,8 @@ int bcnn_forward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_
                     max_i = -1;
                     for (n = 0; n < layer->size; ++n) { // pooling window
                         for (m = 0; m < layer->size; ++m) {
-                            cur_h = offset_pool + i * layer->stride + n;
-                            cur_w = offset_pool + j * layer->stride + m;
+                            cur_h = i * layer->stride + n;
+                            cur_w = j * layer->stride + m;
                             src_index = cur_w + src.w * (cur_h + src.h * (k + b * src.c));
                             valid = (cur_h >= 0 && cur_h < src.h &&
                                 cur_w >= 0 && cur_w < src.w);

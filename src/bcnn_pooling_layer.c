@@ -52,8 +52,8 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *src_id, ch
     bcnn_tensor_set_shape(&dst_node.tensor,
         net->nodes[conn.src[0]].tensor.n,                    // batch size
         net->nodes[conn.src[0]].tensor.c,                    // depth
-        (net->nodes[conn.src[0]].tensor.h - 1) / stride + 1, // height
-        (net->nodes[conn.src[0]].tensor.w - 1) / stride + 1, // width
+        (int)(ceil((float)(net->nodes[conn.src[0]].tensor.h - size) / stride)) + 1, // height
+        (int)(ceil((float)(net->nodes[conn.src[0]].tensor.w - size) / stride)) + 1, // width
         1);
     bcnn_tensor_allocate(&dst_node.tensor);
     // Add node to net

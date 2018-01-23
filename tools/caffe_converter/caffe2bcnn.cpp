@@ -198,7 +198,7 @@ int main(int argc, char **argv)
             const caffe::DropoutParameter& dropout_param = layer.dropout_param();
             fprintf(f_conf, "\n{dropout}\n");
             float scale = 1.0f - dropout_param.dropout_ratio();
-            fprintf(f_dat, " rate=%f\n", scale);
+            fprintf(f_conf, " rate=%f\n", scale);
 
         }
         else if (layer.type() == "InnerProduct")

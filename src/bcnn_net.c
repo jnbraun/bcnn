@@ -298,6 +298,7 @@ void bcnn_net_free_nodes(bcnn_net *net)
     int i;
     for (i = 0; i < net->num_nodes; ++i) {
         bcnn_tensor_free(&net->nodes[i].tensor);
+        bh_free(net->nodes[i].id);
     }
     bh_free(net->nodes);
 }

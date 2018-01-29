@@ -1099,11 +1099,12 @@ static void sgemm_pack_A(int mc, int kc, const float *A, int inc_row_A,
 
 static void sgemm_pack_B(int kc, int nc, const float *B, int inc_row_B,
                          int inc_col_B, float *p) {
+    int i, l, j0;
     const int np = (nc + NR - 1) / NR;
 
-    for (int l = 0; l < np; ++l) {
-        for (int i = 0; i < kc; ++i) {
-            for (int j0 = 0; j0 < NR; ++j0) {
+    for (l = 0; l < np; ++l) {
+        for (i = 0; i < kc; ++i) {
+            for (j0 = 0; j0 < NR; ++j0) {
                 int j = l * NR + j0;
                 int nu = l * NR * kc + i * NR + j0;
                 p[nu] = (j < nc) ? B[i * inc_row_B + j * inc_col_B] : 0;

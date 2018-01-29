@@ -2,7 +2,7 @@ cmake_minimum_required (VERSION 2.9)
 project (bcnn)
 
 # User configuration settings
-option(USE_SSE2 "Build with SSE instructions" ON)
+option(USE_AVX "Build with AVX instructions" ON)
 option(USE_CUDA "Build with CUDA libraries" OFF)
 option(USE_CUDNN "Build with CuDNN library" OFF)
 option(USE_BLAS "Build with BLAS library" ON)
@@ -83,9 +83,10 @@ if (USE_CUDA)
     endif()
 endif()
 
-if (USE_SSE2)
-    message(STATUS "[bcnn] Build with SSE instructions")
-    add_definitions(-DBCNN_USE_SSE2)
+if (USE_AVX)
+    message(STATUS "[bcnn] Build with AVX instructions")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx2")
+    add_definitions(-DBCNN_USE_AVX)
 endif()
 
 message(STATUS "[bcnn] Setting log level: " ${LOG_LEVEL})

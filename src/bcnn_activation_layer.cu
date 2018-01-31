@@ -23,9 +23,10 @@
 
 #ifdef BCNN_USE_CUDA
 
+#include "bcnn_activation_layer.h"
+
 #include <bh/bh.h>
 
-#include "bcnn/bcnn.h"
 #include "bcnn_utils.h"
 
 __global__ void _bcnn_forward_activation_layer_kernel(float *x, int sz, bcnn_activation a)

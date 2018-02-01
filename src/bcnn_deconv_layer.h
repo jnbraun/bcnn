@@ -29,6 +29,9 @@
 extern "C" {
 #endif
 
+int bcnn_forward_deconv_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_deconv_layer(bcnn_net *net, bcnn_connection *conn);
+
 #ifdef __cplusplus
 }
 #endif

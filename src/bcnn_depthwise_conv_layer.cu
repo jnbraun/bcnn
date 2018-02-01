@@ -22,9 +22,10 @@
 
 
 #ifdef BCNN_USE_CUDA
-
+#include "bcnn_depthwise_conv_layer.h"
+#include "bcnn_activation_layer.h"
 #include <bh/bh_timer.h>
-#include "bcnn/bcnn.h"
+
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
 
@@ -98,7 +99,6 @@ __global__ void _bcnn_backward_depthwise_sep_conv_weight_kernel(int nthreads,
 {
  
     int i, n, c, h, w, kw, kh, h_out_s, w_out_s, h_out, w_out, offset; 
-    float value = 0.0f;
     float *p_weight_diff = NULL;
 
     for (i = blockIdx.x * blockDim.x + threadIdx.x; i < nthreads; i += blockDim.x * gridDim.x) {
@@ -107,7 +107,6 @@ __global__ void _bcnn_backward_depthwise_sep_conv_weight_kernel(int nthreads,
         h = (i / src_w) % src_h;
         w = i % src_w;
         p_weight_diff = weight_diff + c * kernel_sz * kernel_sz;
-        value = 0.0f;
         for (kh = 0; kh < kernel_sz; ++kh) {
             for (kw = 0; kw < kernel_sz; ++kw) {
                 h_out_s = h + pad - kh;

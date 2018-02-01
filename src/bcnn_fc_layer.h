@@ -20,8 +20,8 @@
 * SOFTWARE.
 */
 
-#ifndef BCNN_CONV_LAYER_H
-#define BCNN_CONV_LAYER_H
+#ifndef BCNN_FULL_CONNECTED_LAYER_H
+#define BCNN_FULL_CONNECTED_LAYER_H
 
 #include <bcnn/bcnn.h>
 
@@ -29,11 +29,11 @@
 extern "C" {
 #endif
 
-int bcnn_forward_conv_layer(bcnn_net *net, bcnn_connection *conn);
-int bcnn_backward_conv_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_forward_fullc_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_fullc_layer(bcnn_net *net, bcnn_connection *conn);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // BCNN_CONV_LAYER_H
+#endif  // BCNN_FULL_CONNECTED_LAYER_H

@@ -19,6 +19,7 @@
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 * SOFTWARE.
 */
+#include "bcnn_fc_layer.h"
 
 #ifdef BCNN_USE_BLAS
 #include "cblas.h"

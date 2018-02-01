@@ -32,13 +32,6 @@ extern "C" {
 int bcnn_forward_concat_layer(bcnn_net *net, bcnn_connection *conn);
 int bcnn_backward_concat_layer(bcnn_net *net, bcnn_connection *conn);
 
-#ifdef BCNN_USE_CUDA
-int bcnn_forward_concat_layer_gpu(bcnn_node *src0_node, bcnn_node *src1_node,
-    bcnn_node *dst_node);
-int bcnn_backward_concat_layer_gpu(bcnn_node *src0_node, bcnn_node *src1_node,
-    bcnn_node *dst_node);
-#endif
-
 #ifdef __cplusplus
 }
 #endif

@@ -20,8 +20,8 @@
 * SOFTWARE.
 */
 
-#ifndef BCNN_CONV_LAYER_H
-#define BCNN_CONV_LAYER_H
+#ifndef BCNN_POOLING_LAYER_H
+#define BCNN_POOLING_LAYER_H
 
 #include <bcnn/bcnn.h>
 
@@ -29,11 +29,17 @@
 extern "C" {
 #endif
 
-int bcnn_forward_conv_layer(bcnn_net *net, bcnn_connection *conn);
-int bcnn_backward_conv_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_forward_maxpool_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_backward_maxpool_layer(bcnn_net *net, bcnn_connection *conn);
+#ifdef BCNN_USE_CUDA
+int bcnn_forward_maxpool_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
+                                   bcnn_node *dst_node);
+int bcnn_backward_maxpool_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
+                                    bcnn_node *dst_node);
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // BCNN_CONV_LAYER_H
+#endif  // BCNN_POOLING_LAYER_H

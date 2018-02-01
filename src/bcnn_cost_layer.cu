@@ -22,9 +22,10 @@
 
 #ifdef BCNN_USE_CUDA
 
+#include "bcnn_cost_layer.h"
+
 #include <bh/bh.h>
 
-#include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
 

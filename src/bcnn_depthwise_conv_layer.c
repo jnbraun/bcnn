@@ -19,7 +19,7 @@
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 * SOFTWARE.
 */
-
+#include "bcnn_depthwise_conv_layer.h"
 #include "bcnn_activation_layer.h"
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"

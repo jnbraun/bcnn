@@ -84,16 +84,6 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
     conn.layer->weight =
         (float *)calloc(conn.layer->weights_size, sizeof(float));
     conn.layer->bias = (float *)calloc(output_size, sizeof(float));
-    conn.layer->quantize = quantize;
-    if (conn.layer->quantize == 1) {
-        bh_check((input_size % BITS_IN_UINT32 == 0),
-                 "Number of channels in input must be a multiple of 32");
-        conn.layer->binary_workspace = (uint32_t *)calloc(
-            input_size * net->nodes[conn.src[0]].tensor.n / (sizeof(float) * 8),
-            sizeof(float));
-        conn.layer->binary_weight = (uint32_t *)calloc(
-            conn.layer->weights_size / BITS_IN_UINT32, sizeof(uint32_t));
-    }
 
     switch (init) {
         case XAVIER:
@@ -155,53 +145,17 @@ int bcnn_forward_fullc_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
     int dst_size = bcnn_tensor_get_size3d(&dst);
     int sz = bcnn_tensor_get_size(&dst);
 
-    /*for (i = 0; i < batch_size; ++i)
-        bcnn_copy_f32(dst_size, layer->bias, dst.data + i * dst_size);*/
     memset(dst.data, 0, dst_size * batch_size * sizeof(float));
 
-    if (layer->quantize) {
-        for (i = 0; i < layer->weights_size; ++i) {
-            layer->weight[i] = (layer->weight[i] > 0) ? 1.0f : -1.0f;
-        }
-        for (i = 0; i < batch_size * src_size; ++i) {
-            src.data[i] = (src.data[i] > 0) ? 1.0f : -1.0f;
-        }
-        if (layer->net_state == 0) {
-            get_binary_col_unrolled(layer->weight, layer->binary_weight,
-                                    src_size, dst_size);
-            get_binary_row(src.data, layer->binary_workspace,
-                           batch_size * src_size);
-            bcnn_xnor_gemm(
-                0, 0, batch_size, dst_size, src_size / BITS_IN_UINT32, 1.0f,
-                layer->binary_workspace, src_size / BITS_IN_UINT32,
-                layer->binary_weight, dst_size, 1.0f, dst.data, dst_size);
-        } else {
-            /*bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1.0f,
-                src.data, src_size, layer->weight, src_size, 1.0f, dst.data,
-               dst_size);*/
-            bcnn_gemm(0, 0, batch_size, dst_size, src_size, 1.0f, src.data,
-                      src_size, layer->weight, dst_size, 1.0f, dst.data,
-                      dst_size);
-            // Mapping to obtain similar range output than xnor gemm
-            for (i = 0; i < batch_size * dst_size; ++i) {
-                dst.data[i] = (dst.data[i] + src_size) / 2;
-            }
-        }
-    } else {
 #ifdef BCNN_USE_BLAS
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, batch_size,
-                    dst_size, src_size, 1.0f, src.data, src_size, layer->weight,
-                    src_size, 1.0f, dst.data, dst_size);
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, batch_size, dst_size,
+                src_size, 1.0f, src.data, src_size, layer->weight, src_size,
+                1.0f, dst.data, dst_size);
 #else
-        // Original
-        bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1.0f, src.data,
-                  src_size, layer->weight, src_size, 1.0f, dst.data, dst_size);
-// Transposed
-/*bcnn_gemm(0, 0, batch_size, dst_size, src_size, 1.0f,
-        src.data, src_size, layer->weight, dst_size, 1.0f, dst.data,
-   dst_size);*/
+    // Original
+    bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1.0f, src.data, src_size,
+              layer->weight, src_size, 1.0f, dst.data, dst_size);
 #endif
-    }
 
     for (i = 0; i < batch_size; ++i)
         bcnn_axpy(dst_size, 1, layer->bias, dst.data + i * dst_size);
@@ -235,10 +189,6 @@ int bcnn_backward_fullc_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
     // Original
     bcnn_gemm(1, 0, dst_size, src_size, batch_size, 1.0f, dst.grad_data,
               dst_size, src.data, src_size, 1.0f, layer->weight_diff, src_size);
-// Transposed
-/*bcnn_gemm(1, 0, src_size, dst_size, batch_size, 1,
-    src.data, src_size, dst.grad_data, dst_size, 1, layer->weight_diff,
-   dst_size);*/
 #endif
 
     if (src.grad_data) {
@@ -251,18 +201,7 @@ int bcnn_backward_fullc_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
         bcnn_gemm(0, 0, batch_size, src_size, dst_size, 1.0f, dst.grad_data,
                   dst_size, layer->weight, src_size, 1.0f, src.grad_data,
                   src_size);
-// Transposed
-/*bcnn_gemm(0, 1, batch_size, src_size, dst_size, 1,
-    dst.grad_data, dst_size, layer->weight, dst_size, 1, src.grad_data,
-   src_size);*/
 #endif
-    }
-
-    if (layer->quantize && src.grad_data) {
-        for (i = 0; i < batch_size * src_size; ++i) {
-            src.grad_data[i] =
-                src.grad_data[i] * ((fabs(src.data[i]) <= 1.0f) ? 1.0f : 0.0f);
-        }
     }
 
     return BCNN_SUCCESS;

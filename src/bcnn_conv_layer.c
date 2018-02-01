@@ -74,7 +74,6 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     conn.layer->stride = stride;
     conn.layer->size = size;
     conn.layer->pad = pad;
-    conn.layer->quantize = quantize;
     conn.layer->bias_size = n;
     conn.layer->weights_size =
         net->nodes[conn.src[0]].tensor.c * n * size * size;
@@ -128,19 +127,6 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     bcnn_connection_add_dst_node(&conn, net->num_nodes - 1);
     sz = bcnn_tensor_get_size3d(&net->nodes[conn.dst[0]].tensor) * size * size;
     conn.layer->conv_workspace = (float *)calloc(sz, sizeof(float));
-
-    if (conn.layer->quantize == 1) {
-        bh_assert((net->nodes[conn.src[0]].tensor.c % BITS_IN_UINT32 == 0),
-                  "Number of channels in input must be a multiple of 32",
-                  BCNN_INVALID_PARAMETER);
-        k = conn.layer->size * conn.layer->size *
-            net->nodes[conn.src[0]].tensor.c;
-        l = net->nodes[conn.dst[0]].tensor.w * net->nodes[conn.dst[0]].tensor.h;
-        conn.layer->binary_workspace =
-            (uint32_t *)calloc(l * k / (sizeof(float) * 8), sizeof(float));
-        conn.layer->binary_weight = (uint32_t *)calloc(
-            conn.layer->weights_size / BITS_IN_UINT32, sizeof(uint32_t));
-    }
 
 #ifdef BCNN_USE_CUDA
     conn.layer->weight_gpu =
@@ -263,13 +249,6 @@ int bcnn_forward_conv_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
 
     memset(dst.data, 0, sz * sizeof(float));
 
-    // Binarize weights
-    if (layer->quantize) {
-        for (i = 0; i < layer->weights_size; ++i) {
-            layer->weight[i] = (layer->weight[i] > 0) ? 1.0f : -1.0f;
-        }
-    }
-
     m = layer->num;
     k = layer->size * layer->size * src.c;
     n = dst.w * dst.h;
@@ -287,42 +266,12 @@ int bcnn_forward_conv_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
             bcnn_im2col(src.data, src.c, src.h, src.w, layer->size, layer->pad,
                         layer->stride, b);
         }
-        // Binarize inputs here (after padding)
-        if (layer->quantize) {
-            for (j = 0; j < k * n; ++j) b[j] = (b[j] > 0) ? 1.0f : -1.0f;
-            if (layer->net_state == 0) {  // inference phase
-                // bh_timer_start(&t);
-                // xnor / popcnt gemm
-                get_binary_col_unrolled(b, layer->binary_workspace, k, n);
-                get_binary_row(a, layer->binary_weight, m * k);
-                bcnn_xnor_gemm(0, 0, m, n, k / BITS_IN_UINT32, 1.0f,
-                               layer->binary_weight, k / BITS_IN_UINT32,
-                               layer->binary_workspace, n, 1.0f, c, n);
-
-                // bcnn_gemm(0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
-                // bh_timer_stop(&t);
-                // tconv += bh_timer_get_msec(&t);
-                // Mapping to obtain similar range than xnor / popcnt gemm
-                /*for (j = 0; j < n * m; ++j) {
-                    c[j] = (c[j] + k) / 2;
-                }*/
-
-            } else {  // training phase
-                bcnn_gemm(0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
-                // Mapping to obtain similar range output than xnor gemm
-                for (j = 0; j < n * m; ++j) {
-                    c[j] = (c[j] + k) / 2;
-                }
-            }
-        } else {
 #if BCNN_USE_BLAS
-            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k,
-                        1.0f, a, k, b, n, 1.0f, c, n);
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0f, a,
+                    k, b, n, 1.0f, c, n);
 #else
-            bcnn_gemm(0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
+        bcnn_gemm(0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
 #endif
-        }
-
         c += n * m;
         src.data += sz;
     }
@@ -397,13 +346,6 @@ int bcnn_backward_conv_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
         }
     }
 
-    if (layer->quantize && src.grad_data) {
-        for (i = 0; i < batch_size * sz; ++i) {
-            src.grad_data[i] =
-                src.grad_data[i] * ((fabs(src.data[i]) <= 1.0f) ? 1.0f : 0.0f);
-        }
-    }
-
     return BCNN_SUCCESS;
 }
 
@@ -415,8 +357,6 @@ int bcnn_forward_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
     bcnn_tensor dst = dst_node->tensor;
     int batch_size = dst.n;
     int sz;
-/*bh_timer t = { 0 };
-bh_timer_start(&t);*/
 
 #ifdef BCNN_USE_CUDNN
     float alpha = 1.0f, beta = 0.0f;
@@ -457,10 +397,6 @@ bh_timer_start(&t);*/
     sz = dst.w * dst.h * dst.c * batch_size;
     bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
 
-    /*bh_timer_stop(&t);
-    fprintf(stderr, "conv-forward-time %lf sec\n", bh_timer_get_msec(&t) /
-    1000);*/
-
     return BCNN_SUCCESS;
 }
 
@@ -476,8 +412,6 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
 #else
     float one = 1.0f, zero = 0.0f;
 #endif
-    /*bh_timer t = { 0 };
-    bh_timer_start(&t);*/
 
     bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu,
                                  dst.w * dst.h * dst.c * batch_size,
@@ -539,9 +473,7 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
         }
     }
 #endif
-    /*bh_timer_stop(&t);
-    fprintf(stderr, "conv-backward-time %lf sec\n", bh_timer_get_msec(&t) /
-    1000);*/
+
     return BCNN_SUCCESS;
 }
 

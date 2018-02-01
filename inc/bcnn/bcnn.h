@@ -399,11 +399,6 @@ static bh_inline int bh_strfill(char **option, char *argv) {
     return 0;
 }
 
-/* Define for binarized layers */
-#define BITS_IN_CHAR 8
-#define BITS_IN_UINT32 (sizeof(uint32_t) * BITS_IN_CHAR)
-#define BIT_SET(var, pos, val) var |= (val << pos)
-
 void bcnn_net_set_input_shape(bcnn_net *net, int input_width, int input_height,
                               int input_channels, int batch_size);
 

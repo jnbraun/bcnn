@@ -352,6 +352,8 @@ typedef struct bcnn_layer {
     cudnnConvolutionBwdFilterAlgo_t bwd_filter_algo;
 #endif
 #endif
+
+    float num_constraints;
 } bcnn_layer;
 
 typedef struct {

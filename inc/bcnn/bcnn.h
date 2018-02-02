@@ -508,6 +508,9 @@ int bcnn_forward_dropout_layer(bcnn_net *net, bcnn_connection *conn);
 int bcnn_backward_dropout_layer(bcnn_net *net, bcnn_connection *conn);
 
 /* Cost layer */
+void bcnn_LiftedStructSimilaritySoftmax_loss_backward(
+    bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
+void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *label_node, bcnn_node *dst_node);
 int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric loss_metric,
                         float scale, char *src_id, char *label_id,
                         char *dst_id);

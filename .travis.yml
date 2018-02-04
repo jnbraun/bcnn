@@ -5,7 +5,7 @@ language: c
 
 compiler:
   - clang
-  - gcc
+  - gcc-4.9
   
 addons:
   apt:

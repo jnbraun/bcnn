@@ -1,24 +1,24 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * Copyright (c) 2016 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #include "bcnn_cost_layer.h"
 
@@ -121,75 +121,82 @@ int bcnn_forward_cost_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
     // If no truth available, do nothing
     if (!label.data) return BCNN_SUCCESS;
 
-    bcnn_copy_f32(sz, src.data, dst.grad_data);
-    bcnn_axpy(sz, -1, label.data, dst.grad_data);
+    int LEFTED_STRUCTURE_LOSS = 1;
+    if (LEFTED_STRUCTURE_LOSS) {
+        bcnn_LiftedStructSimilaritySoftmax_loss_forward(layer, src_node,
+                                                        label_node, dst_node);
 
-    switch (layer->loss_metric) {
-        case COST_ERROR:
-            *(dst.data) = 0.0f;
-            for (i = 0; i < batch_size; ++i) {
-                offset = i * input_size;
-                p_max = FLT_MIN;
-                j_best = 0;
-                for (j = 0; j < input_size; ++j) {
-                    if (src.data[offset + j] > p_max) {
-                        p_max = src.data[offset + j];
-                        j_best = j;
+    } else {
+        bcnn_copy_f32(sz, src.data, dst.grad_data);
+        bcnn_axpy(sz, -1, label.data, dst.grad_data);
+
+        switch (layer->loss_metric) {
+            case COST_ERROR:
+                *(dst.data) = 0.0f;
+                for (i = 0; i < batch_size; ++i) {
+                    offset = i * input_size;
+                    p_max = FLT_MIN;
+                    j_best = 0;
+                    for (j = 0; j < input_size; ++j) {
+                        if (src.data[offset + j] > p_max) {
+                            p_max = src.data[offset + j];
+                            j_best = j;
+                        }
+                    }
+                    if (label.data[offset + j_best] == 0) {
+                        *(dst.data) += 1.0f;
                     }
                 }
-                if (label.data[offset + j_best] == 0) {
-                    *(dst.data) += 1.0f;
-                }
-            }
-            break;
-        case COST_SSE:
-            *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
-            break;
-        case COST_MSE:
-            *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
-            *(dst.data) /= input_size;
-            break;
-        case COST_CRPS:
-            *(dst.data) = 0.0f;
-            input_cpu = (float *)calloc(sz, sizeof(float));
-            for (i = 0; i < batch_size; ++i) {
-                offset = i * input_size;
-                for (j = 1; j < input_size; ++j) {
-                    if (src.data[offset + j] < src.data[offset + j - 1]) {
-                        input_cpu[offset + j] = src.data[offset + j - 1];
+                break;
+            case COST_SSE:
+                *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
+                break;
+            case COST_MSE:
+                *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
+                *(dst.data) /= input_size;
+                break;
+            case COST_CRPS:
+                *(dst.data) = 0.0f;
+                input_cpu = (float *)calloc(sz, sizeof(float));
+                for (i = 0; i < batch_size; ++i) {
+                    offset = i * input_size;
+                    for (j = 1; j < input_size; ++j) {
+                        if (src.data[offset + j] < src.data[offset + j - 1]) {
+                            input_cpu[offset + j] = src.data[offset + j - 1];
+                        }
                     }
                 }
-            }
-            *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
-            bh_free(input_cpu);
-            break;
-        case COST_LOGLOSS:
-            *(dst.data) = 0.0f;
-            for (i = 0; i < batch_size; ++i) {
-                offset = i * input_size;
-                for (j = 0; j < input_size; ++j) {
-                    if (label.data[offset + j] > 0.0f) {
-                        *(dst.data) += (float)-log(bh_clamp(
-                            src.data[offset + j], 1e-8f, 1.0f - 1e-8f));
+                *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
+                bh_free(input_cpu);
+                break;
+            case COST_LOGLOSS:
+                *(dst.data) = 0.0f;
+                for (i = 0; i < batch_size; ++i) {
+                    offset = i * input_size;
+                    for (j = 0; j < input_size; ++j) {
+                        if (label.data[offset + j] > 0.0f) {
+                            *(dst.data) += (float)-log(bh_clamp(
+                                src.data[offset + j], 1e-8f, 1.0f - 1e-8f));
+                        }
                     }
                 }
-            }
-            break;
-        case COST_DICE:
-            *(dst.data) = 0.0f;
-            for (i = 0; i < batch_size; ++i) {
-                offset = i * input_size;
-                n = 0;
-                d = 0;
-                for (j = 0; j < input_size; ++j) {
-                    n += (int)(label.data[offset + j] *
-                               (src.data[offset + j] > 0.5f));
-                    d += (int)(label.data[offset + j] +
-                               (src.data[offset + j] > 0.5f));
+                break;
+            case COST_DICE:
+                *(dst.data) = 0.0f;
+                for (i = 0; i < batch_size; ++i) {
+                    offset = i * input_size;
+                    n = 0;
+                    d = 0;
+                    for (j = 0; j < input_size; ++j) {
+                        n += (int)(label.data[offset + j] *
+                                   (src.data[offset + j] > 0.5f));
+                        d += (int)(label.data[offset + j] +
+                                   (src.data[offset + j] > 0.5f));
+                    }
+                    *(dst.data) += (float)(2.0f * n + 1.0f) / (d + 1.0f);
                 }
-                *(dst.data) += (float)(2.0f * n + 1.0f) / (d + 1.0f);
-            }
-            break;
+                break;
+        }
     }
 
     return BCNN_SUCCESS;
@@ -197,12 +204,19 @@ int bcnn_forward_cost_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
 
 int bcnn_backward_cost_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
                                  bcnn_node *dst_node) {
-    bcnn_tensor src = src_node->tensor;
-    bcnn_tensor dst = dst_node->tensor;
-    int input_size = src.w * src.h * src.c;
-    int sz = src.n * input_size;
+    int LEFTED_STRUCTURE_LOSS = 1;
+    if (LEFTED_STRUCTURE_LOSS) {
+        bcnn_LiftedStructSimilaritySoftmax_loss_backward(layer, src_node,
+                                                         dst_node);
 
-    bcnn_axpy(sz, layer->scale, dst.grad_data, src.grad_data);
+    } else {
+        bcnn_tensor src = src_node->tensor;
+        bcnn_tensor dst = dst_node->tensor;
+        int input_size = src.w * src.h * src.c;
+        int sz = src.n * input_size;
+
+        bcnn_axpy(sz, layer->scale, dst.grad_data, src.grad_data);
+    }
 
     return BCNN_SUCCESS;
 }

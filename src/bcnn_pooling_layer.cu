@@ -23,7 +23,7 @@
 
 #ifdef BCNN_USE_CUDA
 
-#include "bcnn/bcnn.h"
+#include "bcnn_pooling_layer.h"
 #include "bcnn_utils.h"
 
 __global__ void _bcnn_forward_maxpool_layer_kernel(int n, int in_h, int in_w, int in_c, int stride, int size, float *input, float *output, int *indexes)

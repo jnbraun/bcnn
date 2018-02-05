@@ -19,25 +19,24 @@
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 * SOFTWARE.
 */
+#include "bcnn_dropout_layer.h"
 
 #include <bh/bh_error.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
-#include "bcnn/bcnn.h"
-#include "bh_log.h"
 #include "bcnn_utils.h"
+#include "bh_log.h"
 
-int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id)
-{
+int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
     int sz = 0, i;
-    bcnn_connection conn = { 0 };
+    bcnn_connection conn = {0};
 
     bh_check(net->nb_connections >= 1,
-        "Dropout layer can't be the first layer of the network");
+             "Dropout layer can't be the first layer of the network");
 
     int is_src_node_found = 0;
-    for (i = net->num_nodes - 1; i >= 0 ; --i) {
+    for (i = net->num_nodes - 1; i >= 0; --i) {
         if (strcmp(net->nodes[i].id, src_id) == 0) {
             bcnn_connection_add_src_node(&conn, i);
             bcnn_connection_add_dst_node(&conn, i);
@@ -45,7 +44,8 @@ int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id)
             break;
         }
     }
-    bh_check(is_src_node_found, "Dropout layer: invalid input node name %s", src_id);
+    bh_check(is_src_node_found, "Dropout layer: invalid input node name %s",
+             src_id);
 
     conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     conn.layer->type = DROPOUT;
@@ -59,21 +59,22 @@ int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id)
 
     bcnn_net_add_connection(net, conn);
 
-    bh_log_info("[Dropout] input_shape= %dx%dx%d rate= %f output_shape= %dx%dx%d",
-        net->nodes[conn.src[0]].tensor.w, net->nodes[conn.src[0]].tensor.h, net->nodes[conn.src[0]].tensor.c,
-        rate,
-        net->nodes[conn.dst[0]].tensor.w, net->nodes[conn.dst[0]].tensor.h, net->nodes[conn.dst[0]].tensor.c);
+    bh_log_info(
+        "[Dropout] input_shape= %dx%dx%d rate= %f output_shape= %dx%dx%d",
+        net->nodes[conn.src[0]].tensor.w, net->nodes[conn.src[0]].tensor.h,
+        net->nodes[conn.src[0]].tensor.c, rate,
+        net->nodes[conn.dst[0]].tensor.w, net->nodes[conn.dst[0]].tensor.h,
+        net->nodes[conn.dst[0]].tensor.c);
     return 0;
 }
 
-
-int bcnn_forward_dropout_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
-{
+int bcnn_forward_dropout_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
+                                   bcnn_node *dst_node) {
     bcnn_tensor src = src_node->tensor;
     int i, sz = bcnn_tensor_get_size(&src);
     float r;
 
-    if (!layer->net_state) // state != train
+    if (!layer->net_state)  // state != train
         return BCNN_SUCCESS;
 
     for (i = 0; i < sz; ++i) {
@@ -81,16 +82,14 @@ int bcnn_forward_dropout_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_
         layer->rand[i] = r;
         if (r < layer->dropout_rate) {
             src.data[i] = 0;
-        }
-        else {
+        } else {
             src.data[i] *= layer->scale;
         }
     }
     return BCNN_SUCCESS;
 }
 
-int bcnn_forward_dropout_layer(bcnn_net *net, bcnn_connection *conn)
-{
+int bcnn_forward_dropout_layer(bcnn_net *net, bcnn_connection *conn) {
     bcnn_node *src = &net->nodes[conn->src[0]];
     bcnn_node *dst = &net->nodes[conn->dst[0]];
 #ifdef BCNN_USE_CUDA
@@ -100,9 +99,8 @@ int bcnn_forward_dropout_layer(bcnn_net *net, bcnn_connection *conn)
 #endif
 }
 
-
-int bcnn_backward_dropout_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
-{
+int bcnn_backward_dropout_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
+                                    bcnn_node *dst_node) {
     bcnn_tensor src = src_node->tensor;
     int i, sz = bcnn_tensor_get_size(&src);
     float r;
@@ -115,16 +113,14 @@ int bcnn_backward_dropout_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn
         r = layer->rand[i];
         if (r < layer->dropout_rate) {
             src.grad_data[i] = 0;
-        }
-        else {
+        } else {
             src.grad_data[i] *= layer->scale;
         }
     }
     return BCNN_SUCCESS;
 }
 
-int bcnn_backward_dropout_layer(bcnn_net *net, bcnn_connection *conn)
-{
+int bcnn_backward_dropout_layer(bcnn_net *net, bcnn_connection *conn) {
     bcnn_node *src = &net->nodes[conn->src[0]];
     bcnn_node *dst = &net->nodes[conn->dst[0]];
 #ifdef BCNN_USE_CUDA

@@ -20,17 +20,16 @@
 * SOFTWARE.
 */
 #include <bh/bh.h>
-#include <bh/bh_string.h>
 #include <bh/bh_error.h>
+#include <bh/bh_string.h>
 
 /* include bip image processing lib */
 #include <bip/bip.h>
 
 #include "bcnn/bcnn.h"
 
-
-int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_pack)
-{
+int bcnn_pack_data(char *list, int label_width, bcnn_label_type type,
+                   char *out_pack) {
     FILE *f_lst = NULL, *f_out = NULL, *f_outlst = NULL;
     char *line = NULL;
     int n = 0, n_tok = 0;
@@ -64,11 +63,10 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
     cnt += fwrite(&n, 1, sizeof(int), f_out);
     cnt += fwrite(&label_width, 1, sizeof(int), f_out);
     cnt += fwrite(&type, 1, sizeof(int), f_out);
-    
+
     while ((line = bh_fgetline(f_lst)) != NULL) {
         if (cnt > max_part_sz) {
-            if (f_out != NULL)
-                fclose(f_out);
+            if (f_out != NULL) fclose(f_out);
             cnt = 0;
             part++;
             fprintf(f_outlst, "%s\n", name);
@@ -80,7 +78,7 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
         }
         n_tok = bh_strsplit(line, ' ', &tok);
         bh_assert((n_tok - 1 == label_width),
-            "Data and label_width are not consistent", BCNN_INVALID_DATA);
+                  "Data and label_width are not consistent", BCNN_INVALID_DATA);
         bip_load_image(tok[0], &img, &w, &h, &c);
         bip_write_image_to_memory(&buf, &buf_sz, img, w, h, c, w * c);
         // Write img
@@ -90,43 +88,39 @@ int bcnn_pack_data(char *list, int label_width, bcnn_label_type type, char *out_
         bh_free(img);
         // Write label(s)
         switch (type) {
-        case LABEL_INT:
-            for (i = 1; i < n_tok; ++i) {
-                lf = (float)atoi(tok[i]);
-                cnt += fwrite(&lf, 1, sizeof(float), f_out);
-            }
-            break;
-        case LABEL_FLOAT:
-            for (i = 1; i < n_tok; ++i) {
-                lf = (float)atof(tok[i]);
-                cnt += fwrite(&lf, 1, sizeof(float), f_out);
-            }
-            break;
+            case LABEL_INT:
+                for (i = 1; i < n_tok; ++i) {
+                    lf = (float)atoi(tok[i]);
+                    cnt += fwrite(&lf, 1, sizeof(float), f_out);
+                }
+                break;
+            case LABEL_FLOAT:
+                for (i = 1; i < n_tok; ++i) {
+                    lf = (float)atof(tok[i]);
+                    cnt += fwrite(&lf, 1, sizeof(float), f_out);
+                }
+                break;
         }
-        
+
         bh_free(line);
         for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
         bh_free(tok);
     }
     fprintf(f_outlst, "%s\n", name);
-    if (f_out != NULL)
-        fclose(f_out);
-    if (f_lst != NULL)
-        fclose(f_lst);
-    if (f_outlst != NULL)
-        fclose(f_outlst);
+    if (f_out != NULL) fclose(f_out);
+    if (f_lst != NULL) fclose(f_lst);
+    if (f_outlst != NULL) fclose(f_outlst);
 
     return BCNN_SUCCESS;
 }
 
-
-int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int no_input_norm, int swap_to_bgr, 
-    float mean_r, float mean_g, float mean_b, float *dst)
-{
+int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c,
+                              int no_input_norm, int swap_to_bgr, float mean_r,
+                              float mean_g, float mean_b, float *dst) {
     int x, y, k;
     float m = 0.0f;
-    float sn = 1.0f, sd = 1.0f; 
-    
+    float sn = 1.0f, sd = 1.0f;
+
     if (!no_input_norm) {
         sn = 2.0f;
         sd = 1 / 255.0f;
@@ -134,28 +128,29 @@ int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int no_in
     if (swap_to_bgr) {
         for (k = 0; k < c; ++k) {
             switch (k) {
-            case 0:
-                m = mean_r;
-                break;
-            case 1:
-                m = mean_g;
-                break;
-            case 2:
-                m = mean_b;
-                break;
+                case 0:
+                    m = mean_r;
+                    break;
+                case 1:
+                    m = mean_g;
+                    break;
+                case 2:
+                    m = mean_b;
+                    break;
             }
             for (y = 0; y < h; ++y) {
                 for (x = 0; x < w; ++x) {
-                    dst[w * (h * (2 - k) + y) + x] = ((float)src[c * (x + w * y) + k] * sd - m) * sn;
+                    dst[w * (h * (2 - k) + y) + x] =
+                        ((float)src[c * (x + w * y) + k] * sd - m) * sn;
                 }
             }
         }
-    }
-    else {
+    } else {
         for (k = 0; k < c; ++k) {
             for (y = 0; y < h; ++y) {
                 for (x = 0; x < w; ++x) {
-                    dst[w * (h * k + y) + x] = ((float)src[c * (x + w * y) + k] * sd - 0.5f) * sn;
+                    dst[w * (h * k + y) + x] =
+                        ((float)src[c * (x + w * y) + k] * sd - 0.5f) * sn;
                 }
             }
         }
@@ -163,10 +158,9 @@ int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c, int no_in
     return 0;
 }
 
-
 /* IO */
-int bcnn_load_image_from_csv(char *str, int w, int h, int c, unsigned char **img)
-{
+int bcnn_load_image_from_csv(char *str, int w, int h, int c,
+                             unsigned char **img) {
     int i, n_tok, sz = w * h * c;
     char **tok = NULL;
     unsigned char *ptr_img = NULL;
@@ -181,46 +175,43 @@ int bcnn_load_image_from_csv(char *str, int w, int h, int c, unsigned char **img
     }
     *img = ptr_img;
 
-    for (i = 0; i < n_tok; ++i)
-        bh_free(tok[i]);
+    for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
     bh_free(tok);
 
     return BCNN_SUCCESS;
 }
 
-/* Load image from disk, performs crop to fit the required size if needed and copy in pre-allocated memory */
-int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char *img, int state,
-    int *x_shift, int *y_shift)
-{
+/* Load image from disk, performs crop to fit the required size if needed and
+ * copy in pre-allocated memory */
+int bcnn_load_image_from_path(char *path, int w, int h, int c,
+                              unsigned char *img, int state, int *x_shift,
+                              int *y_shift) {
     int w_img, h_img, c_img, x_ul = 0, y_ul = 0;
     unsigned char *buf = NULL, *pimg = NULL;
 
     bip_load_image(path, &buf, &w_img, &h_img, &c_img);
-    bh_assert(w_img > 0 && h_img > 0 && buf,
-        "Invalid image",
-        BCNN_INVALID_DATA);
+    bh_assert(w_img > 0 && h_img > 0 && buf, "Invalid image",
+              BCNN_INVALID_DATA);
     if (c != c_img) {
         fprintf(stderr, "Unexpected number of channels of image %s\n", path);
         bh_free(buf);
         return BCNN_INVALID_DATA;
     }
-    
+
     if (w_img != w || h_img != h) {
-        if (state == 0) { // state predict, always center crop
+        if (state == 0) {  // state predict, always center crop
             x_ul = (w_img - w) / 2;
             y_ul = (h_img - h) / 2;
-        }
-        else { // state train, random crop
+        } else {  // state train, random crop
             x_ul = (int)((float)rand() / RAND_MAX * (w_img - w));
             y_ul = (int)((float)rand() / RAND_MAX * (h_img - h));
         }
-        pimg = (unsigned char*)calloc(w * h * c, sizeof(unsigned char));
-        bip_crop_image(buf, w_img, h_img, w_img * c_img, x_ul, y_ul,
-            pimg, w, h, w * c, c);
+        pimg = (unsigned char *)calloc(w * h * c, sizeof(unsigned char));
+        bip_crop_image(buf, w_img, h_img, w_img * c_img, x_ul, y_ul, pimg, w, h,
+                       w * c, c);
         memcpy(img, pimg, w * h * c);
         bh_free(pimg);
-    }
-    else {
+    } else {
         memcpy(img, buf, w * h * c);
     }
     bh_free(buf);
@@ -230,39 +221,36 @@ int bcnn_load_image_from_path(char *path, int w, int h, int c, unsigned char *im
     return BCNN_SUCCESS;
 }
 
-
-int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, int h, int c, unsigned char **img, int state,
-    int *x_shift, int *y_shift)
-{
+int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w,
+                                int h, int c, unsigned char **img, int state,
+                                int *x_shift, int *y_shift) {
     int w_img, h_img, c_img, x_ul = 0, y_ul = 0;
     unsigned char *tmp = NULL, *pimg = NULL;
 
-    bip_load_image_from_memory(buffer, buffer_size, &tmp, &w_img, &h_img, &c_img);
-    bh_assert(w_img > 0 && h_img > 0 && tmp,
-        "Invalid image",
-        BCNN_INVALID_DATA);
+    bip_load_image_from_memory(buffer, buffer_size, &tmp, &w_img, &h_img,
+                               &c_img);
+    bh_assert(w_img > 0 && h_img > 0 && tmp, "Invalid image",
+              BCNN_INVALID_DATA);
     if (c != c_img) {
-        //fprintf(stderr, "Unexpected number of channels\n");
+        // fprintf(stderr, "Unexpected number of channels\n");
         bh_free(tmp);
         return BCNN_INVALID_DATA;
     }
-    
+
     if (w_img != w || h_img != h) {
-        if (state == 0) { // state predict, always center crop
+        if (state == 0) {  // state predict, always center crop
             x_ul = (w_img - w) / 2;
             y_ul = (h_img - h) / 2;
-        }
-        else { // state train, random crop
+        } else {  // state train, random crop
             x_ul = (int)((float)rand() / RAND_MAX * (w_img - w));
             y_ul = (int)((float)rand() / RAND_MAX * (h_img - h));
         }
-        pimg = (unsigned char*)calloc(w * h * c, sizeof(unsigned char));
-        bip_crop_image(tmp, w_img, h_img, w_img * c_img, x_ul, y_ul,
-            pimg, w, h, w * c, c);
+        pimg = (unsigned char *)calloc(w * h * c, sizeof(unsigned char));
+        bip_crop_image(tmp, w_img, h_img, w_img * c_img, x_ul, y_ul, pimg, w, h,
+                       w * c, c);
         memcpy(*img, pimg, w * h * c);
         bh_free(pimg);
-    }
-    else {
+    } else {
         memcpy(*img, tmp, w * h * c);
     }
     bh_free(tmp);
@@ -273,8 +261,7 @@ int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w, i
 }
 
 /* Mnist iter */
-unsigned int _read_int(char *v)
-{
+static unsigned int _read_int(char *v) {
     int i;
     unsigned int ret = 0;
 
@@ -286,23 +273,20 @@ unsigned int _read_int(char *v)
     return ret;
 }
 
-static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter)
-{
+static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter) {
     char tmp[16];
     unsigned char l;
     unsigned int n_img = 0, n_labels = 0;
     size_t n = 0;
-    
+
     if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0) {
         rewind(iter->f_input);
-    }
-    else {
+    } else {
         fseek(iter->f_input, -1, SEEK_CUR);
     }
     if (fread((char *)&l, 1, sizeof(char), iter->f_label) == 0) {
         rewind(iter->f_label);
-    }
-    else {
+    } else {
         fseek(iter->f_label, -1, SEEK_CUR);
     }
 
@@ -313,11 +297,13 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter)
         iter->input_width = _read_int(tmp + 12);
         n = fread(tmp, 1, 8, iter->f_label);
         n_labels = _read_int(tmp + 4);
-        bh_assert(n_img == n_labels, "MNIST data: number of images and labels must be the same", 
-            BCNN_INVALID_DATA);
-        bh_assert(net->input_height == iter->input_height && net->input_width == iter->input_width,
-            "MNIST data: incoherent image width and height",
-            BCNN_INVALID_DATA);
+        bh_assert(n_img == n_labels,
+                  "MNIST data: number of images and labels must be the same",
+                  BCNN_INVALID_DATA);
+        bh_assert(net->input_height == iter->input_height &&
+                      net->input_width == iter->input_width,
+                  "MNIST data: incoherent image width and height",
+                  BCNN_INVALID_DATA);
         iter->n_samples = n_img;
     }
 
@@ -325,13 +311,14 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter)
     n = fread((char *)&l, 1, sizeof(char), iter->f_label);
     iter->label_int[0] = (int)l;
     // Read img
-    n = fread(iter->input_uchar, 1, iter->input_width * iter->input_height, iter->f_input);
+    n = fread(iter->input_uchar, 1, iter->input_width * iter->input_height,
+              iter->f_input);
 
     return BCNN_SUCCESS;
 }
 
-static int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
-{
+static int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter,
+                                  char *path_input) {
     FILE *f_bin = NULL, *f_lst = NULL;
     char *line = NULL;
     bcnn_label_type type;
@@ -350,7 +337,7 @@ static int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path
         bh_error("Empty data list", BCNN_INVALID_DATA);
     }
 
-    //bh_strstrip(line);
+    // bh_strstrip(line);
     f_bin = fopen(line, "rb");
     if (f_bin == NULL) {
         fprintf(stderr, "[ERROR] Can not open file %s\n", line);
@@ -363,7 +350,8 @@ static int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path
     iter->input_width = net->input_width;
     iter->input_height = net->input_height;
     iter->input_depth = net->input_channels;
-    iter->input_uchar = (unsigned char *)calloc(iter->input_width * iter->input_height * iter->input_depth,
+    iter->input_uchar = (unsigned char *)calloc(
+        iter->input_width * iter->input_height * iter->input_depth,
         sizeof(unsigned char));
     iter->label_float = (float *)calloc(iter->label_width, sizeof(float));
 
@@ -375,8 +363,7 @@ static int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter, char *path
     return BCNN_SUCCESS;
 }
 
-static int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
-{
+static int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter) {
     unsigned char l;
     size_t n = 0, nr = 0;
     int i, buf_sz = 0, label_width, type;
@@ -398,8 +385,7 @@ static int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
             return BCNN_INVALID_PARAMETER;
         }
         bh_free(line);
-    }
-    else {
+    } else {
         fseek(iter->f_input, -1, SEEK_CUR);
     }
 
@@ -413,8 +399,10 @@ static int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
     nr = fread(&buf_sz, 1, sizeof(int), iter->f_input);
     buf = (unsigned char *)calloc(buf_sz, sizeof(unsigned char));
     nr = fread(buf, 1, buf_sz, iter->f_input);
-    bcnn_load_image_from_memory(buf, buf_sz, net->input_width, net->input_height, net->input_channels,
-        &iter->input_uchar, net->state, &net->data_aug.shift_x, &net->data_aug.shift_y);
+    bcnn_load_image_from_memory(buf, buf_sz, net->input_width,
+                                net->input_height, net->input_channels,
+                                &iter->input_uchar, net->state,
+                                &net->data_aug.shift_x, &net->data_aug.shift_y);
     bh_free(buf);
 
     // Read label
@@ -427,8 +415,8 @@ static int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter)
 }
 
 /* Handles cifar10 binary format */
-static int bcnn_init_cifar10_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
-{
+static int bcnn_init_cifar10_iterator(bcnn_net *net, bcnn_iterator *iter,
+                                      char *path_input) {
     FILE *f_bin = NULL;
 
     iter->type = ITER_CIFAR10;
@@ -439,44 +427,47 @@ static int bcnn_init_cifar10_iterator(bcnn_net *net, bcnn_iterator *iter, char *
         return BCNN_INVALID_PARAMETER;
     }
 
-    iter->n_samples = 0; // not used
+    iter->n_samples = 0;  // not used
     iter->label_width = 1;
 
-    iter->input_uchar = (unsigned char *)calloc(iter->input_width * iter->input_height, sizeof(unsigned char));
+    iter->input_uchar = (unsigned char *)calloc(
+        iter->input_width * iter->input_height, sizeof(unsigned char));
     iter->label_int = (int *)calloc(1, sizeof(int));
     iter->input_width = 32;
     iter->input_height = 32;
     iter->input_depth = 3;
-    iter->input_uchar = (unsigned char *)calloc(iter->input_width * iter->input_height * iter->input_depth,
+    iter->input_uchar = (unsigned char *)calloc(
+        iter->input_width * iter->input_height * iter->input_depth,
         sizeof(unsigned char));
     iter->f_input = f_bin;
 
     return BCNN_SUCCESS;
 }
 
-static int bcnn_cifar10_iter(bcnn_net *net, bcnn_iterator *iter)
-{
+static int bcnn_cifar10_iter(bcnn_net *net, bcnn_iterator *iter) {
     unsigned char l;
     unsigned int n_img = 0, n_labels = 0;
     size_t n = 0;
-    int x, y, k, i, rand_skip = /*(int)(10.0f * (float)rand() / RAND_MAX) + 1*/0;
+    int x, y, k, i,
+        rand_skip = /*(int)(10.0f * (float)rand() / RAND_MAX) + 1*/ 0;
     char tmp[3072];
 
     if (net->state == TRAIN) {
         for (i = 0; i < rand_skip; ++i) {
             if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0) {
                 rewind(iter->f_input);
-            }
-            else {
+            } else {
                 fseek(iter->f_input, -1, SEEK_CUR);
             }
-            fseek(iter->f_input, iter->input_width * iter->input_height * iter->input_depth + 1, SEEK_CUR);
+            fseek(
+                iter->f_input,
+                iter->input_width * iter->input_height * iter->input_depth + 1,
+                SEEK_CUR);
         }
     }
     if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0) {
         rewind(iter->f_input);
-    }
-    else {
+    } else {
         fseek(iter->f_input, -1, SEEK_CUR);
     }
 
@@ -484,34 +475,41 @@ static int bcnn_cifar10_iter(bcnn_net *net, bcnn_iterator *iter)
     n = fread((char *)&l, 1, sizeof(char), iter->f_input);
     iter->label_int[0] = (int)l;
     // Read img
-    n = fread(tmp, 1, iter->input_width * iter->input_height * iter->input_depth, iter->f_input);
+    n = fread(tmp, 1,
+              iter->input_width * iter->input_height * iter->input_depth,
+              iter->f_input);
     // Swap depth <-> spatial dim arrangement
     for (k = 0; k < iter->input_depth; ++k) {
         for (y = 0; y < iter->input_height; ++y) {
             for (x = 0; x < iter->input_width; ++x) {
-                iter->input_uchar[(x + iter->input_width * y) * iter->input_depth + k] =
+                iter->input_uchar[(x + iter->input_width * y) *
+                                      iter->input_depth +
+                                  k] =
                     tmp[iter->input_width * (iter->input_height * k + y) + x];
             }
         }
     }
-    /*bip_write_image("test00.png", iter->input_uchar, iter->input_width, iter->input_height, iter->input_depth, 
+    /*bip_write_image("test00.png", iter->input_uchar, iter->input_width,
+       iter->input_height, iter->input_depth,
         iter->input_width * iter->input_depth);*/
 
     return BCNN_SUCCESS;
 }
 
-
-static int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input)
-{
+static int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter,
+                                   char *path_input) {
     int i;
     FILE *f_list = NULL;
     char *line = NULL;
     char **tok = NULL;
     int n_tok = 0;
     unsigned char *img = NULL;
-    int out_w = net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.w;
-    int	out_h = net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.h;
-    int	out_c = net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.c;
+    int out_w =
+        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.w;
+    int out_h =
+        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.h;
+    int out_c =
+        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.c;
 
     iter->type = ITER_LIST;
 
@@ -524,40 +522,41 @@ static int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter, char *pat
     iter->input_width = net->input_width;
     iter->input_height = net->input_width;
     iter->input_depth = net->input_channels;
-    iter->input_uchar = (unsigned char *)calloc(iter->input_width * iter->input_height * iter->input_depth,
+    iter->input_uchar = (unsigned char *)calloc(
+        iter->input_width * iter->input_height * iter->input_depth,
         sizeof(unsigned char));
     line = bh_fgetline(f_list);
     n_tok = bh_strsplit(line, ' ', &tok);
     if (net->prediction_type != SEGMENTATION) {
         iter->label_width = n_tok - 1;
-    }
-    else {
+    } else {
         iter->label_width = out_w * out_h * out_c;
     }
     iter->label_float = (float *)calloc(iter->label_width, sizeof(float));
-    
+
     rewind(f_list);
     iter->f_input = f_list;
     bh_free(line);
     bh_free(img);
     for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
     bh_free(tok);
-    
+
     return BCNN_SUCCESS;
 }
 
-
-static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
-{
+static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter) {
     char *line = NULL;
     char **tok = NULL;
     int i, n_tok = 0, tmp_x, tmp_y;
-    int out_w = net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.w;
-    int	out_h = net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.h;
-    int	out_c = net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.c;
+    int out_w =
+        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.w;
+    int out_h =
+        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.h;
+    int out_c =
+        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.c;
     unsigned char *img = NULL;
-    //nb_lines_skipped = (int)((float)rand() / RAND_MAX * net->batch_size);
-    //bh_fskipline(f, nb_lines_skipped);
+    // nb_lines_skipped = (int)((float)rand() / RAND_MAX * net->batch_size);
+    // bh_fskipline(f, nb_lines_skipped);
     line = bh_fgetline(iter->f_input);
     if (line == NULL) {
         rewind(iter->f_input);
@@ -565,15 +564,17 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
     }
     n_tok = bh_strsplit(line, ' ', &tok);
     if (net->task != PREDICT && net->prediction_type == CLASSIFICATION) {
-        bh_assert(n_tok == 2,
-            "Wrong data format for classification", BCNN_INVALID_DATA);
+        bh_assert(n_tok == 2, "Wrong data format for classification",
+                  BCNN_INVALID_DATA);
     }
     if (iter->type == ITER_LIST) {
-        bcnn_load_image_from_path(tok[0], net->input_width, net->input_height, net->input_channels, iter->input_uchar, net->state,
-            &net->data_aug.shift_x, &net->data_aug.shift_y);
-    }
-    else {
-        bcnn_load_image_from_csv(tok[0], net->input_width, net->input_height, net->input_channels, &iter->input_uchar);
+        bcnn_load_image_from_path(tok[0], net->input_width, net->input_height,
+                                  net->input_channels, iter->input_uchar,
+                                  net->state, &net->data_aug.shift_x,
+                                  &net->data_aug.shift_y);
+    } else {
+        bcnn_load_image_from_csv(tok[0], net->input_width, net->input_height,
+                                 net->input_channels, &iter->input_uchar);
     }
 
     // Label
@@ -581,21 +582,19 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
         for (i = 0; i < iter->label_width; ++i) {
             iter->label_float[i] = (float)atof(tok[i + 1]);
         }
-    }
-    else {
+    } else {
         for (i = 0; i < iter->label_width; ++i) {
             if (iter->type == ITER_LIST) {
-                bcnn_load_image_from_path(tok[i], out_w, out_h, out_c, img, net->state,
-                    &tmp_x, &tmp_y);
-            }
-            else {
+                bcnn_load_image_from_path(tok[i], out_w, out_h, out_c, img,
+                                          net->state, &tmp_x, &tmp_y);
+            } else {
                 bcnn_load_image_from_csv(tok[i], out_w, out_h, out_c, &img);
             }
-            bcnn_convert_img_to_float(img, out_w, out_h, out_c, 0, 0, 0, 0, 0, iter->label_float);
+            bcnn_convert_img_to_float(img, out_w, out_h, out_c, 0, 0, 0, 0, 0,
+                                      iter->label_float);
             bh_free(img);
         }
     }
-    
 
     bh_free(line);
     for (i = 0; i < n_tok; ++i) {
@@ -607,9 +606,8 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter)
 }
 
 /* Data augmentation */
-int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth, bcnn_data_augment *param,
-    unsigned char *buffer)
-{
+int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
+                           bcnn_data_augment *param, unsigned char *buffer) {
     int sz = width * height * depth;
     unsigned char *img_scale = NULL;
     int x_ul = 0, y_ul = 0, w_scale, h_scale;
@@ -618,7 +616,8 @@ int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
 
     if (param->random_fliph) {
         if ((float)rand() / RAND_MAX > 0.5f) {
-            bip_fliph_image(img, width, height, depth, width * depth, buffer, width * depth);
+            bip_fliph_image(img, width, height, depth, width * depth, buffer,
+                            width * depth);
             memcpy(img, buffer, sz * sizeof(unsigned char));
         }
     }
@@ -627,74 +626,82 @@ int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
         if (param->use_precomputed) {
             x_ul = param->shift_x;
             y_ul = param->shift_y;
-        }
-        else {
-            x_ul = (int)((float)(rand() - RAND_MAX / 2) / RAND_MAX * param->range_shift_x);
-            y_ul = (int)((float)(rand() - RAND_MAX / 2) / RAND_MAX * param->range_shift_y);
+        } else {
+            x_ul = (int)((float)(rand() - RAND_MAX / 2) / RAND_MAX *
+                         param->range_shift_x);
+            y_ul = (int)((float)(rand() - RAND_MAX / 2) / RAND_MAX *
+                         param->range_shift_y);
             param->shift_x = x_ul;
             param->shift_y = y_ul;
         }
-        bip_crop_image(img, width, height, width * depth, x_ul, y_ul, buffer, width, height, width * depth, depth);
+        bip_crop_image(img, width, height, width * depth, x_ul, y_ul, buffer,
+                       width, height, width * depth, depth);
         memcpy(img, buffer, sz * sizeof(unsigned char));
     }
     if (param->max_scale > 0.0f || param->min_scale > 0.0f) {
         if (param->use_precomputed) {
             scale = param->scale;
-        }
-        else {
-            scale = (((float)rand() / RAND_MAX) * (param->max_scale - param->min_scale) +
-                param->min_scale);
+        } else {
+            scale = (((float)rand() / RAND_MAX) *
+                         (param->max_scale - param->min_scale) +
+                     param->min_scale);
             param->scale = scale;
         }
-        w_scale = (int)(width * scale); 
+        w_scale = (int)(width * scale);
         h_scale = (int)(height * scale);
-        img_scale = (unsigned char *)calloc(w_scale * h_scale * depth, sizeof(unsigned char));
-        bip_resize_bilinear(img, width, height, width * depth, img_scale, w_scale, h_scale, w_scale * depth, depth);
-        bip_crop_image(img_scale, w_scale, h_scale, w_scale * depth, x_ul, y_ul, img, width, height, width * depth, depth);
+        img_scale = (unsigned char *)calloc(w_scale * h_scale * depth,
+                                            sizeof(unsigned char));
+        bip_resize_bilinear(img, width, height, width * depth, img_scale,
+                            w_scale, h_scale, w_scale * depth, depth);
+        bip_crop_image(img_scale, w_scale, h_scale, w_scale * depth, x_ul, y_ul,
+                       img, width, height, width * depth, depth);
         bh_free(img_scale);
     }
     if (param->rotation_range > 0.0f) {
         if (param->use_precomputed) {
             theta = param->rotation;
-        }
-        else {
-            theta = bip_deg2rad((float)(rand() - RAND_MAX / 2) / RAND_MAX  * param->rotation_range);
+        } else {
+            theta = bip_deg2rad((float)(rand() - RAND_MAX / 2) / RAND_MAX *
+                                param->rotation_range);
             param->rotation = theta;
         }
         memset(buffer, 128, sz);
-        bip_rotate_image(img, width, height, width * depth,
-            buffer, width, height, width * depth, depth, theta, width / 2, height / 2, BILINEAR);
+        bip_rotate_image(img, width, height, width * depth, buffer, width,
+                         height, width * depth, depth, theta, width / 2,
+                         height / 2, BILINEAR);
         memcpy(img, buffer, width * height * depth * sizeof(unsigned char));
     }
     if (param->min_contrast > 0.0f || param->max_contrast > 0.0f) {
         if (param->use_precomputed) {
             contrast = param->contrast;
-        }
-        else {
-            contrast = (((float)rand() / RAND_MAX) * (param->max_contrast - param->min_contrast) +
-                param->min_contrast);
+        } else {
+            contrast = (((float)rand() / RAND_MAX) *
+                            (param->max_contrast - param->min_contrast) +
+                        param->min_contrast);
             param->contrast = contrast;
         }
-        bip_contrast_stretch(img, width * depth, width, height, depth, img, width * depth, contrast);	
+        bip_contrast_stretch(img, width * depth, width, height, depth, img,
+                             width * depth, contrast);
     }
     if (param->min_brightness != 0 || param->max_brightness != 0) {
         if (param->use_precomputed) {
             brightness = param->brightness;
-        }
-        else {
-            brightness = (int)(((float)rand() / RAND_MAX) * (param->max_brightness - param->min_brightness) +
-                param->min_brightness);
+        } else {
+            brightness =
+                (int)(((float)rand() / RAND_MAX) *
+                          (param->max_brightness - param->min_brightness) +
+                      param->min_brightness);
             param->brightness = brightness;
         }
-        bip_image_brightness(img, width * depth, width, height, depth, img, width * depth, brightness);
+        bip_image_brightness(img, width * depth, width, height, depth, img,
+                             width * depth, brightness);
     }
     if (param->max_distortion > 0.0f) {
         if (param->use_precomputed) {
             kx = param->distortion_kx;
             ky = param->distortion_ky;
             distortion = param->distortion;
-        }
-        else {
+        } else {
             kx = (((float)rand() - RAND_MAX / 2) / RAND_MAX);
             ky = (((float)rand() - RAND_MAX / 2) / RAND_MAX);
             distortion = ((float)rand() / RAND_MAX) * (param->max_distortion);
@@ -702,19 +709,19 @@ int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
             param->distortion_ky = ky;
             param->distortion = distortion;
         }
-        bip_image_perlin_distortion(img, width * depth, width, height, depth, buffer, width * depth,
-            param->distortion, kx, ky);
+        bip_image_perlin_distortion(img, width * depth, width, height, depth,
+                                    buffer, width * depth, param->distortion,
+                                    kx, ky);
         memcpy(img, buffer, width * height * depth * sizeof(unsigned char));
     }
 
     return BCNN_SUCCESS;
 }
 
-
-static int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *path_label)
-{
+static int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img,
+                                    char *path_label) {
     FILE *f_img = NULL, *f_label = NULL;
-    char tmp[16] = { 0 };
+    char tmp[16] = {0};
     int n_img = 0, n_lab = 0, nr = 0;
 
     iter->type = ITER_MNIST;
@@ -740,10 +747,13 @@ static int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *p
     iter->input_depth = 1;
     nr = fread(tmp, 1, 8, iter->f_label);
     n_lab = _read_int(tmp + 4);
-    bh_assert(n_img == n_lab, "Inconsistent MNIST data: number of images and labels must be the same",
+    bh_assert(
+        n_img == n_lab,
+        "Inconsistent MNIST data: number of images and labels must be the same",
         BCNN_INVALID_DATA);
 
-    iter->input_uchar = (unsigned char *)calloc(iter->input_width * iter->input_height, sizeof(unsigned char));
+    iter->input_uchar = (unsigned char *)calloc(
+        iter->input_width * iter->input_height, sizeof(unsigned char));
     iter->label_int = (int *)calloc(1, sizeof(int));
     rewind(iter->f_input);
     rewind(iter->f_label);
@@ -751,52 +761,46 @@ static int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img, char *p
     return 0;
 }
 
-
-int bcnn_init_iterator(bcnn_net *net, bcnn_iterator *iter, char *path_input, char *path_label, char *type)
-{
-    
+int bcnn_iterator_initialize(bcnn_net *net, bcnn_iterator *iter,
+                             char *path_input, char *path_label, char *type) {
     if (strcmp(type, "mnist") == 0) {
         return bcnn_init_mnist_iterator(iter, path_input, path_label);
-    }
-    else if (strcmp(type, "bin") == 0) {
+    } else if (strcmp(type, "bin") == 0) {
         return bcnn_init_bin_iterator(net, iter, path_input);
-    }
-    else if (strcmp(type, "list") == 0) {
+    } else if (strcmp(type, "list") == 0) {
         return bcnn_init_list_iterator(net, iter, path_input);
-    }
-    else if (strcmp(type, "cifar10") == 0) {
+    } else if (strcmp(type, "cifar10") == 0) {
         return bcnn_init_cifar10_iterator(net, iter, path_input);
-    }
-    else {
-        bh_error("Unknown data_format. Available are 'mnist' 'bin' 'list' 'cifar10'",
+    } else {
+        bh_error(
+            "Unknown data_format. Available are 'mnist' 'bin' 'list' 'cifar10'",
             BCNN_INVALID_PARAMETER);
     }
-    
+
     return BCNN_SUCCESS;
 }
 
-int bcnn_advance_iterator(bcnn_net *net, bcnn_iterator *iter)
-{
+int bcnn_iterator_next(bcnn_net *net, bcnn_iterator *iter) {
     switch (iter->type) {
-    case ITER_MNIST:
-        bcnn_mnist_next_iter(net, iter);
-        break;
-    case ITER_CIFAR10:
-        bcnn_cifar10_iter(net, iter);
-        break;
-    case ITER_BIN:
-        bcnn_bin_iter(net, iter);
-        break;
-    case ITER_LIST:
-        bcnn_list_iter(net, iter);
-        break;
-    default: break;
+        case ITER_MNIST:
+            bcnn_mnist_next_iter(net, iter);
+            break;
+        case ITER_CIFAR10:
+            bcnn_cifar10_iter(net, iter);
+            break;
+        case ITER_BIN:
+            bcnn_bin_iter(net, iter);
+            break;
+        case ITER_LIST:
+            bcnn_list_iter(net, iter);
+            break;
+        default:
+            break;
     }
     return 0;
 }
 
-int bcnn_free_iterator(bcnn_iterator *iter)
-{
+int bcnn_iterator_terminate(bcnn_iterator *iter) {
     if (iter->f_input != NULL) {
         fclose(iter->f_input);
     }

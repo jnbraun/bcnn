@@ -19,44 +19,42 @@
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 * SOFTWARE.
 */
-
+#include "bcnn_softmax_layer.h"
 
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
-#include "bcnn/bcnn.h"
 #include "bh_log.h"
 
-int bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id)
-{
+int bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {
     int nb_connections = net->nb_connections + 1;
     int sz, i;
-    bcnn_connection conn = { 0 };
-    bcnn_node dst_node = { 0 };
+    bcnn_connection conn = {0};
+    bcnn_node dst_node = {0};
 
     if (net->nb_connections > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_nodes - 1; i >= 0 ; --i) {
+        for (i = net->num_nodes - 1; i >= 0; --i) {
             if (strcmp(net->nodes[i].id, src_id) == 0) {
                 bcnn_connection_add_src_node(&conn, i);
                 is_src_node_found = 1;
                 break;
             }
         }
-        bh_check(is_src_node_found, "Full-connected layer: invalid input node name %s", src_id);
-    }
-    else {
+        bh_check(is_src_node_found,
+                 "Full-connected layer: invalid input node name %s", src_id);
+    } else {
         bcnn_connection_add_src_node(&conn, 0);
     }
 
     // Setup output node
     bh_strfill(&dst_node.id, dst_id);
     bcnn_tensor_set_shape(&dst_node.tensor,
-        net->nodes[conn.src[0]].tensor.n,            // batch size
-        net->nodes[conn.src[0]].tensor.c,            // depth
-        net->nodes[conn.src[0]].tensor.h,            // height
-        net->nodes[conn.src[0]].tensor.w,            // width
-        1);
+                          net->nodes[conn.src[0]].tensor.n,  // batch size
+                          net->nodes[conn.src[0]].tensor.c,  // depth
+                          net->nodes[conn.src[0]].tensor.h,  // height
+                          net->nodes[conn.src[0]].tensor.w,  // width
+                          1);
     bcnn_tensor_allocate(&dst_node.tensor);
     // Add node to net
     bcnn_net_add_node(net, dst_node);
@@ -68,15 +66,17 @@ int bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id)
 
     bcnn_net_add_connection(net, conn);
 
-    bh_log_info("[Softmax] input_shape= %dx%dx%d output_shape= %dx%dx%d",
-        net->nodes[conn.src[0]].tensor.w, net->nodes[conn.src[0]].tensor.h, net->nodes[conn.src[0]].tensor.c,
-        net->nodes[conn.dst[0]].tensor.w, net->nodes[conn.dst[0]].tensor.h, net->nodes[conn.dst[0]].tensor.c);
+    bh_log_info(
+        "[Softmax] input_shape= %dx%dx%d output_shape= %dx%dx%d",
+        net->nodes[conn.src[0]].tensor.w, net->nodes[conn.src[0]].tensor.h,
+        net->nodes[conn.src[0]].tensor.c, net->nodes[conn.dst[0]].tensor.w,
+        net->nodes[conn.dst[0]].tensor.h, net->nodes[conn.dst[0]].tensor.c);
 
     return BCNN_SUCCESS;
 }
 
-int bcnn_forward_softmax_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
-{
+int bcnn_forward_softmax_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
+                                   bcnn_node *dst_node) {
     bcnn_tensor src = src_node->tensor;
     bcnn_tensor dst = dst_node->tensor;
     int b, i, batch_size = src.n;
@@ -93,40 +93,40 @@ int bcnn_forward_softmax_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_
                     vmax = src.data[b * src_size + i];
                 }
             }
-            for (i = 0; i < src_size; ++i){
+            for (i = 0; i < src_size; ++i) {
                 sum += (float)exp(src.data[b * src_size + i] - vmax);
             }
             if (sum) {
                 sum = vmax + (float)log(sum);
-            }
-            else
+            } else
                 sum = vmax - 100.0f;
-            for (i = 0; i < src_size; ++i){
-                dst.data[b * src_size + i] = (float)exp(src.data[b * src_size + i] - sum);
+            for (i = 0; i < src_size; ++i) {
+                dst.data[b * src_size + i] =
+                    (float)exp(src.data[b * src_size + i] - sum);
             }
         }
-    }
-    else {
+    } else {
         for (b = 0; b < batch_size; ++b) {
             for (i = 0; i < src.w * src.h; ++i) {
                 int c;
                 vmax = -FLT_MAX;
                 sum = 0.0f;
                 for (c = 0; c < src.c; ++c) {
-                    vmax = bh_max(vmax, src.data[b * src_size + c * src.w * src.h + i]);
+                    vmax = bh_max(
+                        vmax, src.data[b * src_size + c * src.w * src.h + i]);
                 }
                 for (c = 0; c < src.c; ++c) {
-                    sum += (float)exp(src.data[b * src_size + c * src.w * src.h + i] - vmax);
+                    sum += (float)exp(
+                        src.data[b * src_size + c * src.w * src.h + i] - vmax);
                 }
                 if (sum) {
                     sum = vmax + (float)log(sum);
-                }
-                else {
+                } else {
                     sum = vmax - 100.0f;
                 }
                 for (c = 0; c < src.c; ++c) {
-                    dst.data[b * src_size + c * src.w * src.h + i] = 
-                        (float)exp(src.data[b * src_size + c * src.w * src.h + i] - sum);
+                    dst.data[b * src_size + c * src.w * src.h + i] = (float)exp(
+                        src.data[b * src_size + c * src.w * src.h + i] - sum);
                 }
             }
         }
@@ -134,22 +134,19 @@ int bcnn_forward_softmax_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_
     return BCNN_SUCCESS;
 }
 
-int bcnn_backward_softmax_layer_cpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
-{
+int bcnn_backward_softmax_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
+                                    bcnn_node *dst_node) {
     int i;
     bcnn_tensor src = src_node->tensor;
     bcnn_tensor dst = dst_node->tensor;
     int sz = bcnn_tensor_get_size(&src);
 
-    for (i = 0; i < sz; ++i)
-        src.grad_data[i] += dst.grad_data[i];
+    for (i = 0; i < sz; ++i) src.grad_data[i] += dst.grad_data[i];
 
     return BCNN_SUCCESS;
 }
 
-
-int bcnn_forward_softmax_layer(bcnn_net *net, bcnn_connection *conn)
-{
+int bcnn_forward_softmax_layer(bcnn_net *net, bcnn_connection *conn) {
     bcnn_node *src = &net->nodes[conn->src[0]];
     bcnn_node *dst = &net->nodes[conn->dst[0]];
 #ifdef BCNN_USE_CUDA
@@ -159,9 +156,7 @@ int bcnn_forward_softmax_layer(bcnn_net *net, bcnn_connection *conn)
 #endif
 }
 
-
-int bcnn_backward_softmax_layer(bcnn_net *net, bcnn_connection *conn)
-{
+int bcnn_backward_softmax_layer(bcnn_net *net, bcnn_connection *conn) {
     bcnn_node *src = &net->nodes[conn->src[0]];
     bcnn_node *dst = &net->nodes[conn->dst[0]];
 #ifdef BCNN_USE_CUDA

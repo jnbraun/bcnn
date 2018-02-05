@@ -23,7 +23,7 @@
 
 #ifdef BCNN_USE_CUDA
 
-#include "bcnn/bcnn.h"
+#include "bcnn_softmax_layer.h"
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
 

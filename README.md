@@ -32,7 +32,7 @@ Install cmake.
 * User configuration: Depending on you build configuration, you may want to edit the following lines of ./CMakeLists.txt:
 ```
 # User configuration settings
-option(USE_SSE2 "Build with SSE instructions" ON)
+option(USE_AVX "Build with AVX instructions" ON)
 option(USE_CUDA "Build with CUDA libraries" OFF)
 option(USE_CUDNN "Build with CuDNN library" OFF)
 option(USE_BLAS "Build with BLAS library" ON)

@@ -1,5 +1,6 @@
 
 #include "bcnn/bcnn.h"
+#include <bh/bh_mem.h>
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
 
@@ -38,26 +39,24 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
     bcnn_cuda_memcpy_dev2host(label.data_gpu, label.data, sz);
 #endif
 
+    size_t align_offset = 32;
     /*********************************************************************
         Step 1: Compute D^2 = x1_transpose + 1x_transpose - 2XX_transpose
     **********************************************************************/
     // Dist square = D^2
-    float dist_sq[M_];
-    memset(dist_sq, 0, M_*sizeof(float));
+    float* dist_sq = (float*)bh_align_calloc(M_*sizeof(float), align_offset);
     for (int i = 0; i < M_; ++i)
     {
         dist_sq[i] = bcnn_dot(channels, src.data+(i*channels), src.data+(i*channels));
     }
 
     // dot =-2 XX_transpose
-    float dot_[batch_size * batch_size];
-    memset(dot_, 0, batch_size * batch_size*sizeof(float));
-
+    float* dot_ = (float*)bh_align_calloc(M_*M_*sizeof(float), align_offset);
     bcnn_gemm(0, 1, M_, N_, K_, -2.0, src.data, K_, src.data, K_, 0, dot_, N_);
 
     
     // one array
-    float one[batch_size];
+    float* one = (float*)bh_align_malloc(batch_size*sizeof(float), align_offset);
     for (int i = 0; i < batch_size; ++i)
     {
         one[i] = 1.0f;
@@ -79,7 +78,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
         Step 2: Construct pairwise label matrix
     ********************************************/
     // array for indicating sample data are same class or not
-    int label_mat[batch_size][batch_size];
+    int* label_mat = (int*)bh_align_calloc(N_ * N_ * sizeof(int), align_offset);
 
     // each label is a One-Hot array
     int length = bcnn_tensor_get_size3d(&label);
@@ -103,7 +102,8 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
                     break;
                 }
             }
-            label_mat[i][j] = (int)(label_i == label_j);
+            // label_mat[i][j] = (int)(label_i == label_j);
+            label_mat[i*N_ + j] = (int)(label_i == label_j);
         }
     }
 
@@ -117,10 +117,8 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
     float* bout = src.grad_data;
     memset(bout, 0, sz); // initialize grad_data
 
-    float blob_pos_diff[channels];
-    memset(blob_pos_diff, 0, channels*sizeof(float));
-    float blob_neg_diff[channels];
-    memset(blob_neg_diff, 0, channels*sizeof(float));
+    float* blob_pos_diff = (float*)bh_align_calloc(channels * sizeof(float), align_offset);
+    float* blob_neg_diff = (float*)bh_align_calloc(channels * sizeof(float), align_offset);
 
 
     // dynamic array according to num_negatives
@@ -132,7 +130,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
     {
         for (int j = i+1; j < batch_size; ++j)
         {
-            if (label_mat[i][j])
+            if (label_mat[i*batch_size + j])
             {
                 // dist_pos = D_ij
                 float dist_pos = sqrt(dot_[i*batch_size + j]);
@@ -142,7 +140,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
                 int num_negatives = 0;
                 for (int k = 0; k < N_; ++k)
                 {
-                    if (!label_mat[i][k])
+                    if (!label_mat[i*N_ + k])
                     {
                         num_negatives +=1;
                     }
@@ -150,16 +148,16 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
 
                 for (int k = 0; k < N_; ++k)
                 {
-                    if (!label_mat[j][k])
+                    if (!label_mat[j*N_ + k])
                     {
                         num_negatives +=1;
                     }
                 }
 
                 free(loss_aug_inference);
-                loss_aug_inference = (float *)calloc(num_negatives, sizeof(float));
+                loss_aug_inference = (float *)bh_align_calloc(num_negatives * sizeof(float), align_offset);
                 free(summer_vec);
-                summer_vec = (float *)calloc(num_negatives, sizeof(float));
+                summer_vec = (float *)bh_align_calloc(num_negatives * sizeof(float), align_offset);
                 
                 for (int ss = 0; ss < num_negatives; ++ss)
                 {
@@ -171,7 +169,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
                 for (int k = 0; k < N_; ++k)
                 {
 
-                    if (!label_mat[i][k])
+                    if (!label_mat[i*N_ + k])
                     {
                         loss_aug_inference[neg_idx] = margin - sqrt(dot_[i*N_ + k]);
                         neg_idx ++;
@@ -181,7 +179,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
                 // mine negative (anchor j, neg k)
                 for (int k = 0; k < N_; ++k)
                 {
-                    if (!label_mat[j][k])
+                    if (!label_mat[j*N_ + k])
                     {
                         loss_aug_inference[neg_idx] = margin - sqrt(dot_[j*N_ + k]);
                         neg_idx++;
@@ -234,7 +232,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
                 float dJ_dDik = 0;
                 for (int k = 0; k < N_; ++k)
                 {
-                    if (!label_mat[i][k])
+                    if (!label_mat[i*N_ + k])
                     {
                         bcnn_vsub(K_, bin+(i*K_), bin+(k*K_), blob_neg_diff);
 
@@ -254,7 +252,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
                 float dJ_dDjk = 0;
                 for (int k = 0; k < N_; ++k)
                 {
-                    if (!label_mat[j][k])
+                    if (!label_mat[j*N_ + k])
                     {
                         bcnn_vsub(K_, bin+(j*K_), bin+(k*K_), blob_neg_diff);
 
@@ -274,6 +272,15 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_nod
     }
     loss = loss / layer->num_constraints;
     dst.data[0] = loss;
+
+
+    free(dist_sq);
+    free(dot_);
+    free(one);
+    free(label_mat);
+    free(blob_pos_diff);
+    free(blob_neg_diff);
+
 
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(src.data_gpu, src.data, sz);

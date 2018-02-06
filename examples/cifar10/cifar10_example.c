@@ -21,15 +21,14 @@
 */
 
 #include <bh/bh.h>
-#include <bh/bh_timer.h>
 #include <bh/bh_error.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
+#include <bh/bh_timer.h>
 
 #include "bcnn/bcnn.h"
 
-int create_network(bcnn_net *net)
-{
+int create_network(bcnn_net *net) {
     net->learner.optimizer = SGD;
     net->learner.learning_rate = 0.005f;
     net->learner.gamma = 0.00002f;
@@ -42,20 +41,26 @@ int create_network(bcnn_net *net)
     net->max_batches = 50000;
 
     bcnn_net_set_input_shape(net, 28, 28, 3, 128);
-    
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "input", "conv1_1");
+
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "input",
+                                 "conv1_1");
     bcnn_add_batchnorm_layer(net, "conv1_1", "bn1_1");
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "bn1_1", "conv1_2");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "bn1_1",
+                                 "conv1_2");
     bcnn_add_batchnorm_layer(net, "conv1_2", "bn1_2");
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "bn1_2", "conv1_3");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "bn1_2",
+                                 "conv1_3");
     bcnn_add_batchnorm_layer(net, "conv1_3", "bn1_3");
     bcnn_add_maxpool_layer(net, 2, 2, "bn1_3", "pool1");
 
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "pool1", "conv2_1");
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "pool1",
+                                 "conv2_1");
     bcnn_add_batchnorm_layer(net, "conv2_1", "bn2_1");
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "bn2_1", "conv2_2");
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "bn2_1",
+                                 "conv2_2");
     bcnn_add_batchnorm_layer(net, "conv2_2", "bn2_2");
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "bn2_2", "conv2_3");
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "bn2_2",
+                                 "conv2_3");
     bcnn_add_batchnorm_layer(net, "conv2_3", "bn2_3");
     bcnn_add_maxpool_layer(net, 2, 2, "bn2_3", "pool2");
 
@@ -83,19 +88,18 @@ int create_network(bcnn_net *net)
     return 0;
 }
 
-
-int predict_cifar10(bcnn_net *net, char *test_img, float *error,
-    int nb_pred, char *pred_out)
-{
+int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
+                    char *pred_out) {
     int i = 0, j = 0, n = 0, k = 0;
     float *out = NULL;
     float err = 0.0f, error_batch = 0.0f;
     FILE *f = NULL;
-    bcnn_iterator data_iter = { 0 };
+    bcnn_iterator data_iter = {0};
     int nb = net->nb_connections;
-    int output_size = bcnn_tensor_get_size3d(&net->nodes[net->connections[nb - 2].dst[0]].tensor);
+    int output_size = bcnn_tensor_get_size3d(
+        &net->nodes[net->connections[nb - 2].dst[0]].tensor);
 
-    bcnn_init_iterator(net, &data_iter, test_img, NULL, "cifar10");
+    bcnn_iterator_initialize(net, &data_iter, test_img, NULL, "cifar10");
 
     f = fopen(pred_out, "wt");
     if (f == NULL) {
@@ -115,7 +119,6 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error,
                 fprintf(f, "%f ", out[j * output_size + k]);
             fprintf(f, "\n");
         }
-
     }
     // Last predictions (Have to do this because batch_size is set to 16 yet the
     // number of samples of mnist test data is not a multiple of 16)
@@ -125,30 +128,26 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error,
             bcnn_predict_on_batch(net, &data_iter, &out, &error_batch);
             err += error_batch;
             // Save predictions
-            for (k = 0; k < output_size; ++k)
-                fprintf(f, "%f ", out[k]);
+            for (k = 0; k < output_size; ++k) fprintf(f, "%f ", out[k]);
             fprintf(f, "\n");
-
         }
     }
     *error = err / nb_pred;
 
-    if (f != NULL)
-        fclose(f);
-    bcnn_free_iterator(&data_iter);
+    if (f != NULL) fclose(f);
+    bcnn_iterator_terminate(&data_iter);
     return 0;
 }
 
-
-int train_cifar10(bcnn_net *net, char *train_img,
-    char *test_img, int nb_iter, int eval_period, float *error)
-{
+int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
+                  int eval_period, float *error) {
     float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
     int i = 0;
-    bh_timer t = { 0 }, tp = { 0 };
-    bcnn_iterator data_iter = { 0 };
+    bh_timer t = {0}, tp = {0};
+    bcnn_iterator data_iter = {0};
 
-    if (bcnn_init_iterator(net, &data_iter, train_img, NULL, "cifar10") != 0)
+    if (bcnn_iterator_initialize(net, &data_iter, train_img, NULL, "cifar10") !=
+        0)
         return -1;
 
     bcnn_compile_net(net, "train");
@@ -161,42 +160,45 @@ int train_cifar10(bcnn_net *net, char *train_img,
         if (i % eval_period == 0 && i > 0) {
             bh_timer_stop(&t);
             bh_timer_start(&tp);
-            predict_cifar10(net, test_img, &error_valid, 10000, "predictions_cifar10.txt");
+            predict_cifar10(net, test_img, &error_valid, 128,
+                            "predictions_cifar10.txt");
             bh_timer_stop(&tp);
-            fprintf(stderr, "iter= %d train-error= %f test-error= %f training-time= %lf sec inference-time= %lf sec\n", i,
-                sum_error / (eval_period * net->batch_size), error_valid,
-                bh_timer_get_msec(&t) / 1000, bh_timer_get_msec(&tp) / 1000);
+            fprintf(stderr,
+                    "iter= %d train-error= %f test-error= %f training-time= "
+                    "%lf sec inference-time= %lf sec\n",
+                    i, sum_error / (eval_period * net->batch_size), error_valid,
+                    bh_timer_get_msec(&t) / 1000,
+                    bh_timer_get_msec(&tp) / 1000);
             fflush(stderr);
             bh_timer_start(&t);
             sum_error = 0;
             // Reschedule net for training
             bcnn_compile_net(net, "train");
         }
-        
     }
 
-    bcnn_free_iterator(&data_iter);
+    bcnn_iterator_terminate(&data_iter);
     *error = (float)sum_error / (eval_period * net->batch_size);
 
     return 0;
 }
 
-
-int run(char *train_data, char *test_data)
-{
+int run(char *train_data, char *test_data) {
     float error_train = 0.0f, error_test = 0.0f;
     bcnn_net *net = NULL;
-    
+
     bcnn_init_net(&net);
     bh_info("Create Network...");
     create_network(net);
 
     bh_info("Start training...");
-    if (train_cifar10(net, train_data, test_data, 4000000, 100, &error_train) != 0)
+    if (train_cifar10(net, train_data, test_data, 4000000, 5, &error_train) !=
+        0)
         bh_error("Can not perform training", -1);
-    
+
     bh_info("Start prediction...");
-    predict_cifar10(net, test_data, &error_test, 10000, "predictions_cifar10.txt");
+    predict_cifar10(net, test_data, &error_test, 10000,
+                    "predictions_cifar10.txt");
     bh_info("Prediction ended successfully");
 
     bcnn_end_net(&net);
@@ -204,9 +206,7 @@ int run(char *train_data, char *test_data)
     return 0;
 }
 
-
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <train_data> <test_data>\n", argv[0]);
         return -1;

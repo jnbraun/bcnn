@@ -46,36 +46,32 @@ typedef struct {
 
 float bcnn_rng_gaussian(bcnn_gauss_gen *g);
 
-void get_binary_row(float *row, unsigned int *bin_row, int size);
-
-void get_binary_col(float *col, unsigned int *bin_col, int n, int k);
-
-void get_binary_col_unrolled(float *col, unsigned int *b_col, int n, int k);
-
-
 #ifdef BCNN_USE_CUDA
 
 cublasHandle_t bcnn_cublas_handle();
 
-#define bcnn_cuda_check(RET) {                                                  \
-    if ((RET) != cudaSuccess) {                                                 \
-        fprintf(stderr, "[ERROR] [CUDA] %s\n", cudaGetErrorString((RET)));      \
-        exit((RET));                                                            \
-    }                                                                           \
-}
-#define bcnn_cublas_check(RET) {                                                \
-    if ((RET) != CUBLAS_STATUS_SUCCESS) {                                       \
-        fprintf(stderr, "[ERROR] [CUBLAS] %d\n", (int)(RET));                   \
-        exit((RET));                                                            \
-    }                                                                           \
-}
+#define bcnn_cuda_check(RET)                                                   \
+    {                                                                          \
+        if ((RET) != cudaSuccess) {                                            \
+            fprintf(stderr, "[ERROR] [CUDA] %s\n", cudaGetErrorString((RET))); \
+            exit((RET));                                                       \
+        }                                                                      \
+    }
+#define bcnn_cublas_check(RET)                                    \
+    {                                                             \
+        if ((RET) != CUBLAS_STATUS_SUCCESS) {                     \
+            fprintf(stderr, "[ERROR] [CUBLAS] %d\n", (int)(RET)); \
+            exit((RET));                                          \
+        }                                                         \
+    }
 
-#define bcnn_curand_check(RET) {                                                \
-    if ((RET) != CURAND_STATUS_SUCCESS) {                                       \
-        fprintf(stderr, "[ERROR] [CURAND] %d\n", (int)(RET));                   \
-        exit((RET));                                                            \
-    }                                                                           \
-}
+#define bcnn_curand_check(RET)                                    \
+    {                                                             \
+        if ((RET) != CURAND_STATUS_SUCCESS) {                     \
+            fprintf(stderr, "[ERROR] [CURAND] %d\n", (int)(RET)); \
+            exit((RET));                                          \
+        }                                                         \
+    }
 
 dim3 bcnn_cuda_gridsize(unsigned int n);
 
@@ -96,19 +92,21 @@ void bcnn_cuda_memcpy_dev2host(float *x_gpu, float *x, int n);
 void bcnn_cuda_set_device(int id);
 
 #ifdef BCNN_USE_CUDNN
-#define bcnn_cudnn_check(RET) {                                                 \
-    if ((RET) != CUDNN_STATUS_SUCCESS) {                                        \
-        fprintf(stderr, "[ERROR] [CUDNN] %s\n", cudnnGetErrorString((RET)));    \
-        exit((RET));                                                            \
-    }                                                                           \
-}
+#define bcnn_cudnn_check(RET)                       \
+    {                                               \
+        if ((RET) != CUDNN_STATUS_SUCCESS) {        \
+            fprintf(stderr, "[ERROR] [CUDNN] %s\n", \
+                    cudnnGetErrorString((RET)));    \
+            exit((RET));                            \
+        }                                           \
+    }
 cudnnHandle_t bcnn_cudnn_handle();
-#endif // BCNN_USE_CUDNN
+#endif  // BCNN_USE_CUDNN
 
-#endif //BCNN_USE_CUDA
+#endif  // BCNN_USE_CUDA
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif //BH_UTILS_H
+#endif  // BH_UTILS_H

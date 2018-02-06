@@ -47,44 +47,44 @@ int bcnn_axpy(int n, float a, float *x, float *y) {
     for (i = 0; i < n; ++i) y[i] += a * x[i];
 #else
     int i, nd, nm;
-    __m128 sum0;
-    __m128 sum1;
-    __m128 reg0, reg1, reg2, reg3;
-    __m128 areg = _mm_set1_ps(a);
-    __m128 prod;
+    __m256 sum0;
+    __m256 sum1;
+    __m256 reg0, reg1, reg2, reg3;
+    __m256 areg = _mm256_set1_ps(a);
+    __m256 prod;
     int data_is_aligned = bh_is_aligned32(x) & bh_is_aligned32(y);
 
-    nd = n / 8 * 8;
-    nm = n % 8;
+    nd = n / 16 * 16;
+    nm = n % 16;
     if (data_is_aligned) {
-        for (i = 0; i < nd; i += 8) {
-            reg0 = _mm_load_ps(x + 0);
-            reg1 = _mm_load_ps(x + 4);
-            reg2 = _mm_load_ps(y + 0);
-            reg3 = _mm_load_ps(y + 4);
-            prod = _mm_mul_ps(reg0, areg);
-            sum0 = _mm_add_ps(prod, reg2);
-            prod = _mm_mul_ps(reg1, areg);
-            sum1 = _mm_add_ps(prod, reg3);
-            _mm_store_ps(y + 0, sum0);
-            _mm_store_ps(y + 4, sum1);
-            x += 8;
-            y += 8;
+        for (i = 0; i < nd; i += 16) {
+            reg0 = _mm256_load_ps(x + 0);
+            reg1 = _mm256_load_ps(x + 8);
+            reg2 = _mm256_load_ps(y + 0);
+            reg3 = _mm256_load_ps(y + 8);
+            prod = _mm256_mul_ps(reg0, areg);
+            sum0 = _mm256_add_ps(prod, reg2);
+            prod = _mm256_mul_ps(reg1, areg);
+            sum1 = _mm256_add_ps(prod, reg3);
+            _mm256_store_ps(y + 0, sum0);
+            _mm256_store_ps(y + 8, sum1);
+            x += 16;
+            y += 16;
         }
     } else {
-        for (i = 0; i < nd; i += 8) {
-            reg0 = _mm_loadu_ps(x + 0);
-            reg1 = _mm_loadu_ps(x + 4);
-            reg2 = _mm_loadu_ps(y + 0);
-            reg3 = _mm_loadu_ps(y + 4);
-            prod = _mm_mul_ps(reg0, areg);
-            sum0 = _mm_add_ps(prod, reg2);
-            prod = _mm_mul_ps(reg1, areg);
-            sum1 = _mm_add_ps(prod, reg3);
-            _mm_storeu_ps(y + 0, sum0);
-            _mm_storeu_ps(y + 4, sum1);
-            x += 8;
-            y += 8;
+        for (i = 0; i < nd; i += 16) {
+            reg0 = _mm256_loadu_ps(x + 0);
+            reg1 = _mm256_loadu_ps(x + 8);
+            reg2 = _mm256_loadu_ps(y + 0);
+            reg3 = _mm256_loadu_ps(y + 8);
+            prod = _mm256_mul_ps(reg0, areg);
+            sum0 = _mm256_add_ps(prod, reg2);
+            prod = _mm256_mul_ps(reg1, areg);
+            sum1 = _mm256_add_ps(prod, reg3);
+            _mm256_storeu_ps(y + 0, sum0);
+            _mm256_storeu_ps(y + 8, sum1);
+            x += 16;
+            y += 16;
         }
     }
     for (i = 0; i < nm; ++i) y[i] += a * x[i];
@@ -98,49 +98,49 @@ int bcnn_axpby(int n, float a, float *x, float b, float *y) {
     for (i = 0; i < n; ++i) y[i] = a * x[i] + b * y[i];
 #else
     int i, nd, nm;
-    __m128 sum0;
-    __m128 sum1;
-    __m128 reg0, reg1, reg2, reg3;
-    __m128 areg = _mm_set1_ps(a);
-    __m128 breg = _mm_set1_ps(b);
-    __m128 prod0, prod1;
+    __m256 sum0;
+    __m256 sum1;
+    __m256 reg0, reg1, reg2, reg3;
+    __m256 areg = _mm256_set1_ps(a);
+    __m256 breg = _mm256_set1_ps(b);
+    __m256 prod0, prod1;
     int data_is_aligned = bh_is_aligned32(x) & bh_is_aligned32(y);
 
-    nd = n / 8 * 8;
-    nm = n % 8;
+    nd = n / 16 * 16;
+    nm = n % 16;
     if (data_is_aligned) {
-        for (i = 0; i < nd; i += 8) {
-            reg0 = _mm_load_ps(x + 0);
-            reg1 = _mm_load_ps(x + 4);
-            reg2 = _mm_load_ps(y + 0);
-            reg3 = _mm_load_ps(y + 4);
-            prod0 = _mm_mul_ps(reg0, areg);
-            prod1 = _mm_mul_ps(reg2, breg);
-            sum0 = _mm_add_ps(prod0, prod1);
-            prod0 = _mm_mul_ps(reg1, areg);
-            prod1 = _mm_mul_ps(reg3, breg);
-            sum1 = _mm_add_ps(prod0, prod1);
-            _mm_store_ps(y + 0, sum0);
-            _mm_store_ps(y + 4, sum1);
-            x += 8;
-            y += 8;
+        for (i = 0; i < nd; i += 16) {
+            reg0 = _mm256_load_ps(x + 0);
+            reg1 = _mm256_load_ps(x + 8);
+            reg2 = _mm256_load_ps(y + 0);
+            reg3 = _mm256_load_ps(y + 8);
+            prod0 = _mm256_mul_ps(reg0, areg);
+            prod1 = _mm256_mul_ps(reg2, breg);
+            sum0 = _mm256_add_ps(prod0, prod1);
+            prod0 = _mm256_mul_ps(reg1, areg);
+            prod1 = _mm256_mul_ps(reg3, breg);
+            sum1 = _mm256_add_ps(prod0, prod1);
+            _mm256_store_ps(y + 0, sum0);
+            _mm256_store_ps(y + 8, sum1);
+            x += 16;
+            y += 16;
         }
     } else {
-        for (i = 0; i < nd; i += 8) {
-            reg0 = _mm_loadu_ps(x + 0);
-            reg1 = _mm_loadu_ps(x + 4);
-            reg2 = _mm_loadu_ps(y + 0);
-            reg3 = _mm_loadu_ps(y + 4);
-            prod0 = _mm_mul_ps(reg0, areg);
-            prod1 = _mm_mul_ps(reg2, breg);
-            sum0 = _mm_add_ps(prod0, prod1);
-            prod0 = _mm_mul_ps(reg1, areg);
-            prod1 = _mm_mul_ps(reg3, breg);
-            sum1 = _mm_add_ps(prod0, prod1);
-            _mm_storeu_ps(y + 0, sum0);
-            _mm_storeu_ps(y + 4, sum1);
-            x += 8;
-            y += 8;
+        for (i = 0; i < nd; i += 16) {
+            reg0 = _mm256_loadu_ps(x + 0);
+            reg1 = _mm256_loadu_ps(x + 8);
+            reg2 = _mm256_loadu_ps(y + 0);
+            reg3 = _mm256_loadu_ps(y + 8);
+            prod0 = _mm256_mul_ps(reg0, areg);
+            prod1 = _mm256_mul_ps(reg2, breg);
+            sum0 = _mm256_add_ps(prod0, prod1);
+            prod0 = _mm256_mul_ps(reg1, areg);
+            prod1 = _mm256_mul_ps(reg3, breg);
+            sum1 = _mm256_add_ps(prod0, prod1);
+            _mm256_storeu_ps(y + 0, sum0);
+            _mm256_storeu_ps(y + 8, sum1);
+            x += 16;
+            y += 16;
         }
     }
     for (i = 0; i < nm; ++i) y[i] = a * x[i] + b * y[i];
@@ -516,170 +516,6 @@ int bcnn_gemv(int trans_a, int m, int n, float alpha, float *a, float *x,
         }
 #endif
     }
-    return 0;
-}
-
-// Legacy
-int bcnn_gemm2(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
-               float *A, int lda, float *B, int ldb, float BETA, float *C,
-               int ldc) {
-    int i, j, k;
-#ifdef BCNN_USE_AVX
-    int nd, kd;
-    __m128 apart, bpart, cpart, mul0, areg, mula;
-    float sum[4] = {0};
-#endif
-
-    if (BETA != 1.0f) {
-        for (i = 0; i < M; ++i) {
-            for (j = 0; j < N; ++j) {
-                C[i * ldc + j] *= BETA;
-            }
-        }
-    }
-
-    if (!trans_a && !trans_b) {
-#ifndef BCNN_USE_AVX
-        for (i = 0; i < M; ++i) {
-            for (k = 0; k < K; ++k) {
-                register float tmp = ALPHA * A[i * lda + k];
-                for (j = 0; j < N; ++j) {
-                    C[i * ldc + j] += tmp * B[k * ldb + j];
-                }
-            }
-        }
-#else
-        apart = _mm_setzero_ps();
-        cpart = _mm_setzero_ps();
-        nd = N / 4 * 4;
-
-        for (i = 0; i < M; ++i) {
-            for (k = 0; k < K; ++k) {
-                register float tmp = ALPHA * A[i * lda + k];
-                apart = _mm_set1_ps(tmp);
-                for (j = 0; j < nd; j += 4) {
-                    cpart = _mm_loadu_ps(&C[i * ldc + j]);
-                    bpart = _mm_loadu_ps(&B[k * ldb + j]);
-                    mul0 = _mm_mul_ps(bpart, apart);
-                    cpart = _mm_add_ps(cpart, mul0);
-                    _mm_storeu_ps(&C[i * ldc + j], cpart);
-                }
-                for (; j < N; ++j) C[i * ldc + j] += tmp * B[k * ldb + j];
-            }
-        }
-#endif
-    } else if (trans_a && !trans_b) {
-#ifndef BCNN_USE_AVX
-        for (i = 0; i < M; ++i) {
-            for (k = 0; k < K; ++k) {
-                register float tmp = ALPHA * A[k * lda + i];
-                for (j = 0; j < N; ++j) {
-                    C[i * ldc + j] += tmp * B[k * ldb + j];
-                }
-            }
-        }
-#else
-        cpart = _mm_setzero_ps();
-        nd = N / 4 * 4;
-
-        for (i = 0; i < M; ++i) {
-            for (k = 0; k < K; ++k) {
-                register float tmp = ALPHA * A[k * lda + i];
-                apart = _mm_set1_ps(tmp);
-                for (j = 0; j < nd; j += 4) {
-                    cpart = _mm_loadu_ps(&C[i * ldc + j]);
-                    bpart = _mm_loadu_ps(&B[k * ldb + j]);
-                    mul0 = _mm_mul_ps(bpart, apart);
-                    cpart = _mm_add_ps(cpart, mul0);
-                    _mm_storeu_ps(&C[i * ldc + j], cpart);
-                }
-                for (; j < N; ++j) C[i * ldc + j] += tmp * B[k * ldb + j];
-            }
-        }
-#endif
-    } else if (!trans_a && trans_b) {
-#ifndef BCNN_USE_AVX
-        float sum = 0;
-        for (i = 0; i < M; ++i) {
-            for (j = 0; j < N; ++j) {
-                sum = 0;
-                for (k = 0; k < K; ++k) {
-                    sum += ALPHA * A[i * lda + k] * B[j * ldb + k];
-                }
-                C[i * ldc + j] += sum;
-            }
-        }
-#else
-        areg = _mm_set1_ps(ALPHA);
-        kd = K / 4 * 4;
-
-        for (i = 0; i < M; ++i) {
-            for (j = 0; j < N; ++j) {
-                memset(sum, 0, 4 * sizeof(float));
-                cpart = _mm_setzero_ps();
-                for (k = 0; k < kd; k += 4) {
-                    apart = _mm_loadu_ps(&A[i * lda + k]);
-                    bpart = _mm_loadu_ps(&B[j * ldb + k]);
-                    mula = _mm_mul_ps(apart, areg);
-                    mul0 = _mm_mul_ps(bpart, mula);
-                    cpart = _mm_add_ps(cpart, mul0);
-                }
-                _mm_storeu_ps(sum, cpart);
-                C[i * ldc + j] += sum[0] + sum[1] + sum[2] + sum[3];
-                for (; k < K; ++k)
-                    C[i * ldc + j] += ALPHA * A[i * lda + k] * B[j * ldb + k];
-            }
-        }
-#endif
-    } else {
-        for (i = 0; i < M; ++i) {
-            for (k = 0; k < K; ++k) {
-                register float tmp = ALPHA * A[i * lda + k];
-                for (j = 0; j < N; ++j) {
-                    C[i * ldc + j] += tmp * B[k * ldb + j];
-                }
-            }
-        }
-    }
-    return 0;
-}
-
-// From https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetNaive
-static uint32_t portable_popcnt(uint32_t x) {
-    x = x - ((x >> 1) & (uint32_t) ~(uint32_t)0 / 3);
-    x = (x & (uint32_t) ~(uint32_t)0 / 15 * 3) +
-        ((x >> 2) & (uint32_t) ~(uint32_t)0 / 15 * 3);
-    x = (x + (x >> 4)) & (uint32_t) ~(uint32_t)0 / 255 * 15;
-    return (uint32_t)(x * ((uint32_t) ~(uint32_t)0 / 255)) >>
-           (sizeof(uint32_t) - 1) * 8;
-}
-
-#ifdef _MSC_VER
-#include <intrin.h>
-#include <nmmintrin.h>
-#define __builtin_popcount _mm_popcnt_u32
-#else
-#define __builtin_popcount portable_popcnt
-#endif
-
-int bcnn_xnor_gemm(int trans_a, int trans_b, int M, int N, int K, float ALPHA,
-                   uint32_t *A, int lda, uint32_t *B, int ldb, float BETA,
-                   float *C, int ldc) {
-    int m, k, n;
-
-    for (m = 0; m < M; ++m) {
-        for (k = 0; k < K; k++) {
-            uint32_t A_PART = A[m * lda + k];
-            for (n = 0; n < N; ++n) {
-#ifdef _MSC_VER
-                C[m * ldc + n] += _mm_popcnt_u32(~(A_PART ^ B[k * ldb + n]));
-#else
-                C[m * ldc + n] += portable_popcnt(~(A_PART ^ B[k * ldb + n]));
-#endif
-            }
-        }
-    }
-
     return 0;
 }
 

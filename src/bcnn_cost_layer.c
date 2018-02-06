@@ -20,10 +20,11 @@
  * SOFTWARE.
  */
 
+#include "bcnn_cost_layer.h"
+
 #include <bh/bh.h>
 #include <bh/bh_mem.h>
 
-#include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
 #include "bh_log.h"
 

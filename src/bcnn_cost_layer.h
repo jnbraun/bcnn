@@ -32,15 +32,8 @@ extern "C" {
 int bcnn_forward_cost_layer(bcnn_net *net, bcnn_connection *conn);
 int bcnn_backward_cost_layer(bcnn_net *net, bcnn_connection *conn);
 
-#ifdef BCNN_USE_CUDA
-int bcnn_forward_cost_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
-                                bcnn_node *label_node, bcnn_node *dst_node);
-int bcnn_backward_cost_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
-                                 bcnn_node *dst_node);
-#endif
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif // BCNN_COST_LAYER_H
+#endif  // BCNN_COST_LAYER_H

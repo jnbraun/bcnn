@@ -42,6 +42,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     bcnn_activation a = NONE;
     bcnn_weights_init init = XAVIER;
     bcnn_loss_metric cost = COST_SSE;
+    bcnn_loss loss = EUCLIDEAN_LOSS;
     float rate = 1.0f;
     int n_tok;
     char *src_id = NULL, *dst_id = NULL;
@@ -136,8 +137,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     } else if (strcmp(curr_layer, "{dropout}") == 0) {
                         bcnn_add_dropout_layer(net, rate, src_id);
                     } else {
-                        fprintf(stderr, "[ERROR] Unknown Layer %s\n",
-                                curr_layer);
+                        bh_log_error("Unknown Layer %s", curr_layer);
                         return BCNN_INVALID_PARAMETER;
                     }
                     bh_free(curr_layer);
@@ -230,10 +230,9 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     else if (strcmp(tok[1], "none") == 0)
                         a = NONE;
                     else {
-                        fprintf(stderr,
-                                "[WARNING] Unknown activation type %s, going "
-                                "with ReLU\n",
-                                tok[1]);
+                        bh_log_warning(
+                            "Unknown activation type %s, going with ReLU",
+                            tok[1]);
                         a = RELU;
                     }
                 } else if (strcmp(tok[0], "init") == 0) {
@@ -242,10 +241,9 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     else if (strcmp(tok[1], "msra") == 0)
                         init = MSRA;
                     else {
-                        fprintf(stderr,
-                                "[WARNING] Unknown init type %s, going with "
-                                "xavier init\n",
-                                tok[1]);
+                        bh_log_warning(
+                            "Unknown init type %s, going with xavier init",
+                            tok[1]);
                         init = XAVIER;
                     }
                 } else if (strcmp(tok[0], "metric") == 0) {
@@ -262,11 +260,22 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     else if (strcmp(tok[1], "dice") == 0)
                         cost = COST_DICE;
                     else {
-                        fprintf(stderr,
-                                "[WARNING] Unknown cost metric %s, going with "
-                                "sse\n",
-                                tok[1]);
+                        bh_log_warning("Unknown cost metric %s, going with sse",
+                                       tok[1]);
                         cost = COST_SSE;
+                    }
+                } else if (strcmp(tok[0], "metric") == 0) {
+                    if (strcmp(tok[1], "l2") == 0 ||
+                        strcmp(tok[1], "euclidean") == 0) {
+                        loss = EUCLIDEAN_LOSS;
+                    } else if (strcmp(tok[1], "lifted_struct_similarity") ==
+                               0) {
+                        loss = LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS;
+                    } else {
+                        bh_log_warning(
+                            "Unknown loss %s, going with euclidean loss",
+                            tok[1]);
+                        loss = EUCLIDEAN_LOSS;
                     }
                 } else
                     bcnn_set_param(net, tok[0], tok[1]);
@@ -286,7 +295,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
         bh_check(dst_id != NULL,
                  "Cost layer: invalid input node name. "
                  "Hint: Are you sure that 'dst' field is correctly setup?");
-        bcnn_add_cost_layer(net, cost, 1.0f, src_id, "label", dst_id);
+        bcnn_add_cost_layer(net, loss, cost, 1.0f, src_id, "label", dst_id);
     } else {
         bh_error("Error in config file: last layer must be a cost layer",
                  BCNN_INVALID_PARAMETER);

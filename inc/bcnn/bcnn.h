@@ -249,7 +249,10 @@ typedef enum {
     MSRA    /**< MSRA weight init */
 } bcnn_weights_init;
 
-typedef enum { L2, HUBER } bcnn_loss;
+typedef enum {
+    EUCLIDEAN_LOSS,
+    LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS
+} bcnn_loss;
 
 /**
  * \brief Enum of available loss metrics.
@@ -281,6 +284,7 @@ typedef struct bcnn_layer {
     int net_state;
     bcnn_layer_type type;
     bcnn_activation activation;
+    bcnn_loss loss;
     bcnn_loss_metric loss_metric;
     float dropout_rate;
     float scale;
@@ -478,12 +482,16 @@ int bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
 int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id);
 
 /* Cost layer */
-void bcnn_LiftedStructSimilaritySoftmax_loss_backward(
-    bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node);
-void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *label_node, bcnn_node *dst_node);
-int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric loss_metric,
-                        float scale, char *src_id, char *label_id,
-                        char *dst_id);
+void bcnn_LiftedStructSimilaritySoftmax_loss_backward(bcnn_layer *layer,
+                                                      bcnn_node *src_node,
+                                                      bcnn_node *dst_node);
+void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
+                                                     bcnn_node *src_node,
+                                                     bcnn_node *label_node,
+                                                     bcnn_node *dst_node);
+int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
+                        bcnn_loss_metric loss_metric, float scale, char *src_id,
+                        char *label_id, char *dst_id);
 
 /* Core network routines */
 int bcnn_update(bcnn_net *net);

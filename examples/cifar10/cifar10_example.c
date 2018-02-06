@@ -70,7 +70,8 @@ int create_network(bcnn_net *net) {
     bcnn_add_fullc_layer(net, 10, XAVIER, RELU, 0, "bn3", "fc2");
 
     bcnn_add_softmax_layer(net, "fc2", "softmax");
-    bcnn_add_cost_layer(net, COST_ERROR, 1.0f, "softmax", "label", "cost");
+    bcnn_add_cost_layer(net, EUCLIDEAN_LOSS, COST_ERROR, 1.0f, "softmax",
+                        "label", "cost");
 
     // Data augmentation
     net->data_aug.range_shift_x = 10;

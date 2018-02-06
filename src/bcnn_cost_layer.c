@@ -26,11 +26,12 @@
 #include <bh/bh_mem.h>
 
 #include "bcnn_mat.h"
+#include "bcnn_utils.h"
 #include "bh_log.h"
 
-int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric loss_metric,
-                        float scale, char *src_id, char *label_id,
-                        char *dst_id) {
+int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
+                        bcnn_loss_metric loss_metric, float scale, char *src_id,
+                        char *label_id, char *dst_id) {
     int sz, i;
     bcnn_connection conn = {0};
     bcnn_node dst_node = {0};
@@ -54,7 +55,7 @@ int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric loss_metric,
 
     conn.layer->scale = scale;
     conn.layer->loss_metric = loss_metric;
-
+    conn.layer->loss = loss;
     // Setup label node
     bcnn_tensor_set_shape(
         &net->nodes[1].tensor, net->nodes[conn.src[0]].tensor.n,
@@ -81,16 +82,8 @@ int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss_metric loss_metric,
     return 0;
 }
 
-static void _bcnn_l2_loss(int n, float *x, float *label, float *error,
-                          float *grad_error) {
-    bcnn_copy_f32(n, x, grad_error);
-    bcnn_axpy(n, -1, label, grad_error);
-    *error = bcnn_dot(n, grad_error, grad_error);
-    return;
-}
-
-static void _bcnn_huber_loss(int n, float *x, float *label, float *error,
-                             float *grad_error, float hdelta) {
+static void bcnn_huber_loss(int n, float *x, float *label, float *error,
+                            float *grad_error, float hdelta) {
     int i;
     float e = 0.0f;
 
@@ -107,137 +100,172 @@ static void _bcnn_huber_loss(int n, float *x, float *label, float *error,
     return;
 }
 
-int bcnn_forward_cost_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
-                                bcnn_node *label_node, bcnn_node *dst_node) {
-    int i, j, offset, j_best, n, d;
+static void bcnn_euclidean_loss_forward(bcnn_node *src_node,
+                                        bcnn_node *label_node,
+                                        bcnn_node *dst_node) {
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
+    bcnn_tensor label = label_node->tensor;
+    int size = bcnn_tensor_get_size(&src);
+#ifdef BCNN_USE_CUDA
+    bcnn_cuda_copy_f32(size, src.data_gpu, 1, dst.grad_data_gpu, 1);
+    bcnn_cuda_axpy(size, -1, label.data_gpu, 1, dst.grad_data_gpu, 1);
+#else
+    bcnn_copy_f32(size, src.data, dst.grad_data);
+    bcnn_axpy(size, -1, label.data, dst.grad_data);
+#endif
+}
+
+static void bcnn_euclidean_loss_backward(bcnn_node *src_node,
+                                         bcnn_node *dst_node,
+                                         bcnn_layer *layer) {
+    bcnn_tensor src = src_node->tensor;
+    bcnn_tensor dst = dst_node->tensor;
+    int size = bcnn_tensor_get_size(&src);
+#ifdef BCNN_USE_CUDA
+    bcnn_cuda_axpy(size, layer->scale, dst.grad_data_gpu, 1, src.grad_data_gpu,
+                   1);
+#else
+    bcnn_axpy(size, layer->scale, dst.grad_data, src.grad_data);
+#endif
+}
+
+void bcnn_compute_error(bcnn_layer *layer, bcnn_node *src_node,
+                        bcnn_node *label_node, bcnn_node *dst_node) {
     bcnn_tensor src = src_node->tensor;
     bcnn_tensor dst = dst_node->tensor;
     bcnn_tensor label = label_node->tensor;
     int input_size = src.w * src.h * src.c;
     int batch_size = src.n;
     int sz = src.n * input_size;
-    float p_max;
-    float *input_cpu = NULL;
-    // If no truth available, do nothing
-    if (!label.data) return BCNN_SUCCESS;
 
-    int LEFTED_STRUCTURE_LOSS = 1;
-    if (LEFTED_STRUCTURE_LOSS) {
-        bcnn_LiftedStructSimilaritySoftmax_loss_forward(layer, src_node,
-                                                        label_node, dst_node);
+#ifdef BCNN_USE_CUDA
+    bcnn_cuda_memcpy_dev2host(dst.grad_data_gpu, dst.grad_data, sz);
+#endif
 
-    } else {
-        bcnn_copy_f32(sz, src.data, dst.grad_data);
-        bcnn_axpy(sz, -1, label.data, dst.grad_data);
-
-        switch (layer->loss_metric) {
-            case COST_ERROR:
-                *(dst.data) = 0.0f;
-                for (i = 0; i < batch_size; ++i) {
-                    offset = i * input_size;
-                    p_max = FLT_MIN;
-                    j_best = 0;
-                    for (j = 0; j < input_size; ++j) {
-                        if (src.data[offset + j] > p_max) {
-                            p_max = src.data[offset + j];
-                            j_best = j;
-                        }
-                    }
-                    if (label.data[offset + j_best] == 0) {
-                        *(dst.data) += 1.0f;
+    switch (layer->loss_metric) {
+        case COST_ERROR:
+            *(dst.data) = 0.0f;
+#ifdef BCNN_USE_CUDA
+            bcnn_cuda_memcpy_dev2host(src.data_gpu, src.data, sz);
+            bcnn_cuda_memcpy_dev2host(label.data_gpu, label.data, sz);
+#endif
+            for (int i = 0; i < batch_size; ++i) {
+                int offset = i * input_size;
+                float p_max = FLT_MIN;
+                int j_best = 0;
+                for (int j = 0; j < input_size; ++j) {
+                    if (src.data[offset + j] > p_max) {
+                        p_max = src.data[offset + j];
+                        j_best = j;
                     }
                 }
-                break;
-            case COST_SSE:
-                *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
-                break;
-            case COST_MSE:
-                *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
-                *(dst.data) /= input_size;
-                break;
-            case COST_CRPS:
-                *(dst.data) = 0.0f;
-                input_cpu = (float *)calloc(sz, sizeof(float));
-                for (i = 0; i < batch_size; ++i) {
-                    offset = i * input_size;
-                    for (j = 1; j < input_size; ++j) {
-                        if (src.data[offset + j] < src.data[offset + j - 1]) {
-                            input_cpu[offset + j] = src.data[offset + j - 1];
-                        }
+                if (label.data[offset + j_best] == 0) {
+                    *(dst.data) += 1.0f;
+                }
+            }
+            break;
+        case COST_SSE:
+            *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
+            break;
+        case COST_MSE:
+            *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
+            *(dst.data) /= input_size;
+            break;
+        case COST_CRPS:
+#ifdef BCNN_USE_CUDA
+            bcnn_cuda_memcpy_dev2host(src.data_gpu, src.data, sz);
+            bcnn_cuda_memcpy_dev2host(label.data_gpu, label.data, sz);
+#endif
+            *(dst.data) = 0.0f;
+            float *input_cpu = (float *)calloc(sz, sizeof(float));
+            for (int i = 0; i < batch_size; ++i) {
+                int offset = i * input_size;
+                for (int j = 1; j < input_size; ++j) {
+                    if (src.data[offset + j] < src.data[offset + j - 1]) {
+                        input_cpu[offset + j] = src.data[offset + j - 1];
                     }
                 }
-                *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
-                bh_free(input_cpu);
-                break;
-            case COST_LOGLOSS:
-                *(dst.data) = 0.0f;
-                for (i = 0; i < batch_size; ++i) {
-                    offset = i * input_size;
-                    for (j = 0; j < input_size; ++j) {
-                        if (label.data[offset + j] > 0.0f) {
-                            *(dst.data) += (float)-log(bh_clamp(
-                                src.data[offset + j], 1e-8f, 1.0f - 1e-8f));
-                        }
+            }
+            *(dst.data) = bcnn_dot(sz, dst.grad_data, dst.grad_data);
+            bh_free(input_cpu);
+            break;
+        case COST_LOGLOSS:
+#ifdef BCNN_USE_CUDA
+            bcnn_cuda_memcpy_dev2host(src.data_gpu, src.data, sz);
+            bcnn_cuda_memcpy_dev2host(label.data_gpu, label.data, sz);
+#endif
+            *(dst.data) = 0.0f;
+            for (int i = 0; i < batch_size; ++i) {
+                int offset = i * input_size;
+                for (int j = 0; j < input_size; ++j) {
+                    if (label.data[offset + j] > 0.0f) {
+                        *(dst.data) += (float)-log(bh_clamp(
+                            src.data[offset + j], 1e-8f, 1.0f - 1e-8f));
                     }
                 }
-                break;
-            case COST_DICE:
-                *(dst.data) = 0.0f;
-                for (i = 0; i < batch_size; ++i) {
-                    offset = i * input_size;
-                    n = 0;
-                    d = 0;
-                    for (j = 0; j < input_size; ++j) {
-                        n += (int)(label.data[offset + j] *
-                                   (src.data[offset + j] > 0.5f));
-                        d += (int)(label.data[offset + j] +
-                                   (src.data[offset + j] > 0.5f));
-                    }
-                    *(dst.data) += (float)(2.0f * n + 1.0f) / (d + 1.0f);
+            }
+            break;
+        case COST_DICE:
+#ifdef BCNN_USE_CUDA
+            bcnn_cuda_memcpy_dev2host(src.data_gpu, src.data, sz);
+            bcnn_cuda_memcpy_dev2host(label.data_gpu, label.data, sz);
+#endif
+            *(dst.data) = 0.0f;
+            for (int i = 0; i < batch_size; ++i) {
+                int offset = i * input_size;
+                int n = 0;
+                int d = 0;
+                for (int j = 0; j < input_size; ++j) {
+                    n += (int)(label.data[offset + j] *
+                               (src.data[offset + j] > 0.5f));
+                    d += (int)(label.data[offset + j] +
+                               (src.data[offset + j] > 0.5f));
                 }
-                break;
-        }
+                *(dst.data) += (float)(2.0f * n + 1.0f) / (d + 1.0f);
+            }
+            break;
     }
-
-    return BCNN_SUCCESS;
-}
-
-int bcnn_backward_cost_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
-                                 bcnn_node *dst_node) {
-    int LEFTED_STRUCTURE_LOSS = 1;
-    if (LEFTED_STRUCTURE_LOSS) {
-        bcnn_LiftedStructSimilaritySoftmax_loss_backward(layer, src_node,
-                                                         dst_node);
-
-    } else {
-        bcnn_tensor src = src_node->tensor;
-        bcnn_tensor dst = dst_node->tensor;
-        int input_size = src.w * src.h * src.c;
-        int sz = src.n * input_size;
-
-        bcnn_axpy(sz, layer->scale, dst.grad_data, src.grad_data);
-    }
-
-    return BCNN_SUCCESS;
 }
 
 int bcnn_forward_cost_layer(bcnn_net *net, bcnn_connection *conn) {
-    bcnn_node *src = &net->nodes[conn->src[0]];
-    bcnn_node *dst = &net->nodes[conn->dst[0]];
-    bcnn_node *label = &net->nodes[1];
-#ifdef BCNN_USE_CUDA
-    return bcnn_forward_cost_layer_gpu(conn->layer, src, label, dst);
-#else
-    return bcnn_forward_cost_layer_cpu(conn->layer, src, label, dst);
-#endif
+    bcnn_node *src_node = &net->nodes[conn->src[0]];
+    bcnn_node *dst_node = &net->nodes[conn->dst[0]];
+    bcnn_node *label_node = &net->nodes[1];
+    bcnn_layer *layer = conn->layer;
+    // If no truth available, do nothing
+    if (!label_node->tensor.data) {
+        return BCNN_SUCCESS;
+    }
+
+    switch (layer->loss) {
+        case EUCLIDEAN_LOSS:
+            bcnn_euclidean_loss_forward(src_node, label_node, dst_node);
+            break;
+        case LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS:
+            bcnn_LiftedStructSimilaritySoftmax_loss_forward(
+                layer, src_node, label_node, dst_node);
+            break;
+    }
+
+    bcnn_compute_error(layer, src_node, label_node, dst_node);
+
+    return BCNN_SUCCESS;
 }
 
 int bcnn_backward_cost_layer(bcnn_net *net, bcnn_connection *conn) {
-    bcnn_node *src = &net->nodes[conn->src[0]];
-    bcnn_node *dst = &net->nodes[conn->dst[0]];
-#ifdef BCNN_USE_CUDA
-    return bcnn_backward_cost_layer_gpu(conn->layer, src, dst);
-#else
-    return bcnn_backward_cost_layer_cpu(conn->layer, src, dst);
-#endif
+    bcnn_node *src_node = &net->nodes[conn->src[0]];
+    bcnn_node *dst_node = &net->nodes[conn->dst[0]];
+    bcnn_layer *layer = conn->layer;
+    switch (layer->loss) {
+        case EUCLIDEAN_LOSS:
+            bcnn_euclidean_loss_backward(src_node, dst_node, layer);
+            break;
+        case LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS:
+            bcnn_LiftedStructSimilaritySoftmax_loss_backward(layer, src_node,
+                                                             dst_node);
+            break;
+    }
+
+    return BCNN_SUCCESS;
 }

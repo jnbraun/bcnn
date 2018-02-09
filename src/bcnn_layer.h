@@ -26,13 +26,42 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+/* Experimental API... WIP
+typedef struct bcnn_layer {
+    bcnn_layer_type layer_type;
+    int data_size;
+    void* data;
+    void (*initialize)(bcnn_layer* layer);
+    void (*terminate)(bcnn_layer* layer);
+    void (*forward)(bcnn_layer* layer);
+    void (*backward)(bcnn_layer* layer);
+    void (*update)(bcnn_layer* layer);
+} bcnn_layer;
 
+bcnn_layer* bcnn_layer_create(bcnn_layer_type type, bcnn_layer_param* param);
 
+bcnn_layer bcnn_layer_fullc = {
+    .layer_type = FULL_CONNECTED,
+    .data_size = sizeof(struct bcnn_layer_fullc_data),
+    .initialize = bcnn_layer_fullc_init,
+    .terminate = bcnn_layer_fullc_terminate,
+    .func_update = bcnn_layer_fullc_update,
+    .forward = bcnn_forward_fullc_layer,
+    .backward = bcnn_backward_fullc_layer};
 
+typedef struct bcnn_layer_fullc_data {
+    bcnn_tensor weights;
+    bcnn_tensor bias;
+    bcnn_activation activation;
+} bcnn_layer_fullc_data;
+
+void bcnn_layer_fullc_init(bcnn_layer* layer) {
+    bcnn_layer_fullc_data* data = (bcnn_layer_fullc_data*)layer->data;
+    data->weights;
+}*/
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // BH_LAYER_H
-
+#endif  // BH_LAYER_H

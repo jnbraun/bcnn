@@ -46,6 +46,14 @@ typedef struct {
 
 float bcnn_rng_gaussian(bcnn_gauss_gen *g);
 
+static bh_inline void bh_strfill(char **option, char *argv) {
+    size_t length;
+    bh_free(*option);
+    length = strlen(argv) + 1;
+    *option = (char *)calloc(length, sizeof(char));
+    memcpy(*option, argv, length);
+}
+
 #ifdef BCNN_USE_CUDA
 
 cublasHandle_t bcnn_cublas_handle();

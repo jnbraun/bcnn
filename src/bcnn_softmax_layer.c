@@ -24,6 +24,7 @@
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
+#include "bcnn_utils.h"
 #include "bh_log.h"
 
 int bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {

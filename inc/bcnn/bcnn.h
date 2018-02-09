@@ -396,15 +396,6 @@ typedef struct {
 #endif
 } bcnn_net;
 
-static bh_inline int bh_strfill(char **option, char *argv) {
-    size_t length;
-    bh_free(*option);
-    length = strlen(argv) + 1;
-    *option = (char *)calloc(length, sizeof(char));
-    memcpy(*option, argv, length);
-    return 0;
-}
-
 void bcnn_net_set_input_shape(bcnn_net *net, int input_width, int input_height,
                               int input_channels, int batch_size);
 

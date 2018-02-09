@@ -100,7 +100,10 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
     int output_size = bcnn_tensor_get_size3d(
         &net->nodes[net->connections[nb - 2].dst[0]].tensor);
 
-    bcnn_iterator_initialize(net, &data_iter, test_img, NULL, "cifar10");
+    if (bcnn_iterator_initialize(net, &data_iter, test_img, NULL, "cifar10") !=
+        0) {
+        return -1;
+    }
 
     f = fopen(pred_out, "wt");
     if (f == NULL) {
@@ -148,8 +151,9 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
     bcnn_iterator data_iter = {0};
 
     if (bcnn_iterator_initialize(net, &data_iter, train_img, NULL, "cifar10") !=
-        0)
+        0) {
         return -1;
+    }
 
     bcnn_compile_net(net, "train");
 

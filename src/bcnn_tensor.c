@@ -27,9 +27,50 @@
 
 #include "bcnn/bcnn.h"
 #include "bcnn_utils.h"
+#include "bh_log.h"
 
-void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w, int has_grad)
-{
+void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
+                        int has_grad) {
+    bcnn_tensor_set_shape(t, n, c, h, w, has_grad);
+    bcnn_tensor_allocate(t);
+}
+
+void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler) {
+    bh_check(t->data != NULL, "Invalid tensor data");
+    switch (filler.type) {
+        float std_init;
+        case XAVIER:
+            std_init = sqrtf(3.0f / filler.range);
+            for (int i = 0; i < bcnn_tensor_get_size(t); ++i) {
+                t->data[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);
+            }
+            break;
+        case MSRA:
+            std_init = sqrtf(2.0f / filler.range);
+            bcnn_gauss_gen g = {0};
+            for (int i = 0; i < bcnn_tensor_get_size(t); ++i) {
+                t->data[i] = std_init * bcnn_rng_gaussian(&g);
+            }
+            break;
+        case ZEROS:
+            break;
+    }
+#ifdef BCNN_USE_CUDA
+    bcnn_cuda_memcpy_f32_noalloc(t->data, t->data_gpu, bcnn_tensor_get_size(t));
+#endif
+}
+
+void bcnn_tensor_destroy(bcnn_tensor *t) {
+    bcnn_tensor_free(t);
+    t->n = 0;
+    t->c = 0;
+    t->h = 0;
+    t->w = 0;
+    t->has_grad = 0;
+}
+
+void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w,
+                           int has_grad) {
     t->n = n;
     t->c = c;
     t->h = h;
@@ -37,8 +78,7 @@ void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w, int has_g
     t->has_grad = has_grad;
 }
 
-void bcnn_tensor_set_shape_from_tensor(bcnn_tensor *dst, bcnn_tensor *src)
-{
+void bcnn_tensor_set_shape_from_tensor(bcnn_tensor *dst, bcnn_tensor *src) {
     dst->n = src->n;
     dst->c = src->c;
     dst->h = src->h;
@@ -46,32 +86,22 @@ void bcnn_tensor_set_shape_from_tensor(bcnn_tensor *dst, bcnn_tensor *src)
     dst->has_grad = src->has_grad;
 }
 
-int bcnn_tensor_get_size(bcnn_tensor *t)
-{
-    return t->w * t->h * t->c * t->n;
-}
+int bcnn_tensor_get_size(bcnn_tensor *t) { return t->w * t->h * t->c * t->n; }
 
-int bcnn_tensor_get_size3d(bcnn_tensor *t)
-{
-    return t->w * t->h * t->c;
-}
+int bcnn_tensor_get_size3d(bcnn_tensor *t) { return t->w * t->h * t->c; }
 
-int bcnn_tensor_get_size2d(bcnn_tensor *t)
-{
-    return t->w * t->h;
-}
+int bcnn_tensor_get_size2d(bcnn_tensor *t) { return t->w * t->h; }
 
-void bcnn_tensor_allocate(bcnn_tensor *t)
-{
+void bcnn_tensor_allocate(bcnn_tensor *t) {
     int size = t->n * t->c * t->h * t->w;
-    
+
     bcnn_tensor_free(t);
-    if (size <= 0)
-        return;
+    if (size <= 0) return;
     t->data = (float *)bh_align_calloc(size * sizeof(float), align_offset_);
 #ifndef BCNN_DEPLOY_ONLY
     if (t->has_grad) {
-        t->grad_data = (float *)bh_align_calloc(size * sizeof(float), align_offset_);
+        t->grad_data =
+            (float *)bh_align_calloc(size * sizeof(float), align_offset_);
     }
 #endif
 #ifdef BCNN_USE_CUDA
@@ -84,8 +114,7 @@ void bcnn_tensor_allocate(bcnn_tensor *t)
 #endif
 }
 
-void bcnn_tensor_free(bcnn_tensor *t)
-{
+void bcnn_tensor_free(bcnn_tensor *t) {
     bh_align_free(t->data);
     t->data = NULL;
 #ifndef BCNN_DEPLOY_ONLY
@@ -107,8 +136,7 @@ void bcnn_tensor_free(bcnn_tensor *t)
 }
 
 /* bcnn_tensor_assign carries out a shallow copy */
-void bcnn_tensor_assign(bcnn_tensor *dst, bcnn_tensor *src)
-{
+void bcnn_tensor_assign(bcnn_tensor *dst, bcnn_tensor *src) {
     dst->n = src->n;
     dst->c = src->c;
     dst->h = src->h;
@@ -130,4 +158,3 @@ void bcnn_tensor_assign(bcnn_tensor *dst, bcnn_tensor *src)
 #endif
 #endif
 }
-

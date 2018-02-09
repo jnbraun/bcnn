@@ -754,17 +754,20 @@ int bcnn_write_model(bcnn_net *net, char *filename) {
         layer = net->connections[i].layer;
         if (layer->type == CONVOLUTIONAL || layer->type == DECONVOLUTIONAL ||
             layer->type == DEPTHWISE_CONV || layer->type == FULL_CONNECTED) {
+            int weights_size = bcnn_tensor_get_size(&layer->weights);
+            int biases_size = bcnn_tensor_get_size(&layer->biases);
 #ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_dev2host(layer->weight_gpu, layer->weight,
-                                      layer->weights_size);
-            bcnn_cuda_memcpy_dev2host(layer->bias_gpu, layer->bias,
-                                      layer->bias_size);
+            bcnn_cuda_memcpy_dev2host(layer->weights.data_gpu,
+                                      layer->weights.data, weights_size);
+            bcnn_cuda_memcpy_dev2host(layer->biases.data_gpu,
+                                      layer->biases.data, biases_size);
 #endif
-            fwrite(layer->bias, sizeof(float), layer->bias_size, fp);
-            fwrite(layer->weight, sizeof(float), layer->weights_size, fp);
+            fwrite(layer->biases.data, sizeof(float), biases_size, fp);
+            fwrite(layer->weights.data, sizeof(float), weights_size, fp);
         }
         if (layer->type == ACTIVATION && layer->activation == PRELU) {
-            fwrite(layer->weight, sizeof(float), layer->weights_size, fp);
+            int weights_size = bcnn_tensor_get_size(&layer->weights);
+            fwrite(layer->weights.data, sizeof(float), weights_size, fp);
         }
         if (layer->type == BATCHNORM) {
 #ifdef BCNN_USE_CUDA
@@ -817,26 +820,29 @@ int bcnn_load_model(bcnn_net *net, char *filename) {
         if ((layer->type == CONVOLUTIONAL || layer->type == DECONVOLUTIONAL ||
              layer->type == DEPTHWISE_CONV || layer->type == FULL_CONNECTED) &&
             is_ft == 0) {
-            nb_read = fread(layer->bias, sizeof(float), layer->bias_size, fp);
+            int weights_size = bcnn_tensor_get_size(&layer->weights);
+            int biases_size = bcnn_tensor_get_size(&layer->biases);
+            nb_read = fread(layer->biases.data, sizeof(float), biases_size, fp);
             bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d\n",
-                        i, (unsigned long)nb_read, layer->bias_size);
+                        i, (unsigned long)nb_read, biases_size);
             nb_read =
-                fread(layer->weight, sizeof(float), layer->weights_size, fp);
+                fread(layer->weights.data, sizeof(float), weights_size, fp);
             bh_log_info(
                 "layer= %d nbread_weight= %lu weight_size_expected= %d\n", i,
-                (unsigned long)nb_read, layer->weights_size);
+                (unsigned long)nb_read, weights_size);
 #ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_host2dev(layer->weight_gpu, layer->weight,
-                                      layer->weights_size);
-            bcnn_cuda_memcpy_host2dev(layer->bias_gpu, layer->bias,
-                                      layer->bias_size);
+            bcnn_cuda_memcpy_host2dev(layer->weights.data_gpu,
+                                      layer->weights.data, weights_size);
+            bcnn_cuda_memcpy_host2dev(layer->biases.data_gpu,
+                                      layer->biases.data, biases_size);
 #endif
         }
         if (layer->type == ACTIVATION && layer->activation == PRELU) {
+            int weights_size = bcnn_tensor_get_size(&layer->weights);
             nb_read =
-                fread(layer->weight, sizeof(float), layer->weights_size, fp);
+                fread(layer->weights.data, sizeof(float), weights_size, fp);
             bh_log_info("PReLU layer= %d nbread= %lu expected= %d\n", i,
-                        (unsigned long)nb_read, layer->weights_size);
+                        (unsigned long)nb_read, weights_size);
         }
         if (layer->type == BATCHNORM) {
             int sz = net->nodes[net->connections[i].dst[0]].tensor.c;
@@ -928,28 +934,29 @@ int bcnn_visualize_network(bcnn_net *net) {
                 sz = bcnn_tensor_get_size(
                     &net->nodes[net->connections[j].src[0]].tensor);
 #ifdef BCNN_USE_CUDA
-                bcnn_cuda_memcpy_dev2host(net->connections[j].layer->weight_gpu,
-                                          net->connections[j].layer->weight,
-                                          sz);
+                bcnn_cuda_memcpy_dev2host(
+                    net->connections[j].layer->weights.data_gpu,
+                    net->connections[j].layer->weights.data, sz);
 #endif
                 sprintf(name, "wgt_%d.txt", j);
                 ftmp = fopen(name, "wt");
                 layer = net->connections[j].layer;
                 for (k = 0; k < sz; ++k) {
-                    fprintf(ftmp, "%f ", layer->weight[k]);
+                    fprintf(ftmp, "%f ", layer->weights.data[k]);
                 }
                 fprintf(ftmp, "\n");
                 fclose(ftmp);
                 sz = 2;
 #ifdef BCNN_USE_CUDA
-                bcnn_cuda_memcpy_dev2host(net->connections[j].layer->bias_gpu,
-                                          net->connections[j].layer->bias, sz);
+                bcnn_cuda_memcpy_dev2host(
+                    net->connections[j].layer->biases.data_gpu,
+                    net->connections[j].layer->biases.data, sz);
 #endif
                 sprintf(name, "b_%d.txt", j);
                 ftmp = fopen(name, "wt");
                 layer = net->connections[j].layer;
                 for (k = 0; k < sz; ++k) {
-                    fprintf(ftmp, "%f ", layer->bias[k]);
+                    fprintf(ftmp, "%f ", layer->biases.data[k]);
                 }
                 fprintf(ftmp, "\n");
                 fclose(ftmp);
@@ -963,10 +970,8 @@ int bcnn_visualize_network(bcnn_net *net) {
 int bcnn_free_layer(bcnn_layer **layer) {
     bcnn_layer *p_layer = (*layer);
     bh_free(p_layer->indexes);
-    bh_free(p_layer->weight);
-    bh_free(p_layer->weight_diff);
-    bh_free(p_layer->bias);
-    bh_free(p_layer->bias_diff);
+    bcnn_tensor_destroy(&p_layer->weights);
+    bcnn_tensor_destroy(&p_layer->biases);
     bh_free(p_layer->conv_workspace);
     bh_free(p_layer->mean);
     bh_free(p_layer->diff_mean);
@@ -985,10 +990,6 @@ int bcnn_free_layer(bcnn_layer **layer) {
     bh_free(p_layer->binary_workspace);
 #ifdef BCNN_USE_CUDA
     if (p_layer->indexes_gpu) bcnn_cuda_free(p_layer->indexes_gpu);
-    if (p_layer->weight_gpu) bcnn_cuda_free(p_layer->weight_gpu);
-    if (p_layer->weight_diff_gpu) bcnn_cuda_free(p_layer->weight_diff_gpu);
-    if (p_layer->bias_gpu) bcnn_cuda_free(p_layer->bias_gpu);
-    if (p_layer->bias_diff_gpu) bcnn_cuda_free(p_layer->bias_diff_gpu);
     if (p_layer->mean_gpu) bcnn_cuda_free(p_layer->mean_gpu);
     if (p_layer->diff_mean_gpu) bcnn_cuda_free(p_layer->diff_mean_gpu);
     if (p_layer->global_mean_gpu) bcnn_cuda_free(p_layer->global_mean_gpu);

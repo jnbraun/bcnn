@@ -22,6 +22,7 @@
 
 #include "bcnn/bcnn.h"
 #include "bcnn_utils.h"
+#include "bh_log.h"
 
 #include <bh/bh.h>
 #include <bh/bh_error.h>
@@ -122,6 +123,17 @@ float *bcnn_cuda_memcpy_f32(float *x, int n) {
     }
 
     return x_gpu;
+}
+
+void bcnn_cuda_memcpy_f32_noalloc(float *x, float *x_gpu, int n) {
+    size_t size = sizeof(float) * n;
+
+    bh_check(x_gpu != NULL, "Invalid pointer to gpu memory");
+
+    if (x) {
+        cudaError_t status = cudaMemcpy(x_gpu, x, size, cudaMemcpyHostToDevice);
+        bcnn_cuda_check(status);
+    }
 }
 
 void bcnn_cuda_fill_with_random(float *x_gpu, int n) {

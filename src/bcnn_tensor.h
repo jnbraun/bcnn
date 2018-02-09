@@ -30,23 +30,42 @@ extern "C" {
 static const int align_offset_ = 32;
 
 typedef struct {
-    int     n;                      // Batch size
-    int     c;                      // Number of channels = depth
-    int     h;                      // Height
-    int     w;                      // Width
-    float   *data;                  // Pointer to data
+    int n;        // Batch size
+    int c;        // Number of channels = depth
+    int h;        // Height
+    int w;        // Width
+    float *data;  // Pointer to data
 #ifndef BCNN_DEPLOY_ONLY
-    float   *grad_data;             // Pointer to gradient data
+    float *grad_data;  // Pointer to gradient data
 #endif
 #ifdef BCNN_USE_CUDA
-    float   *data_gpu;              // Pointer to data on gpu
+    float *data_gpu;  // Pointer to data on gpu
 #ifndef BCNN_DEPLOY_ONLY
-    float   *grad_data_gpu;         // Pointer to gradient data on gpu
+    float *grad_data_gpu;  // Pointer to gradient data on gpu
 #endif
 #endif
-    int     has_grad;               // if has gradient data or not
+    int has_grad;  // if has gradient data or not
 } bcnn_tensor;
 
+// The different type of tensor initialization.
+// This is ususally used to randomly initialize the weights/bias of one layer
+typedef enum bcnn_filler_type {
+    ZEROS,   // Fill with 0
+    XAVIER,  // Xavier init
+    MSRA     // MSRA init
+} bcnn_filler_type;
+
+typedef struct tensor_filler {
+    int range;
+    bcnn_filler_type type;
+} bcnn_tensor_filler;
+
+void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
+                        int has_grad);
+
+void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler);
+
+void bcnn_tensor_destroy(bcnn_tensor *t);
 
 // User will be responsible to declare/allocate the tensor instance such as:
 // On stack:
@@ -67,7 +86,8 @@ typedef struct {
 // bcnn_tensor_free(t);
 // bh_free(t);
 
-void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w, int has_grad);
+void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w,
+                           int has_grad);
 
 void bcnn_tensor_set_shape_from_tensor(bcnn_tensor *dst, bcnn_tensor *src);
 
@@ -83,10 +103,8 @@ int bcnn_tensor_get_size2d(bcnn_tensor *t);
 
 void bcnn_tensor_assign(bcnn_tensor *dst, bcnn_tensor *src);
 
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif // BH_TENSOR_H
-
+#endif  // BH_TENSOR_H

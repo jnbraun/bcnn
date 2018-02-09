@@ -89,6 +89,8 @@ float *bcnn_cuda_malloc_f32(int n);
 
 float *bcnn_cuda_memcpy_f32(float *x, int n);
 
+void bcnn_cuda_memcpy_f32_noalloc(float *x, float *x_gpu, int n);
+
 void bcnn_cuda_fill_with_random(float *x_gpu, int n);
 
 void bcnn_cuda_free(void *x_gpu);

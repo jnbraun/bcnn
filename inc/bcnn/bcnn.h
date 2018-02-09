@@ -244,10 +244,10 @@ typedef enum {
 /**
  * \brief Enum of available weight inializations modes.
  */
-typedef enum {
-    XAVIER, /**< Xavier weight init */
-    MSRA    /**< MSRA weight init */
-} bcnn_weights_init;
+// typedef enum {
+//     XAVIER, /**< Xavier weight init */
+//     MSRA    /**< MSRA weight init */
+// } bcnn_filler_type;
 
 typedef enum {
     EUCLIDEAN_LOSS,
@@ -289,20 +289,8 @@ typedef struct bcnn_layer {
     float dropout_rate;
     float scale;
     int concat_index;
-    int weights_size;
-    float *weight;
-    float *weight_diff;
-#ifdef BCNN_USE_CUDA
-    float *weight_gpu;
-    float *weight_diff_gpu;
-#endif
-    int bias_size;
-    float *bias;
-    float *bias_diff;
-#ifdef BCNN_USE_CUDA
-    float *bias_gpu;
-    float *bias_diff_gpu;
-#endif
+    bcnn_tensor weights;
+    bcnn_tensor biases;
     int *indexes;
     float *conv_workspace;
     float *rand;
@@ -429,21 +417,20 @@ int bcnn_free_workload(bcnn_net *net);
 
 /* Conv layer */
 int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
-                                 int pad, int batch_norm,
-                                 bcnn_weights_init init,
+                                 int pad, int batch_norm, bcnn_filler_type init,
                                  bcnn_activation activation, int quantize,
                                  char *src_id, char *dst_id);
 
 /* Deconv layer */
 int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride,
-                                   int pad, bcnn_weights_init init,
+                                   int pad, bcnn_filler_type init,
                                    bcnn_activation activation, char *src_id,
                                    char *dst_id);
 
 /* Depthwise separable conv layer */
 int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride,
                                       int pad, int batch_norm,
-                                      bcnn_weights_init init,
+                                      bcnn_filler_type init,
                                       bcnn_activation activation, char *src_id,
                                       char *dst_id);
 
@@ -451,7 +438,7 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride,
 int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id);
 
 /* Full-connected layer */
-int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_weights_init init,
+int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_filler_type init,
                          bcnn_activation activation, int quantize, char *src_id,
                          char *dst_id);
 

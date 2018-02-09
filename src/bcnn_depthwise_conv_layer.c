@@ -38,7 +38,7 @@
 
 int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride,
                                       int pad, int batch_norm,
-                                      bcnn_weights_init init,
+                                      bcnn_filler_type init,
                                       bcnn_activation activation, char *src_id,
                                       char *dst_id) {
     int nb_connections = net->nb_connections + 1;
@@ -74,37 +74,22 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride,
     conn.layer->stride = stride;
     conn.layer->size = size;
     conn.layer->pad = pad;
-    conn.layer->bias_size = net->nodes[conn.src[0]].tensor.c;
-    conn.layer->weights_size = net->nodes[conn.src[0]].tensor.c * size * size;
-    conn.layer->weight =
-        (float *)calloc(conn.layer->weights_size, sizeof(float));
-    conn.layer->weight_diff =
-        (float *)calloc(conn.layer->weights_size, sizeof(float));
-    conn.layer->bias = (float *)calloc(conn.layer->bias_size, sizeof(float));
-    conn.layer->bias_diff =
-        (float *)calloc(conn.layer->bias_size, sizeof(float));
-    switch (init) {
-        case XAVIER:
-            std_init = (float)sqrt(
-                3.0f / (size * size * net->nodes[conn.src[0]].tensor.c));
-            for (i = 0; i < conn.layer->weights_size; ++i) {
-                conn.layer->weight[i] =
-                    std_init * (2 * ((float)rand() / RAND_MAX) - 1);
-            }
-            break;
-        case MSRA:
-            std_init = (float)sqrt(
-                2.0f / (size * size * net->nodes[conn.src[0]].tensor.c));
-            for (i = 0; i < conn.layer->weights_size; ++i) {
-                conn.layer->weight[i] = std_init * bcnn_rng_gaussian(&g);
-            }
-            break;
-    }
+
+    // Setup layer weights
+    bcnn_tensor_create(&conn.layer->weights, 1, 1, 1,
+                       net->nodes[conn.src[0]].tensor.c * size * size, 1);
+    bcnn_tensor_filler w_filler = {
+        .range = (size * size * net->nodes[conn.src[0]].tensor.c),
+        .type = init};
+    bcnn_tensor_fill(&conn.layer->weights, w_filler);
+    // Setup layer biases
+    bcnn_tensor_create(&conn.layer->biases, 1, 1, 1,
+                       net->nodes[conn.src[0]].tensor.c, 1);
+
     if (net->learner.optimizer == ADAM) {
-        conn.layer->adam_m =
-            (float *)calloc(conn.layer->weights_size, sizeof(float));
-        conn.layer->adam_v =
-            (float *)calloc(conn.layer->weights_size, sizeof(float));
+        int weights_size = bcnn_tensor_get_size(&conn.layer->weights);
+        conn.layer->adam_m = (float *)calloc(weights_size, sizeof(float));
+        conn.layer->adam_v = (float *)calloc(weights_size, sizeof(float));
     }
 
     bh_strfill(&dst_node.id, dst_id);
@@ -130,19 +115,12 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride,
     conn.layer->conv_workspace = (float *)calloc(sz, sizeof(float));
 
 #ifdef BCNN_USE_CUDA
-    conn.layer->weight_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->weight, conn.layer->weights_size);
-    conn.layer->weight_diff_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->weight_diff, conn.layer->weights_size);
-    conn.layer->bias_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->bias, conn.layer->bias_size);
-    conn.layer->bias_diff_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->bias_diff, conn.layer->bias_size);
     if (net->learner.optimizer == ADAM) {
+        int weights_size = bcnn_tensor_get_size(&conn.layer->weights);
         conn.layer->adam_m_gpu =
-            bcnn_cuda_memcpy_f32(conn.layer->adam_m, conn.layer->weights_size);
+            bcnn_cuda_memcpy_f32(conn.layer->adam_m, weights_size);
         conn.layer->adam_v_gpu =
-            bcnn_cuda_memcpy_f32(conn.layer->adam_v, conn.layer->weights_size);
+            bcnn_cuda_memcpy_f32(conn.layer->adam_v, weights_size);
     }
     sz = net->nodes[conn.dst[0]].tensor.w * net->nodes[conn.dst[0]].tensor.h *
          net->nodes[conn.src[0]].tensor.c * size * size;
@@ -190,7 +168,7 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                     (h * layer->stride - layer->pad + layer->size) < src.h) {
                     for (w = 0; w < dst.w; ++w) {
                         weight_data =
-                            layer->weight + c * layer->size * layer->size;
+                            layer->weights.data + c * layer->size * layer->size;
                         val = 0;
                         if (w * layer->stride - layer->pad >= 0 &&
                             (w * layer->stride - layer->pad + layer->size) <
@@ -228,7 +206,7 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                 } else {
                     for (w = 0; w < dst.w; ++w) {
                         weight_data =
-                            layer->weight + c * layer->size * layer->size;
+                            layer->weights.data + c * layer->size * layer->size;
                         val = 0;
                         if (w * layer->stride - layer->pad >= 0 &&
                             (w * layer->stride - layer->pad + layer->size) <
@@ -273,7 +251,8 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
         }
     }
 
-    bcnn_add_bias(dst.data, layer->bias, batch_size, dst.c, dst.w * dst.h);
+    bcnn_add_bias(dst.data, layer->biases.data, batch_size, dst.c,
+                  dst.w * dst.h);
 
     sz = dst.w * dst.h * dst.c * batch_size;
     bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
@@ -305,13 +284,12 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                                  dst.w * dst.h * dst.c * batch_size,
                                  layer->activation);
 
-    bcnn_grad_bias(layer->bias_diff, dst.grad_data, batch_size, dst.c,
+    bcnn_grad_bias(layer->biases.grad_data, dst.grad_data, batch_size, dst.c,
                    dst.w * dst.h);
 
     if (src.grad_data) {
         dst_grad_data = dst.grad_data;
-        weight_diff_base = layer->weight_diff;
-        ;
+        weight_diff_base = layer->weights.grad_data;
         for (n = 0; n < batch_size; ++n) {
             for (c = 0; c < dst.c; ++c) {
                 for (h = 0; h < dst.h; ++h) {
@@ -413,7 +391,7 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
     }
     if (src.grad_data) {
         dst_grad_data = dst.grad_data;
-        weight_data_base = layer->weight;
+        weight_data_base = layer->weights.data;
         for (n = 0; n < batch_size; ++n) {
             for (c = 0; c < dst.c; ++c) {
                 for (h = 0; h < dst.h; ++h) {

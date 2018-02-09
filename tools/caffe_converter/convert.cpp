@@ -45,7 +45,7 @@ static int _init_from_config(bcnn_net *net, char *config_file, bcnncl_param *par
     int nb_lines = 0, nb_layers = 0;
     int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0;
     bcnn_activation a = NONE;
-    bcnn_weights_init init = XAVIER;
+    bcnn_filler_type init = XAVIER;
     bcnn_loss_metric cost = COST_SSE;
     float rate = 1.0f;
     int n_tok;

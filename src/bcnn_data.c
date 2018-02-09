@@ -430,8 +430,6 @@ static int bcnn_init_cifar10_iterator(bcnn_net *net, bcnn_iterator *iter,
     iter->n_samples = 0;  // not used
     iter->label_width = 1;
 
-    iter->input_uchar = (unsigned char *)calloc(
-        iter->input_width * iter->input_height, sizeof(unsigned char));
     iter->label_int = (int *)calloc(1, sizeof(int));
     iter->input_width = 32;
     iter->input_height = 32;

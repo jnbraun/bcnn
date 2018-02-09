@@ -78,8 +78,7 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id) {
         conn.layer->bn_scale[i] = 1.0f;
     }
     conn.layer->bn_scale_diff = (float *)calloc(channels, sizeof(float));
-    conn.layer->bias = (float *)calloc(channels, sizeof(float));
-    conn.layer->bias_diff = (float *)calloc(channels, sizeof(float));
+    bcnn_tensor_create(&conn.layer->biases, 1, 1, 1, channels, 1);
 #ifdef BCNN_USE_CUDA
     // conn.dst_tensor.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.data,
     // sz);
@@ -104,9 +103,6 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id) {
         bcnn_cuda_memcpy_f32(conn.layer->bn_scale, channels);
     conn.layer->bn_scale_diff_gpu =
         bcnn_cuda_memcpy_f32(conn.layer->bn_scale_diff, channels);
-    conn.layer->bias_gpu = bcnn_cuda_memcpy_f32(conn.layer->bias, channels);
-    conn.layer->bias_diff_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->bias_diff, channels);
 #ifdef BCNN_USE_CUDNN
     bcnn_cudnn_check(cudnnCreateTensorDescriptor(
         &conn.layer->src_tensor_desc));  // same desc for x, dx, dy

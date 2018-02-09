@@ -35,8 +35,7 @@
 #include "bh_log.h"
 
 int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
-                                 int pad, int batch_norm,
-                                 bcnn_weights_init init,
+                                 int pad, int batch_norm, bcnn_filler_type init,
                                  bcnn_activation activation, int quantize,
                                  char *src_id, char *dst_id) {
     int i, sz, k, l;
@@ -74,38 +73,21 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     conn.layer->stride = stride;
     conn.layer->size = size;
     conn.layer->pad = pad;
-    conn.layer->bias_size = n;
-    conn.layer->weights_size =
-        net->nodes[conn.src[0]].tensor.c * n * size * size;
-    conn.layer->weight =
-        (float *)calloc(conn.layer->weights_size, sizeof(float));
-    conn.layer->weight_diff =
-        (float *)calloc(conn.layer->weights_size, sizeof(float));
-    conn.layer->bias = (float *)calloc(conn.layer->bias_size, sizeof(float));
-    conn.layer->bias_diff =
-        (float *)calloc(conn.layer->bias_size, sizeof(float));
-    switch (init) {
-        case XAVIER:
-            std_init = (float)sqrt(
-                3.0f / (size * size * net->nodes[conn.src[0]].tensor.c));
-            for (i = 0; i < conn.layer->weights_size; ++i) {
-                conn.layer->weight[i] =
-                    std_init * (2 * ((float)rand() / RAND_MAX) - 1);
-            }
-            break;
-        case MSRA:
-            std_init = (float)sqrt(
-                2.0f / (size * size * net->nodes[conn.src[0]].tensor.c));
-            for (i = 0; i < conn.layer->weights_size; ++i) {
-                conn.layer->weight[i] = std_init * bcnn_rng_gaussian(&g);
-            }
-            break;
-    }
+
+    // Setup layer weights
+    bcnn_tensor_create(&conn.layer->weights, 1, 1, 1,
+                       net->nodes[conn.src[0]].tensor.c * n * size * size, 1);
+    bcnn_tensor_filler w_filler = {
+        .range = (size * size * net->nodes[conn.src[0]].tensor.c),
+        .type = init};
+    bcnn_tensor_fill(&conn.layer->weights, w_filler);
+    // Setup layer biases
+    bcnn_tensor_create(&conn.layer->biases, 1, 1, 1, n, 1);
+
     if (net->learner.optimizer == ADAM) {
-        conn.layer->adam_m =
-            (float *)calloc(conn.layer->weights_size, sizeof(float));
-        conn.layer->adam_v =
-            (float *)calloc(conn.layer->weights_size, sizeof(float));
+        int weights_size = bcnn_tensor_get_size(&conn.layer->weights);
+        conn.layer->adam_m = (float *)calloc(weights_size, sizeof(float));
+        conn.layer->adam_v = (float *)calloc(weights_size, sizeof(float));
     }
 
     bh_strfill(&dst_node.id, dst_id);
@@ -129,20 +111,12 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     conn.layer->conv_workspace = (float *)calloc(sz, sizeof(float));
 
 #ifdef BCNN_USE_CUDA
-    conn.layer->weight_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->weight, conn.layer->weights_size);
-    conn.layer->weight_diff_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->weight_diff, conn.layer->weights_size);
-    conn.layer->bias_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->bias, conn.layer->bias_size);
-    conn.layer->bias_diff_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->bias_diff, conn.layer->bias_size);
-
     if (net->learner.optimizer == ADAM) {
+        int weights_size = bcnn_tensor_get_size(&conn.layer->weights);
         conn.layer->adam_m_gpu =
-            bcnn_cuda_memcpy_f32(conn.layer->adam_m, conn.layer->weights_size);
+            bcnn_cuda_memcpy_f32(conn.layer->adam_m, weights_size);
         conn.layer->adam_v_gpu =
-            bcnn_cuda_memcpy_f32(conn.layer->adam_v, conn.layer->weights_size);
+            bcnn_cuda_memcpy_f32(conn.layer->adam_v, weights_size);
     }
 #ifdef BCNN_USE_CUDNN
 
@@ -255,7 +229,7 @@ int bcnn_forward_conv_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
 
     sz = src.c * src.h * src.w;
 
-    a = layer->weight;
+    a = layer->weights.data;
     b = layer->conv_workspace;
     c = dst.data;
 
@@ -276,7 +250,8 @@ int bcnn_forward_conv_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
         src.data += sz;
     }
 
-    bcnn_add_bias(dst.data, layer->bias, batch_size, layer->num, dst.w * dst.h);
+    bcnn_add_bias(dst.data, layer->biases.data, batch_size, layer->num,
+                  dst.w * dst.h);
 
     sz = dst.w * dst.h * dst.c * batch_size;
     bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
@@ -299,12 +274,13 @@ int bcnn_backward_conv_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
                                  dst.w * dst.h * dst.c * batch_size,
                                  layer->activation);
 
-    bcnn_grad_bias(layer->bias_diff, dst.grad_data, batch_size, layer->num, k);
+    bcnn_grad_bias(layer->biases.grad_data, dst.grad_data, batch_size,
+                   layer->num, k);
 
     for (i = 0; i < batch_size; ++i) {
         a = dst.grad_data + i * m * k;
         b = layer->conv_workspace;
-        c = layer->weight_diff;
+        c = layer->weights.grad_data;
 
         if (layer->size == 1) {
             b = src.data + i * sz;
@@ -320,7 +296,7 @@ int bcnn_backward_conv_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
 #endif
 
         if (src.grad_data) {
-            a = layer->weight;
+            a = layer->weights.data;
             b = dst.grad_data + i * m * k;
             c = layer->conv_workspace;
 
@@ -362,12 +338,12 @@ int bcnn_forward_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
     float alpha = 1.0f, beta = 0.0f;
     bcnn_cudnn_check(cudnnConvolutionForward(
         bcnn_cudnn_handle(), &alpha, layer->src_tensor_desc, src.data_gpu,
-        layer->filter_desc, layer->weight_gpu, layer->conv_desc,
+        layer->filter_desc, layer->weights.data_gpu, layer->conv_desc,
         layer->fwd_algo, layer->conv_workspace_gpu, layer->workspace_size,
         &beta, layer->dst_tensor_desc, dst.data_gpu));
-    bcnn_cudnn_check(cudnnAddTensor(bcnn_cudnn_handle(), &alpha,
-                                    layer->bias_desc, layer->bias_gpu, &alpha,
-                                    layer->dst_tensor_desc, dst.data_gpu));
+    bcnn_cudnn_check(cudnnAddTensor(
+        bcnn_cudnn_handle(), &alpha, layer->bias_desc, layer->biases.data_gpu,
+        &alpha, layer->dst_tensor_desc, dst.data_gpu));
 #else
     int i, w_sz, out_sz, out_spatial_dim;
 
@@ -385,13 +361,14 @@ int bcnn_forward_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
                              layer->size, layer->stride, layer->pad,
                              layer->conv_workspace_gpu);
         }
-        bcnn_cuda_gemm(
-            0, 0, layer->num, out_spatial_dim, w_sz, 1.0f, layer->weight_gpu,
-            w_sz, layer->conv_workspace_gpu, out_spatial_dim, 1.0f,
-            dst.data_gpu + i * layer->num * out_spatial_dim, out_spatial_dim);
-    }
-    bcnn_cuda_add_bias(dst.data_gpu, layer->bias_gpu, batch_size, layer->num,
+        bcnn_cuda_gemm(0, 0, layer->num, out_spatial_dim, w_sz, 1.0f,
+                       layer->weights.data_gpu, w_sz, layer->conv_workspace_gpu,
+                       out_spatial_dim, 1.0f,
+                       dst.data_gpu + i * layer->num * out_spatial_dim,
                        out_spatial_dim);
+    }
+    bcnn_cuda_add_bias(dst.data_gpu, layer->biases.data_gpu, batch_size,
+                       layer->num, out_spatial_dim);
 #endif
 
     sz = dst.w * dst.h * dst.c * batch_size;
@@ -420,24 +397,24 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
 #ifdef BCNN_USE_CUDNN
     bcnn_cudnn_check(cudnnConvolutionBackwardBias(
         bcnn_cudnn_handle(), &one, layer->dst_tensor_desc, dst.grad_data_gpu,
-        &one, layer->bias_desc, layer->bias_diff_gpu));
+        &one, layer->bias_desc, layer->biases.grad_data_gpu));
     bcnn_cudnn_check(cudnnConvolutionBackwardFilter(
         bcnn_cudnn_handle(), &one, layer->src_tensor_desc, src.data_gpu,
         layer->dst_tensor_desc, dst.grad_data_gpu, layer->conv_desc,
         layer->bwd_filter_algo, layer->conv_workspace_gpu,
         layer->workspace_size, &one, layer->filter_desc,
-        layer->weight_diff_gpu));
+        layer->weights.grad_data_gpu));
     if (src.grad_data_gpu) {
         bcnn_cudnn_check(cudnnConvolutionBackwardData(
-            bcnn_cudnn_handle(), &one, layer->filter_desc, layer->weight_gpu,
-            layer->dst_tensor_desc, dst.grad_data_gpu, layer->conv_desc,
-            layer->bwd_data_algo, layer->conv_workspace_gpu,
+            bcnn_cudnn_handle(), &one, layer->filter_desc,
+            layer->weights.data_gpu, layer->dst_tensor_desc, dst.grad_data_gpu,
+            layer->conv_desc, layer->bwd_data_algo, layer->conv_workspace_gpu,
             layer->workspace_size, &zero, layer->src_tensor_desc,
             src.grad_data_gpu));
     }
 #else
-    bcnn_cuda_grad_bias(layer->bias_diff_gpu, dst.grad_data_gpu, batch_size,
-                        layer->num, out_spatial_dim);
+    bcnn_cuda_grad_bias(layer->biases.grad_data_gpu, dst.grad_data_gpu,
+                        batch_size, layer->num, out_spatial_dim);
     for (i = 0; i < batch_size; ++i) {
         if (layer->size == 1)
             layer->conv_workspace_gpu = src.data_gpu + i * sz;
@@ -449,20 +426,20 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
         bcnn_cuda_gemm(0, 1, layer->num, w_sz, out_spatial_dim, 1,
                        dst.grad_data_gpu + i * layer->num * out_spatial_dim,
                        out_spatial_dim, layer->conv_workspace_gpu,
-                       out_spatial_dim, 1, layer->weight_diff_gpu, w_sz);
+                       out_spatial_dim, 1, layer->weights.grad_data_gpu, w_sz);
 
         if (src.grad_data_gpu) {
             if (layer->size == 1) {
                 bcnn_cuda_gemm(
                     1, 0, w_sz, out_spatial_dim, layer->num, 1,
-                    layer->weight_gpu, w_sz,
+                    layer->weights.data_gpu, w_sz,
                     dst.grad_data_gpu + i * out_spatial_dim * layer->num,
                     out_spatial_dim, 0, src.grad_data_gpu + i * sz,
                     out_spatial_dim);
             } else {
                 bcnn_cuda_gemm(
                     1, 0, w_sz, out_spatial_dim, layer->num, 1,
-                    layer->weight_gpu, w_sz,
+                    layer->weights.data_gpu, w_sz,
                     dst.grad_data_gpu + i * out_spatial_dim * layer->num,
                     out_spatial_dim, 0, layer->conv_workspace_gpu,
                     out_spatial_dim);

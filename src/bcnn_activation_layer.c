@@ -52,9 +52,8 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
 
     conn.layer->activation = type;
     if (type == PRELU) {
-        conn.layer->weights_size = net->nodes[conn.src[0]].tensor.c;
-        conn.layer->weight =
-            (float *)calloc(conn.layer->weights_size, sizeof(float));
+        bcnn_tensor_create(&conn.layer->weights, 1, 1, 1,
+                           net->nodes[conn.src[0]].tensor.c, 1);
     }
 
     bcnn_net_add_connection(net, conn);
@@ -164,7 +163,8 @@ int bcnn_forward_activation_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
 
     dst.data = src.data;
     if (layer->activation == PRELU) {
-        bcnn_forward_prelu(dst.data, layer->weight, sz, dst.w * dst.h, dst.c);
+        bcnn_forward_prelu(dst.data, layer->weights.data, sz, dst.w * dst.h,
+                           dst.c);
     } else {
         bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
     }
@@ -241,8 +241,8 @@ int bcnn_backward_activation_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
     int sz = bcnn_tensor_get_size(&dst);
 
     if (layer->activation == PRELU) {
-        bcnn_backward_prelu(dst.data, dst.grad_data, layer->weight,
-                            layer->weight_diff, sz, dst.w * dst.h, dst.c);
+        bcnn_backward_prelu(dst.data, dst.grad_data, layer->weights.data,
+                            layer->weights.grad_data, sz, dst.w * dst.h, dst.c);
     } else {
         bcnn_backward_activation_cpu(dst.data, dst.grad_data, sz,
                                      layer->activation);

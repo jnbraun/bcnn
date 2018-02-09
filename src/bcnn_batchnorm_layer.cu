@@ -195,7 +195,7 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcn
                 dst.data_gpu,
                 layer->dst_tensor_desc,
                 layer->bn_scale_gpu,
-                layer->bias_gpu,
+                layer->biases.data_gpu,
                 0.1,
                 layer->global_mean_gpu,
                 layer->global_variance_gpu,
@@ -232,7 +232,7 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcn
             dst.data_gpu,
             layer->dst_tensor_desc,
             layer->bn_scale_gpu,
-            layer->bias_gpu,
+            layer->biases.data_gpu,
             layer->global_mean_gpu,
             layer->global_variance_gpu,
             0.0001));
@@ -281,7 +281,7 @@ int bcnn_backward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bc
             layer->dst_tensor_desc,
             layer->bn_scale_gpu,
             layer->bn_scale_diff_gpu,
-            layer->bias_diff_gpu,
+            layer->biases.grad_data_gpu,
             0.0001,
             layer->mean_gpu,
             layer->variance_gpu));

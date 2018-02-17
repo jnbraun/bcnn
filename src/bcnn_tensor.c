@@ -52,7 +52,10 @@ void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler) {
                 t->data[i] = std_init * bcnn_rng_gaussian(&g);
             }
             break;
-        case ZEROS:
+        case FIXED:
+            for (int i = 0; i < bcnn_tensor_get_size(t); ++i) {
+                t->data[i] = filler.value;
+            }
             break;
     }
 #ifdef BCNN_USE_CUDA

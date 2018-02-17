@@ -772,15 +772,15 @@ int bcnn_write_model(bcnn_net *net, char *filename) {
         if (layer->type == BATCHNORM) {
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_dev2host(
-                layer->global_mean_gpu, layer->global_mean,
+                layer->running_mean.data_gpu, layer->running_mean.data,
                 net->nodes[net->connections[i].dst[0]].tensor.c);
             bcnn_cuda_memcpy_dev2host(
-                layer->global_variance_gpu, layer->global_variance,
+                layer->running_variance.data_gpu, layer->running_variance.data,
                 net->nodes[net->connections[i].dst[0]].tensor.c);
 #endif
-            fwrite(layer->global_mean, sizeof(float),
+            fwrite(layer->running_mean.data, sizeof(float),
                    net->nodes[net->connections[i].dst[0]].tensor.c, fp);
-            fwrite(layer->global_variance, sizeof(float),
+            fwrite(layer->running_variance.data, sizeof(float),
                    net->nodes[net->connections[i].dst[0]].tensor.c, fp);
         }
     }
@@ -846,20 +846,21 @@ int bcnn_load_model(bcnn_net *net, char *filename) {
         }
         if (layer->type == BATCHNORM) {
             int sz = net->nodes[net->connections[i].dst[0]].tensor.c;
-            nb_read = fread(layer->global_mean, sizeof(float), sz, fp);
+            nb_read = fread(layer->running_mean.data, sizeof(float), sz, fp);
             bh_log_info(
                 "batchnorm layer= %d nbread_mean= %lu mean_size_expected= %d\n",
                 i, (unsigned long)nb_read, sz);
-            nb_read = fread(layer->global_variance, sizeof(float), sz, fp);
+            nb_read =
+                fread(layer->running_variance.data, sizeof(float), sz, fp);
             bh_log_info(
                 "batchnorm layer= %d nbread_variance= %lu "
                 "variance_size_expected= %d\n",
                 i, (unsigned long)nb_read, sz);
 #ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_host2dev(layer->global_mean_gpu,
-                                      layer->global_mean, sz);
-            bcnn_cuda_memcpy_host2dev(layer->global_variance_gpu,
-                                      layer->global_variance, sz);
+            bcnn_cuda_memcpy_host2dev(layer->running_mean.data_gpu,
+                                      layer->running_mean.data, sz);
+            bcnn_cuda_memcpy_host2dev(layer->running_variance.data_gpu,
+                                      layer->running_variance.data, sz);
 #endif
         }
     }
@@ -972,16 +973,13 @@ int bcnn_free_layer(bcnn_layer **layer) {
     bh_free(p_layer->indexes);
     bcnn_tensor_destroy(&p_layer->weights);
     bcnn_tensor_destroy(&p_layer->biases);
+    bcnn_tensor_destroy(&p_layer->scales);
+    bcnn_tensor_destroy(&p_layer->saved_mean);
+    bcnn_tensor_destroy(&p_layer->saved_variance);
+    bcnn_tensor_destroy(&p_layer->running_mean);
+    bcnn_tensor_destroy(&p_layer->running_variance);
     bh_free(p_layer->conv_workspace);
-    bh_free(p_layer->mean);
-    bh_free(p_layer->diff_mean);
-    bh_free(p_layer->global_mean);
-    bh_free(p_layer->variance);
-    bh_free(p_layer->diff_variance);
-    bh_free(p_layer->global_variance);
     bh_free(p_layer->x_norm);
-    bh_free(p_layer->bn_scale);
-    bh_free(p_layer->bn_scale_diff);
     bh_free(p_layer->bn_workspace);
     bh_free(p_layer->rand);
     bh_free(p_layer->adam_m);
@@ -990,16 +988,7 @@ int bcnn_free_layer(bcnn_layer **layer) {
     bh_free(p_layer->binary_workspace);
 #ifdef BCNN_USE_CUDA
     if (p_layer->indexes_gpu) bcnn_cuda_free(p_layer->indexes_gpu);
-    if (p_layer->mean_gpu) bcnn_cuda_free(p_layer->mean_gpu);
-    if (p_layer->diff_mean_gpu) bcnn_cuda_free(p_layer->diff_mean_gpu);
-    if (p_layer->global_mean_gpu) bcnn_cuda_free(p_layer->global_mean_gpu);
-    if (p_layer->variance_gpu) bcnn_cuda_free(p_layer->variance_gpu);
-    if (p_layer->diff_variance_gpu) bcnn_cuda_free(p_layer->diff_variance_gpu);
-    if (p_layer->global_variance_gpu)
-        bcnn_cuda_free(p_layer->global_variance_gpu);
     if (p_layer->x_norm_gpu) bcnn_cuda_free(p_layer->x_norm_gpu);
-    if (p_layer->bn_scale_gpu) bcnn_cuda_free(p_layer->bn_scale_gpu);
-    if (p_layer->bn_scale_diff_gpu) bcnn_cuda_free(p_layer->bn_scale_diff_gpu);
     if (p_layer->bn_workspace_gpu) bcnn_cuda_free(p_layer->bn_workspace_gpu);
     if (p_layer->rand_gpu) bcnn_cuda_free(p_layer->rand_gpu);
     if (p_layer->adam_m_gpu) bcnn_cuda_free(p_layer->adam_m_gpu);

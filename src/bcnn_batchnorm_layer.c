@@ -65,44 +65,23 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id) {
     conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     conn.layer->type = BATCHNORM;
     channels = net->nodes[conn.dst[0]].tensor.c;
-    conn.layer->mean = (float *)calloc(channels, sizeof(float));
-    conn.layer->variance = (float *)calloc(channels, sizeof(float));
-    conn.layer->global_mean = (float *)calloc(channels, sizeof(float));
-    conn.layer->global_variance = (float *)calloc(channels, sizeof(float));
-    conn.layer->diff_mean = (float *)calloc(channels, sizeof(float));
-    conn.layer->diff_variance = (float *)calloc(channels, sizeof(float));
+    bcnn_tensor_create(&conn.layer->saved_mean, 1, 1, 1, channels, 1);
+    bcnn_tensor_create(&conn.layer->saved_variance, 1, 1, 1, channels, 1);
+    bcnn_tensor_create(&conn.layer->running_mean, 1, 1, 1, channels,
+                       0);  // no gradients
+    bcnn_tensor_create(&conn.layer->running_variance, 1, 1, 1, channels,
+                       0);  // no gradients
     conn.layer->x_norm = (float *)calloc(sz, sizeof(float));
     conn.layer->bn_workspace = (float *)calloc(sz, sizeof(float));
-    conn.layer->bn_scale = (float *)calloc(channels, sizeof(float));
-    for (i = 0; i < channels; ++i) {
-        conn.layer->bn_scale[i] = 1.0f;
-    }
-    conn.layer->bn_scale_diff = (float *)calloc(channels, sizeof(float));
+    bcnn_tensor_create(&conn.layer->scales, 1, 1, 1, channels, 1);
+    bcnn_tensor_filler filler = {.value = 1.0f, .type = FIXED};
+    bcnn_tensor_fill(&conn.layer->scales, filler);
     bcnn_tensor_create(&conn.layer->biases, 1, 1, 1, channels, 1);
 #ifdef BCNN_USE_CUDA
-    // conn.dst_tensor.data_gpu = bcnn_cuda_memcpy_f32(conn.dst_tensor.data,
-    // sz);
-    // conn.dst_tensor.grad_data_gpu =
-    // bcnn_cuda_memcpy_f32(conn.dst_tensor.grad_data, sz);
-    conn.layer->mean_gpu = bcnn_cuda_memcpy_f32(conn.layer->mean, channels);
-    conn.layer->variance_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->variance, channels);
-    conn.layer->global_mean_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->global_mean, channels);
-    conn.layer->global_variance_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->global_variance, channels);
-    conn.layer->diff_mean_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->diff_mean, channels);
-    conn.layer->diff_variance_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->diff_variance, channels);
     conn.layer->x_norm_gpu =
         bcnn_cuda_memcpy_f32(net->nodes[conn.dst[0]].tensor.data, sz);
     conn.layer->bn_workspace_gpu =
         bcnn_cuda_memcpy_f32(conn.layer->bn_workspace, sz);
-    conn.layer->bn_scale_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->bn_scale, channels);
-    conn.layer->bn_scale_diff_gpu =
-        bcnn_cuda_memcpy_f32(conn.layer->bn_scale_diff, channels);
 #ifdef BCNN_USE_CUDNN
     bcnn_cudnn_check(cudnnCreateTensorDescriptor(
         &conn.layer->src_tensor_desc));  // same desc for x, dx, dy
@@ -179,20 +158,25 @@ int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
 
     if (layer->net_state) {
         _mean_variance_forward(dst.data, batch_size, dst.c, dst.h * dst.w,
-                               layer->mean, layer->variance);
+                               layer->saved_mean.data,
+                               layer->saved_variance.data);
 
-        bcnn_scal(dst.c, 0.9f, layer->global_mean);
-        bcnn_axpy(dst.c, 0.1f, layer->mean, layer->global_mean);
-        bcnn_scal(dst.c, 0.9f, layer->global_variance);
-        bcnn_axpy(dst.c, 0.1f, layer->variance, layer->global_variance);
+        bcnn_scal(dst.c, 0.9f, layer->running_mean.data);
+        bcnn_axpy(dst.c, 0.1f, layer->saved_mean.data,
+                  layer->running_mean.data);
+        bcnn_scal(dst.c, 0.9f, layer->running_variance.data);
+        bcnn_axpy(dst.c, 0.1f, layer->saved_variance.data,
+                  layer->running_variance.data);
 
-        _norm_forward(dst.data, layer->mean, layer->variance, batch_size, dst.c,
+        _norm_forward(dst.data, layer->saved_mean.data,
+                      layer->saved_variance.data, batch_size, dst.c,
                       dst.h * dst.w);
         bcnn_copy_f32(batch_size * sz, dst.data, layer->x_norm);
     } else {
         // Normalize with global mean / variance
-        _norm_forward(dst.data, layer->global_mean, layer->global_variance,
-                      batch_size, dst.c, dst.h * dst.w);
+        _norm_forward(dst.data, layer->running_mean.data,
+                      layer->running_variance.data, batch_size, dst.c,
+                      dst.h * dst.w);
     }
 
     return BCNN_SUCCESS;
@@ -244,16 +228,18 @@ int bcnn_backward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
     int sz = dst.w * dst.h * dst.c;
 
     if (!layer->net_state) {
-        layer->mean = layer->global_mean;
-        layer->variance = layer->global_variance;
+        layer->saved_mean.data = layer->running_mean.data;
+        layer->saved_variance.data = layer->running_variance.data;
     }
 
-    _mean_variance_backward(layer->bn_workspace, dst.grad_data, layer->mean,
-                            layer->variance, batch_size, dst.c, dst.w * dst.h,
-                            layer->diff_mean, layer->diff_variance);
-    _normalize_backward(layer->bn_workspace, layer->mean, layer->variance,
-                        layer->diff_mean, layer->diff_variance, batch_size,
-                        dst.c, dst.w * dst.h, dst.grad_data);
+    _mean_variance_backward(
+        layer->bn_workspace, dst.grad_data, layer->saved_mean.data,
+        layer->saved_variance.data, batch_size, dst.c, dst.w * dst.h,
+        layer->saved_mean.grad_data, layer->saved_variance.grad_data);
+    _normalize_backward(layer->bn_workspace, layer->saved_mean.data,
+                        layer->saved_variance.data, layer->saved_mean.grad_data,
+                        layer->saved_variance.grad_data, batch_size, dst.c,
+                        dst.w * dst.h, dst.grad_data);
 
     if (src.grad_data)
         bcnn_copy_f32(sz * batch_size, dst.grad_data, src.grad_data);

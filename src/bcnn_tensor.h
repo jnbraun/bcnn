@@ -50,13 +50,14 @@ typedef struct {
 // The different type of tensor initialization.
 // This is ususally used to randomly initialize the weights/bias of one layer
 typedef enum bcnn_filler_type {
-    ZEROS,   // Fill with 0
+    FIXED,   // Fill with constant set by value
     XAVIER,  // Xavier init
     MSRA     // MSRA init
 } bcnn_filler_type;
 
 typedef struct tensor_filler {
     int range;
+    float value;
     bcnn_filler_type type;
 } bcnn_tensor_filler;
 

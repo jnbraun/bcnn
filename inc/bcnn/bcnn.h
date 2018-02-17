@@ -242,20 +242,15 @@ typedef enum {
 } bcnn_activation;
 
 /**
- * \brief Enum of available weight inializations modes.
+ * \brief Enum of available loss functions.
  */
-// typedef enum {
-//     XAVIER, /**< Xavier weight init */
-//     MSRA    /**< MSRA weight init */
-// } bcnn_filler_type;
-
 typedef enum {
     EUCLIDEAN_LOSS,
     LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS
 } bcnn_loss;
 
 /**
- * \brief Enum of available loss metrics.
+ * \brief Enum of available error metrics.
  */
 typedef enum {
     COST_ERROR,   /**< Error rate (classification only) */
@@ -300,26 +295,15 @@ typedef struct bcnn_layer {
     float *rand_gpu;
 #endif
     float *bn_workspace;
-    float *mean;
-    float *variance;
-    float *global_mean;
-    float *global_variance;
-    float *diff_mean;
-    float *diff_variance;
+    bcnn_tensor saved_mean;
+    bcnn_tensor saved_variance;
+    bcnn_tensor running_mean;
+    bcnn_tensor running_variance;
+    bcnn_tensor scales;
     float *x_norm;
-    float *bn_scale;
-    float *bn_scale_diff;
 #ifdef BCNN_USE_CUDA
-    float *mean_gpu;
-    float *variance_gpu;
-    float *global_mean_gpu;
-    float *global_variance_gpu;
-    float *diff_mean_gpu;
-    float *diff_variance_gpu;
     float *bn_workspace_gpu;
     float *x_norm_gpu;
-    float *bn_scale_gpu;
-    float *bn_scale_diff_gpu;
 #endif
     float *adam_m; /**< Adam optimizer: first moment gradient */
     float *adam_v; /**< Adam optimizer: second moment gradient */

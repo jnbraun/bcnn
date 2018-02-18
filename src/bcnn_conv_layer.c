@@ -107,9 +107,9 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     bcnn_net_add_node(net, dst_node);
     // Add node pointer to connection
     bcnn_connection_add_dst_node(&conn, net->num_nodes - 1);
-    sz = bcnn_tensor_get_size3d(&net->nodes[conn.dst[0]].tensor) * size * size;
+    sz = net->nodes[conn.dst[0]].tensor.w * net->nodes[conn.dst[0]].tensor.h *
+         net->nodes[conn.src[0]].tensor.c * size * size;
     conn.layer->conv_workspace = (float *)calloc(sz, sizeof(float));
-
 #ifdef BCNN_USE_CUDA
     if (net->learner.optimizer == ADAM) {
         int weights_size = bcnn_tensor_get_size(&conn.layer->weights);

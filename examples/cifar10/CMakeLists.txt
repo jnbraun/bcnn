@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 2.9)
-project (mnist-example)
+project (cifar10-example)
 
 #set(USE_SSE2 1)
 #set(USE_CUDA 0)

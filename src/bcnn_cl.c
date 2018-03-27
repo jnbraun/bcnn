@@ -264,7 +264,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                                        tok[1]);
                         cost = COST_SSE;
                     }
-                } else if (strcmp(tok[0], "metric") == 0) {
+                } else if (strcmp(tok[0], "loss") == 0) {
                     if (strcmp(tok[1], "l2") == 0 ||
                         strcmp(tok[1], "euclidean") == 0) {
                         loss = EUCLIDEAN_LOSS;

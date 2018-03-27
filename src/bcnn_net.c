@@ -719,7 +719,7 @@ int bcnn_predict_on_batch(bcnn_net *net, bcnn_iterator *iter, float **pred,
     int en =
         (net->connections[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
     int output_size =
-        bcnn_tensor_get_size3d(&net->nodes[net->connections[en].dst[0]].tensor);
+        bcnn_tensor_get_size(&net->nodes[net->connections[en].dst[0]].tensor);
 
     bcnn_iter_batch(net, iter);
 

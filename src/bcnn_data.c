@@ -577,6 +577,8 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter) {
 
     // Label
     if (net->prediction_type != SEGMENTATION) {
+        bh_assert(n_tok == iter->label_width + 1, "Unexpected label format",
+                  BCNN_INVALID_DATA);
         for (i = 0; i < iter->label_width; ++i) {
             iter->label_float[i] = (float)atof(tok[i + 1]);
         }

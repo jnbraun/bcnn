@@ -62,9 +62,9 @@ static float bcnn_update_learning_rate(bcnn_net *net) {
     }
 }
 
-int bcnn_sgd_optimizer(bcnn_connection *conn, int batch_size,
+int bcnn_sgd_optimizer(bcnn_node *node, int batch_size,
                        float learning_rate, float momentum, float decay) {
-    bcnn_layer *layer = conn->layer;
+    bcnn_layer *layer = node->layer;
     int biases_size = bcnn_tensor_get_size(&layer->biases);
     int weights_size = bcnn_tensor_get_size(&layer->weights);
 #ifdef BCNN_USE_CUDA
@@ -100,10 +100,10 @@ int bcnn_sgd_optimizer(bcnn_connection *conn, int batch_size,
     return 0;
 }
 
-int bcnn_adam_optimizer(bcnn_connection *conn, int iter, int batch_size,
+int bcnn_adam_optimizer(bcnn_node *node, int iter, int batch_size,
                         float beta1, float beta2, float learning_rate,
                         float momentum, float decay) {
-    bcnn_layer *layer = conn->layer;
+    bcnn_layer *layer = node->layer;
     float mu_correction = sqrtf(1.0f - powf(beta2, (float)iter + 1)) /
                           (1.0f - powf(beta1, (float)iter + 1));
     int biases_size = bcnn_tensor_get_size(&layer->biases);
@@ -172,24 +172,24 @@ int bcnn_update(bcnn_net *net) {
     bcnn_layer_type type;
 
     if (net->learner.optimizer == SGD) {
-        for (i = 0; i < net->nb_connections; ++i) {
-            type = net->connections[i].layer->type;
+        for (i = 0; i < net->num_nodes; ++i) {
+            type = net->nodes[i].layer->type;
             if ((type == CONVOLUTIONAL || type == DECONVOLUTIONAL ||
                  type == DEPTHWISE_CONV || type == FULL_CONNECTED ||
                  (type == ACTIVATION &&
-                  net->connections[i].layer->activation == PRELU))) {
-                bcnn_sgd_optimizer(&net->connections[i], net->batch_size, lr,
+                  net->nodes[i].layer->activation == PRELU))) {
+                bcnn_sgd_optimizer(&net->nodes[i], net->batch_size, lr,
                                    net->learner.momentum, net->learner.decay);
             }
         }
     } else if (net->learner.optimizer == ADAM) {
-        for (i = 0; i < net->nb_connections; ++i) {
-            type = net->connections[i].layer->type;
+        for (i = 0; i < net->num_nodes; ++i) {
+            type = net->nodes[i].layer->type;
             if ((type == CONVOLUTIONAL || type == DECONVOLUTIONAL ||
                  type == DEPTHWISE_CONV || type == FULL_CONNECTED ||
                  (type == ACTIVATION &&
-                  net->connections[i].layer->activation == PRELU))) {
-                bcnn_adam_optimizer(&net->connections[i], net->seen,
+                  net->nodes[i].layer->activation == PRELU))) {
+                bcnn_adam_optimizer(&net->nodes[i], net->seen,
                                     net->batch_size, net->learner.beta1,
                                     net->learner.beta2, lr,
                                     net->learner.momentum, net->learner.decay);

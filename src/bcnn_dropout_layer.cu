@@ -33,10 +33,10 @@ __global__ void _bcnn_dropout_layer_kernel(float *input, int size, float *rand, 
     }
 }
 
-int bcnn_forward_dropout_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
+int bcnn_forward_dropout_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor, bcnn_tensor *dst_tensor)
 {
-    bcnn_tensor src = src_node->tensor;
-    int size = bcnn_tensor_get_size(&src);
+    
+    int size = bcnn_tensor_get_size(src_tensor);
     
     if (!layer->net_state) { // state != train
         return BCNN_SUCCESS;
@@ -44,22 +44,22 @@ int bcnn_forward_dropout_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_
 
     bcnn_cuda_fill_with_random(layer->rand_gpu, size);
 
-    _bcnn_dropout_layer_kernel<<<bcnn_cuda_gridsize(size), BCNN_CUDA_THREADS>>>(src.data_gpu,
+    _bcnn_dropout_layer_kernel<<<bcnn_cuda_gridsize(size), BCNN_CUDA_THREADS>>>(src_tensor->data_gpu,
      size, layer->rand_gpu, layer->dropout_rate, layer->scale);
     bcnn_cuda_check(cudaPeekAtLastError());
     return BCNN_SUCCESS;
 }
 
-int bcnn_backward_dropout_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
+int bcnn_backward_dropout_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor, bcnn_tensor *dst_tensor)
 {
-    bcnn_tensor src = src_node->tensor;
-    int size = bcnn_tensor_get_size(&src);
+    
+    int size = bcnn_tensor_get_size(src_tensor);
 
-    if (!src.grad_data_gpu) {
+    if (!src_tensor->grad_data_gpu) {
         return BCNN_SUCCESS;
     }
     
-    _bcnn_dropout_layer_kernel<<<bcnn_cuda_gridsize(size), BCNN_CUDA_THREADS>>>(src.grad_data_gpu,
+    _bcnn_dropout_layer_kernel<<<bcnn_cuda_gridsize(size), BCNN_CUDA_THREADS>>>(src_tensor->grad_data_gpu,
      size, layer->rand_gpu, layer->dropout_rate, layer->scale);
     bcnn_cuda_check(cudaPeekAtLastError());
     return BCNN_SUCCESS;

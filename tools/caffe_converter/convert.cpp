@@ -74,8 +74,8 @@ static int _init_from_config(bcnn_net *net, char *config_file, bcnncl_param *par
                 if (strcmp(curr_layer, "{conv}") == 0 ||
                     strcmp(curr_layer, "{convolutional}") == 0) {
                     bcnn_add_convolutional_layer(net, n_filts, size, stride, pad, 0, init, a, 0, src_id, dst_id);
-                    /*fprintf(stderr, "out_c= %d %d %d %d\n", n_filts, size, net->connections[net->nb_connections - 1].src_tensor.c,
-                        net->connections[net->nb_connections - 1].layer->weights_size);*/
+                    /*fprintf(stderr, "out_c= %d %d %d %d\n", n_filts, size, net->nodes[net->num_nodes - 1].src_tensor.c,
+                        net->nodes[net->num_nodes - 1].layer->weights_size);*/
                 }
                 else if (strcmp(curr_layer, "{deconv}") == 0 ||
                     strcmp(curr_layer, "{deconvolutional}") == 0) {
@@ -247,8 +247,8 @@ static int _write_model(bcnn_net *net, char *filename)
     fwrite(&net->learner.decay, sizeof(float), 1, fp);
     fwrite(&net->seen, sizeof(int), 1, fp);
 
-    for (i = 0; i < net->nb_connections; ++i){
-        layer = net->connections[i].layer;
+    for (i = 0; i < net->num_nodes; ++i){
+        layer = net->nodes[i].layer;
         if (layer->type == CONVOLUTIONAL ||
             layer->type == DECONVOLUTIONAL ||
             layer->type == DEPTHWISE_CONV ||
@@ -257,8 +257,8 @@ static int _write_model(bcnn_net *net, char *filename)
             fwrite(layer->weight, sizeof(float), layer->weights_size, fp);
         }
         if (layer->type == BATCHNORM) {
-            fwrite(layer->global_mean, sizeof(float), net->nodes[net->connections[i].dst[0]].tensor.c, fp);
-            fwrite(layer->global_variance, sizeof(float), net->nodes[net->connections[i].dst[0]].tensor.c, fp);
+            fwrite(layer->global_mean, sizeof(float), net->tensors[net->nodes[i].dst[0]].tensor.c, fp);
+            fwrite(layer->global_variance, sizeof(float), net->tensors[net->nodes[i].dst[0]].tensor.c, fp);
         }
     }
     fclose(fp);
@@ -288,9 +288,9 @@ int main(int argc, char **argv)
     const vector<caffe::shared_ptr<caffe::Layer<float> > >& caffe_layers = caffe_net->layers();
     const vector<string> & layer_names = caffe_net->layer_names();
 
-    /*for (int i = 0; i < net->nb_connections; ++i) {
-        fprintf(stderr, "layer %d wsz = %d bsz = %d\n", i, net->connections[i].layer->weights_size,
-            net->connections[i].layer->bias_size);
+    /*for (int i = 0; i < net->num_nodes; ++i) {
+        fprintf(stderr, "layer %d wsz = %d bsz = %d\n", i, net->nodes[i].layer->weights_size,
+            net->nodes[i].layer->bias_size);
     }*/
 
     for (size_t i = 1; i < layer_names.size(); ++i) {
@@ -306,7 +306,7 @@ int main(int argc, char **argv)
             //fprintf(stderr, "%ld %ld %ld %ld\n", caffe_weight.num(), caffe_weight.channels(), caffe_weight.height(), caffe_weight.width());
             int d_sz = caffe_weight.channels() * caffe_weight.height() * caffe_weight.width();
             float ratio0 = 0.0f;
-            if (net->connections[i_bcnn].layer->weights_size == caffe_weight.count() /** caffe_weight.num()*/) {
+            if (net->nodes[i_bcnn].layer->weights_size == caffe_weight.count() /** caffe_weight.num()*/) {
                 for (int n = 0; n < caffe_weight.num(); n++) {
                     for (int c = 0; c < caffe_weight.channels(); c++) {
                         for (int h = 0; h < caffe_weight.height(); h++) {
@@ -318,12 +318,12 @@ int main(int argc, char **argv)
                                 else {
                                     data = caffe_weight.data_at(n, c, h, w);
                                 }
-                                /*net->connections[i_bcnn].layer->weight[n * caffe_weight.count() +
+                                /*net->nodes[i_bcnn].layer->weight[n * caffe_weight.count() +
                                     (c * caffe_weight.height() + h) * caffe_weight.width() + w] = data;*/
                                 /*if (data < 0.001f) {
                                     ratio0 += 1.0f;
                                 }*/
-                                net->connections[i_bcnn].layer->weight[n * d_sz +
+                                net->nodes[i_bcnn].layer->weight[n * d_sz +
                                     (c * caffe_weight.height() + h) * caffe_weight.width() + w] = data;
                             } // width
                         } // height
@@ -331,13 +331,13 @@ int main(int argc, char **argv)
                 } // num
                 //fprintf(stderr, "ratio0= %f caffe_bias.num() %d = %d\n", ratio0 / caffe_weight.count(),  i, caffe_bias.num());
                 for (int b = 0; b < caffe_bias.num(); b++) {
-                    net->connections[i_bcnn].layer->bias[b] = caffe_bias.data_at(b, 0, 0, 0);
+                    net->nodes[i_bcnn].layer->bias[b] = caffe_bias.data_at(b, 0, 0, 0);
                 }
                 fprintf(stderr, "Weights of layer %s succesfully converted\n", layer_names[i].c_str());
             }
             else {
                 fprintf(stderr, "[WARNING] Weights size not compatible for layer %s: found %d * %d, expected %d skipping...\n",
-                    layer_names[i].c_str(), caffe_weight.count(), caffe_weight.num(), net->connections[i_bcnn].layer->weights_size);
+                    layer_names[i].c_str(), caffe_weight.count(), caffe_weight.num(), net->nodes[i_bcnn].layer->weights_size);
             }
         }
         else if (caffe::InnerProductLayer<float> *caffe_layer =
@@ -348,24 +348,24 @@ int main(int argc, char **argv)
             caffe::Blob<float> &caffe_bias = *blobs[1];
             fprintf(stderr, "Converting weights of inner product layer %s: found %d * %d...\n",
                     layer_names[i].c_str(), caffe_weight.channels(), caffe_weight.num());
-            /*bh_assert(net.connections[i].layer->weights_size == caffe_weight.channels() * caffe_weight.num(),
+            /*bh_assert(net.nodes[i].layer->weights_size == caffe_weight.channels() * caffe_weight.num(),
                 "Weights size not compatible", -1);*/
 
-            if (net->connections[i_bcnn].layer->weights_size == caffe_weight.channels() * caffe_weight.num()) {
+            if (net->nodes[i_bcnn].layer->weights_size == caffe_weight.channels() * caffe_weight.num()) {
                 for (int n = 0; n < caffe_weight.num(); n++) {
                     for (int c = 0; c < caffe_weight.channels(); c++) {
-                        net->connections[i_bcnn].layer->weight[n * caffe_weight.channels() + c] = caffe_weight.data_at(n, c, 0, 0);
+                        net->nodes[i_bcnn].layer->weight[n * caffe_weight.channels() + c] = caffe_weight.data_at(n, c, 0, 0);
                     }
                 }
                 //fprintf(stderr, "caffe_bias.count() %d = %d\n", i, caffe_bias.count());
                 for (int b = 0; b < caffe_bias.count(); b++) {
-                    net->connections[i_bcnn].layer->bias[b] = caffe_bias.data_at(b, 0, 0, 0);
+                    net->nodes[i_bcnn].layer->bias[b] = caffe_bias.data_at(b, 0, 0, 0);
                 }
                 fprintf(stderr, "Weights of layer %s succesfully converted\n", layer_names[i].c_str());
             }
             else {
                 fprintf(stderr, "[WARNING] Weights size not compatible for layer %s: found %d * %d, expected %d skipping...\n",
-                    layer_names[i].c_str(), caffe_weight.channels(), caffe_weight.num(), net->connections[i_bcnn].layer->weights_size);
+                    layer_names[i].c_str(), caffe_weight.channels(), caffe_weight.num(), net->nodes[i_bcnn].layer->weights_size);
             }
         }
     }

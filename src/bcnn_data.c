@@ -502,12 +502,9 @@ static int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter,
     char **tok = NULL;
     int n_tok = 0;
     unsigned char *img = NULL;
-    int out_w =
-        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.w;
-    int out_h =
-        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.h;
-    int out_c =
-        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.c;
+    int out_w = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].w;
+    int out_h = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].h;
+    int out_c = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].c;
 
     iter->type = ITER_LIST;
 
@@ -546,12 +543,9 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter) {
     char *line = NULL;
     char **tok = NULL;
     int i, n_tok = 0, tmp_x, tmp_y;
-    int out_w =
-        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.w;
-    int out_h =
-        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.h;
-    int out_c =
-        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.c;
+    int out_w = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].w;
+    int out_h = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].h;
+    int out_c = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].c;
     unsigned char *img = NULL;
     // nb_lines_skipped = (int)((float)rand() / RAND_MAX * net->batch_size);
     // bh_fskipline(f, nb_lines_skipped);

@@ -45,6 +45,7 @@ typedef struct {
 #endif
 #endif
     int has_grad;  // if has gradient data or not
+    char *name;
 } bcnn_tensor;
 
 // The different type of tensor initialization.

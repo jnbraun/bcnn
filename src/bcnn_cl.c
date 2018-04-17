@@ -372,12 +372,9 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     int batch_size = net->batch_size;
     char out_pred_name[128] = {0};
     bcnn_iterator iter_data = {0};
-    int out_w =
-        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.w;
-    int out_h =
-        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.h;
-    int out_c =
-        net->nodes[net->connections[net->nb_connections - 2].dst[0]].tensor.c;
+    int out_w = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].w;
+    int out_h = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].h;
+    int out_c = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].c;
     int output_size = out_w * out_h * out_c;
 
     if (bcnn_iterator_initialize(net, &iter_data, param->test_input,

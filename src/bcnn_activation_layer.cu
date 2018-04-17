@@ -62,14 +62,14 @@ int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a)
     return BCNN_SUCCESS;
 }
 
-int bcnn_forward_activation_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
+int bcnn_forward_activation_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor, bcnn_tensor *dst_tensor)
 {
-    bcnn_tensor src = src_node->tensor;
-    bcnn_tensor dst = dst_node->tensor;
-    int sz = bcnn_tensor_get_size(&dst);
+    
+    
+    int sz = bcnn_tensor_get_size(dst_tensor);
 
-    dst.data_gpu = src.data_gpu;
-    bcnn_forward_activation_gpu(dst.data_gpu, sz, layer->activation);
+    dst_tensor->data_gpu = src_tensor->data_gpu;
+    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, layer->activation);
     bcnn_cuda_check(cudaPeekAtLastError());
 
     return BCNN_SUCCESS;
@@ -108,15 +108,15 @@ int bcnn_backward_activation_gpu(float *x, float *dx, int sz, bcnn_activation a)
     return BCNN_SUCCESS;
 }
 
-int bcnn_backward_activation_layer_gpu(bcnn_layer *layer, bcnn_node *src_node, bcnn_node *dst_node)
+int bcnn_backward_activation_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor, bcnn_tensor *dst_tensor)
 {
-    bcnn_tensor src = src_node->tensor;
-    bcnn_tensor dst = dst_node->tensor;
-    int sz = bcnn_tensor_get_size(&dst);
     
-    bcnn_backward_activation_gpu(dst.data_gpu, dst.grad_data_gpu, sz, layer->activation);
+    
+    int sz = bcnn_tensor_get_size(dst_tensor);
+    
+    bcnn_backward_activation_gpu(dst_tensor->data_gpu, dst_tensor->grad_data_gpu, sz, layer->activation);
     bcnn_cuda_check(cudaPeekAtLastError());
-    src.grad_data_gpu = dst.grad_data_gpu;
+    src_tensor->grad_data_gpu = dst_tensor->grad_data_gpu;
 
     return BCNN_SUCCESS;
 }

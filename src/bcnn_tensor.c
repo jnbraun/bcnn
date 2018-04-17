@@ -120,6 +120,7 @@ void bcnn_tensor_allocate(bcnn_tensor *t) {
 void bcnn_tensor_free(bcnn_tensor *t) {
     bh_align_free(t->data);
     t->data = NULL;
+    bh_free(t->name);
 #ifndef BCNN_DEPLOY_ONLY
     if (t->has_grad) {
         bh_align_free(t->grad_data);

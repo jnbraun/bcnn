@@ -261,12 +261,6 @@ typedef enum {
     COST_DICE     /**< Sørensen–Dice index: metric for image segmentation */
 } bcnn_loss_metric;
 
-typedef struct {
-    bcnn_tensor tensor;
-    char *id;
-    int mem_chunk_id;  // reserved for memory manager handle
-} bcnn_node;
-
 /**
  * \brief Structure defining a generic layer.
  */
@@ -334,11 +328,11 @@ typedef struct bcnn_layer {
 typedef struct {
     int state;
     int num_src;
-    int *src;  // 'num_src' nodes indexes (net->nodes array)
+    int *src;  // 'num_src' tensors indexes (net->tensors array)
     int num_dst;
-    int *dst;  // 'num_dst' nodes indexes (net->nodes array)
+    int *dst;  // 'num_dst' tensors indexes (net->tensors array)
     bcnn_layer *layer;
-} bcnn_connection;
+} bcnn_node;
 
 typedef struct {
     int input_width;
@@ -350,10 +344,10 @@ typedef struct {
     bcnn_loss_metric loss_metric; /**< Loss metric for evaluation */
     bcnn_learner learner;         /**< Learner/optimizer parameters */
     int seen; /**< Number of instances seen by the network */
-    int nb_connections;
-    bcnn_connection *connections;
-    int num_nodes;    /**< Number of nodes hold in the network */
-    bcnn_node *nodes; /**< Array of nodes hold in the network */
+    int num_nodes;
+    bcnn_node *nodes;
+    int num_tensors;      /**< Number of tensors hold in the network */
+    bcnn_tensor *tensors; /**< Array of tensors hold in the network */
     bcnn_target prediction_type;
     bcnn_data_augment data_aug; /**< Parameters for online data augmentation */
     bcnn_task task;
@@ -371,14 +365,15 @@ typedef struct {
 void bcnn_net_set_input_shape(bcnn_net *net, int input_width, int input_height,
                               int input_channels, int batch_size);
 
-void bcnn_net_add_connection(bcnn_net *net, bcnn_connection conn);
-int bcnn_free_connection(bcnn_connection *conn);
-
 void bcnn_net_add_node(bcnn_net *net, bcnn_node node);
+int bcnn_free_node(bcnn_node *node);
 void bcnn_net_free_nodes(bcnn_net *net);
+void bcnn_net_free_tensors(bcnn_net *net);
 
-void bcnn_connection_add_src_node(bcnn_connection *conn, int index);
-void bcnn_connection_add_dst_node(bcnn_connection *conn, int index);
+void bcnn_node_add_input(bcnn_node *node, int index);
+void bcnn_node_add_output(bcnn_node *node, int index);
+
+void bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor);
 
 int bcnn_init_net(bcnn_net **net);
 int bcnn_end_net(bcnn_net **net);
@@ -445,20 +440,20 @@ int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id);
 
 /* Cost layer */
 void bcnn_LiftedStructSimilaritySoftmax_loss_backward(bcnn_layer *layer,
-                                                      bcnn_node *src_node,
-                                                      bcnn_node *dst_node);
+                                                      bcnn_tensor *src_tensor,
+                                                      bcnn_tensor *dst_tensor);
 void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
-                                                     bcnn_node *src_node,
-                                                     bcnn_node *label_node,
-                                                     bcnn_node *dst_node);
+                                                     bcnn_tensor *src_tensor,
+                                                     bcnn_tensor *label_node,
+                                                     bcnn_tensor *dst_tensor);
 int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                         bcnn_loss_metric loss_metric, float scale, char *src_id,
                         char *label_id, char *dst_id);
 
 /* Core network routines */
 int bcnn_update(bcnn_net *net);
-int bcnn_sgd_optimizer(bcnn_connection *conn, int batch_size,
-                       float learning_rate, float momentum, float decay);
+int bcnn_sgd_optimizer(bcnn_node *node, int batch_size, float learning_rate,
+                       float momentum, float decay);
 int bcnn_visualize_network(bcnn_net *net);
 int bcnn_forward(bcnn_net *net);
 int bcnn_backward(bcnn_net *net);

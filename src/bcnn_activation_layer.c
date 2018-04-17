@@ -29,20 +29,20 @@
 
 int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
                               char *src_id) {
-    bcnn_connection conn = {0};
+    bcnn_node node = {0};
     char type_name[256];
     int i;
 
-    bh_check(net->nb_connections >= 1,
+    bh_check(net->num_nodes >= 1,
              "Activation layer can't be the first layer of the network");
-    conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    conn.layer->type = ACTIVATION;
+    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
+    node.layer->type = ACTIVATION;
 
     int is_src_node_found = 0;
-    for (i = net->num_nodes - 1; i >= 0; --i) {
-        if (strcmp(net->nodes[i].id, src_id) == 0) {
-            bcnn_connection_add_src_node(&conn, i);
-            bcnn_connection_add_dst_node(&conn, i);
+    for (i = net->num_tensors - 1; i >= 0; --i) {
+        if (strcmp(net->tensors[i].name, src_id) == 0) {
+            bcnn_node_add_input(&node, i);
+            bcnn_node_add_output(&node, i);
             is_src_node_found = 1;
             break;
         }
@@ -50,13 +50,13 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
     bh_check(is_src_node_found, "Activation layer: invalid input node name %s",
              src_id);
 
-    conn.layer->activation = type;
+    node.layer->activation = type;
     if (type == PRELU) {
-        bcnn_tensor_create(&conn.layer->weights, 1, 1, 1,
-                           net->nodes[conn.src[0]].tensor.c, 1);
+        bcnn_tensor_create(&node.layer->weights, 1, 1, 1,
+                           net->tensors[node.src[0]].c, 1);
     }
 
-    bcnn_net_add_connection(net, conn);
+    bcnn_net_add_node(net, node);
 
     switch (type) {
         case TANH:
@@ -91,10 +91,9 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
     bh_log_info(
         "[Activation] input_shape= %dx%dx%d function= %s output_shape= "
         "%dx%dx%d",
-        net->nodes[conn.src[0]].tensor.w, net->nodes[conn.src[0]].tensor.h,
-        net->nodes[conn.src[0]].tensor.c, type_name,
-        net->nodes[conn.dst[0]].tensor.w, net->nodes[conn.dst[0]].tensor.h,
-        net->nodes[conn.dst[0]].tensor.c);
+        net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
+        net->tensors[node.src[0]].c, type_name, net->tensors[node.dst[0]].w,
+        net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);
 
     return BCNN_SUCCESS;
 }
@@ -155,20 +154,17 @@ static void bcnn_forward_prelu(float *x, float *slope, int size,
     }
 }
 
-int bcnn_forward_activation_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
-                                      bcnn_node *dst_node) {
-    bcnn_tensor src = src_node->tensor;
-    bcnn_tensor dst = dst_node->tensor;
-    int sz = bcnn_tensor_get_size(&dst);
-
-    dst.data = src.data;
+int bcnn_forward_activation_layer_cpu(bcnn_layer *layer,
+                                      bcnn_tensor *src_tensor,
+                                      bcnn_tensor *dst_tensor) {
+    int sz = bcnn_tensor_get_size(dst_tensor);
+    dst_tensor->data = src_tensor->data;
     if (layer->activation == PRELU) {
-        bcnn_forward_prelu(dst.data, layer->weights.data, sz, dst.w * dst.h,
-                           dst.c);
+        bcnn_forward_prelu(dst_tensor->data, layer->weights.data, sz,
+                           dst_tensor->w * dst_tensor->h, dst_tensor->c);
     } else {
-        bcnn_forward_activation_cpu(dst.data, sz, layer->activation);
+        bcnn_forward_activation_cpu(dst_tensor->data, sz, layer->activation);
     }
-
     return BCNN_SUCCESS;
 }
 
@@ -234,40 +230,40 @@ static void bcnn_backward_prelu(float *x, float *dx, float *slope,
     }
 }
 
-int bcnn_backward_activation_layer_cpu(bcnn_layer *layer, bcnn_node *src_node,
-                                       bcnn_node *dst_node) {
-    bcnn_tensor src = src_node->tensor;
-    bcnn_tensor dst = dst_node->tensor;
-    int sz = bcnn_tensor_get_size(&dst);
+int bcnn_backward_activation_layer_cpu(bcnn_layer *layer,
+                                       bcnn_tensor *src_tensor,
+                                       bcnn_tensor *dst_tensor) {
+    int sz = bcnn_tensor_get_size(dst_tensor);
 
     if (layer->activation == PRELU) {
-        bcnn_backward_prelu(dst.data, dst.grad_data, layer->weights.data,
-                            layer->weights.grad_data, sz, dst.w * dst.h, dst.c);
+        bcnn_backward_prelu(dst_tensor->data, dst_tensor->grad_data,
+                            layer->weights.data, layer->weights.grad_data, sz,
+                            dst_tensor->w * dst_tensor->h, dst_tensor->c);
     } else {
-        bcnn_backward_activation_cpu(dst.data, dst.grad_data, sz,
-                                     layer->activation);
+        bcnn_backward_activation_cpu(dst_tensor->data, dst_tensor->grad_data,
+                                     sz, layer->activation);
     }
-    src.grad_data = dst.grad_data;
+    src_tensor->grad_data = dst_tensor->grad_data;
 
     return BCNN_SUCCESS;
 }
 
-int bcnn_forward_activation_layer(bcnn_net *net, bcnn_connection *conn) {
-    bcnn_node *src = &net->nodes[conn->src[0]];
-    bcnn_node *dst = &net->nodes[conn->dst[0]];
+int bcnn_forward_activation_layer(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src = &net->tensors[node->src[0]];
+    bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_activation_layer_gpu(conn->layer, src, dst);
+    return bcnn_forward_activation_layer_gpu(node->layer, src, dst);
 #else
-    return bcnn_forward_activation_layer_cpu(conn->layer, src, dst);
+    return bcnn_forward_activation_layer_cpu(node->layer, src, dst);
 #endif
 }
 
-int bcnn_backward_activation_layer(bcnn_net *net, bcnn_connection *conn) {
-    bcnn_node *src = &net->nodes[conn->src[0]];
-    bcnn_node *dst = &net->nodes[conn->dst[0]];
+int bcnn_backward_activation_layer(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src = &net->tensors[node->src[0]];
+    bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_activation_layer_gpu(conn->layer, src, dst);
+    return bcnn_backward_activation_layer_gpu(node->layer, src, dst);
 #else
-    return bcnn_backward_activation_layer_cpu(conn->layer, src, dst);
+    return bcnn_backward_activation_layer_cpu(node->layer, src, dst);
 #endif
 }

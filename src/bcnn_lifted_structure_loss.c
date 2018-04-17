@@ -5,9 +5,9 @@
 #include "bcnn_utils.h"
 
 void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
-                                                     bcnn_node *src_node,
-                                                     bcnn_node *label_node,
-                                                     bcnn_node *dst_node) {
+                                                     bcnn_tensor *src_tensor,
+                                                     bcnn_tensor *label,
+                                                     bcnn_tensor *dst_tensor) {
     /*
         1. D^2 = x1_transpose + 1x_transpose - 2XX_transpose
         2. Construct pairwise label matrix
@@ -17,28 +17,28 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
             dJ_dD_{ij} = 1/p J_ij indicat
     */
 
-    bcnn_tensor src = src_node->tensor;      // bottom[0]
-    bcnn_tensor dst = dst_node->tensor;      // top[0]
-    bcnn_tensor label = label_node->tensor;  // bottom[1]
-
+    // bottom[0]
+    // top[0]
     // previous layer channel = num of Feature vector
-    int channels = src.c;
-    int input_size = src.w * src.h * src.c;
-    int batch_size = src.n;
-    int sz = src.n * input_size;
+    int channels = src_tensor->c;
+    int input_size = src_tensor->w * src_tensor->h * src_tensor->c;
+    int batch_size = src_tensor->n;
+    int sz = src_tensor->n * input_size;
 
     const int M_ = batch_size;
     const int N_ = batch_size;
     const int K_ = channels;
 
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_dev2host(src.data_gpu, src.data, sz);
-    bcnn_cuda_memcpy_dev2host(src.grad_data_gpu, src.grad_data, sz);
+    bcnn_cuda_memcpy_dev2host(src_tensor->data_gpu, src_tensor->data, sz);
+    bcnn_cuda_memcpy_dev2host(src_tensor->grad_data_gpu, src_tensor->grad_data,
+                              sz);
 
-    bcnn_cuda_memcpy_dev2host(dst.data_gpu, dst.data, sz);
-    bcnn_cuda_memcpy_dev2host(dst.grad_data_gpu, dst.grad_data, sz);
+    bcnn_cuda_memcpy_dev2host(dst_tensor->data_gpu, dst_tensor->data, sz);
+    bcnn_cuda_memcpy_dev2host(dst_tensor->grad_data_gpu, dst_tensor->grad_data,
+                              sz);
 
-    bcnn_cuda_memcpy_dev2host(label.data_gpu, label.data, sz);
+    bcnn_cuda_memcpy_dev2host(label->data_gpu, label->data, sz);
 #endif
 
     size_t align_offset = 32;
@@ -48,14 +48,15 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
     // Dist square = D^2
     float *dist_sq = (float *)bh_align_calloc(M_ * sizeof(float), align_offset);
     for (int i = 0; i < M_; ++i) {
-        dist_sq[i] = bcnn_dot(channels, src.data + (i * channels),
-                              src.data + (i * channels));
+        dist_sq[i] = bcnn_dot(channels, src_tensor->data + (i * channels),
+                              src_tensor->data + (i * channels));
     }
 
     // dot =-2 XX_transpose
     float *dot_ =
         (float *)bh_align_calloc(M_ * M_ * sizeof(float), align_offset);
-    bcnn_gemm(0, 1, M_, N_, K_, -2.0, src.data, K_, src.data, K_, 0, dot_, N_);
+    bcnn_gemm(0, 1, M_, N_, K_, -2.0, src_tensor->data, K_, src_tensor->data,
+              K_, 0, dot_, N_);
 
     // one array
     float *one =
@@ -82,13 +83,13 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
         (int *)bh_align_calloc(N_ * N_ * sizeof(int), align_offset);
 
     // each label is a One-Hot array
-    int length = bcnn_tensor_get_size3d(&label);
+    int length = bcnn_tensor_get_size3d(label);
     for (int i = 0; i < batch_size; ++i) {
         // find out which element in the One Hot label array
         // is 1 and the index is the label
         double label_i;
         for (int l = 0; l < length; ++l) {
-            if (label.data[i * length + l] > 0.0f) {
+            if (label->data[i * length + l] > 0.0f) {
                 label_i = l;
                 break;
             }
@@ -96,7 +97,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
         double label_j;
         for (int j = 0; j < batch_size; ++j) {
             for (int l = 0; l < length; ++l) {
-                if (label.data[j * length + l] > 0.0f) {
+                if (label->data[j * length + l] > 0.0f) {
                     label_j = l;
                     break;
                 }
@@ -112,8 +113,8 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
     float loss = 0;
     float margin = 1.0;
     layer->num_constraints = 0;
-    float *bin = src.data;
-    float *bout = src.grad_data;
+    float *bin = src_tensor->data;
+    float *bout = src_tensor->grad_data;
     memset(bout, 0, sz);  // initialize grad_data
 
     float *blob_pos_diff =
@@ -147,7 +148,6 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
                     }
                 }
 
-                    
                 loss_aug_inference = (float *)bh_align_calloc(
                     num_negatives * sizeof(float), align_offset);
                 summer_vec = (float *)bh_align_calloc(
@@ -263,7 +263,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
         }
     }
     loss = loss / layer->num_constraints;
-    dst.data[0] = loss;
+    dst_tensor->data[0] = loss;
 
     bh_align_free(dist_sq);
     bh_align_free(dot_);
@@ -273,28 +273,29 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
     bh_align_free(blob_neg_diff);
 
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_host2dev(src.data_gpu, src.data, sz);
-    bcnn_cuda_memcpy_host2dev(src.grad_data_gpu, src.grad_data, sz);
-    // bcnn_cuda_memcpy_host2dev(dst.data_gpu, dst.data, sz);
-    bcnn_cuda_memcpy_host2dev(dst.grad_data_gpu, dst.grad_data, sz);
+    bcnn_cuda_memcpy_host2dev(src_tensor->data_gpu, src_tensor->data, sz);
+    bcnn_cuda_memcpy_host2dev(src_tensor->grad_data_gpu, src_tensor->grad_data,
+                              sz);
+    // bcnn_cuda_memcpy_host2dev(dst_tensor->data_gpu, dst_tensor->data, sz);
+    bcnn_cuda_memcpy_host2dev(dst_tensor->grad_data_gpu, dst_tensor->grad_data,
+                              sz);
 #endif
 }
 
 void bcnn_LiftedStructSimilaritySoftmax_loss_backward(bcnn_layer *layer,
-                                                      bcnn_node *src_node,
-                                                      bcnn_node *dst_node) {
-    bcnn_tensor src = src_node->tensor;
-    int batch_size = src.n;
-    int channels = src.c;
+                                                      bcnn_tensor *src_tensor,
+                                                      bcnn_tensor *dst_tensor) {
+    int batch_size = src_tensor->n;
+    int channels = src_tensor->c;
     float alpha = layer->scale / layer->num_constraints;
 
 #ifdef BCNN_USE_CUDA
-    float *bout = src.grad_data_gpu;
+    float *bout = src_tensor->grad_data_gpu;
     for (int i = 0; i < batch_size; ++i) {
         bcnn_cuda_scal(channels, alpha, bout + (i * channels), 1);
     }
 #else
-    float *bout = src.grad_data;
+    float *bout = src_tensor->grad_data;
     for (int i = 0; i < batch_size; ++i) {
         bcnn_scal(channels, alpha, (bout + (i * channels)));
     }

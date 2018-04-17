@@ -29,14 +29,14 @@
 extern "C" {
 #endif
 
-int bcnn_forward_softmax_layer(bcnn_net *net, bcnn_connection *conn);
-int bcnn_backward_softmax_layer(bcnn_net *net, bcnn_connection *conn);
+int bcnn_forward_softmax_layer(bcnn_net *net, bcnn_node *node);
+int bcnn_backward_softmax_layer(bcnn_net *net, bcnn_node *node);
 
 #ifdef BCNN_USE_CUDA
-int bcnn_forward_softmax_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
-                                   bcnn_node *dst_node);
-int bcnn_backward_softmax_layer_gpu(bcnn_layer *layer, bcnn_node *src_node,
-                                    bcnn_node *dst_node);
+int bcnn_forward_softmax_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+                                   bcnn_tensor *dst_tensor);
+int bcnn_backward_softmax_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+                                    bcnn_tensor *dst_tensor);
 #endif
 
 #ifdef __cplusplus

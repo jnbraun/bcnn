@@ -33,23 +33,23 @@
 int bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
                           char *dst_id) {
     int i, sz, ind_concat = -1;
-    bcnn_connection conn = {0};
-    bcnn_node dst_node = {0};
+    bcnn_node node = {0};
+    bcnn_tensor dst_tensor = {0};
     int is_src_node1_found = 0, is_src_node2_found = 0;
 
-    bh_check(net->nb_connections >= 1,
+    bh_check(net->num_nodes >= 1,
              "Concat layer can't be the first layer of the network");
 
-    conn.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    conn.layer->type = CONCAT;
+    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
+    node.layer->type = CONCAT;
 
-    for (i = net->num_nodes - 1; i >= 0; --i) {
-        if (strcmp(net->nodes[i].id, src_id1) == 0) {
-            bcnn_connection_add_src_node(&conn, i);
+    for (i = net->num_tensors - 1; i >= 0; --i) {
+        if (strcmp(net->tensors[i].name, src_id1) == 0) {
+            bcnn_node_add_input(&node, i);
             is_src_node1_found = 1;
         }
-        if (strcmp(net->nodes[i].id, src_id2) == 0) {
-            bcnn_connection_add_src_node(&conn, i);
+        if (strcmp(net->tensors[i].name, src_id2) == 0) {
+            bcnn_node_add_input(&node, i);
             is_src_node2_found = 1;
         }
         if (is_src_node1_found && is_src_node2_found) {
@@ -62,82 +62,79 @@ int bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
              src_id2);
     // Check spatial dimensions consistency
     bh_check(
-        net->nodes[conn.src[0]].tensor.w == net->nodes[conn.src[1]].tensor.w,
+        net->tensors[node.src[0]].w == net->tensors[node.src[1]].w,
         "Concat layer: inconsistent width size between node %s (w = %d) and "
         "node %s (w = %d)",
-        src_id1, net->nodes[conn.src[0]].tensor.w, src_id2,
-        net->nodes[conn.src[1]].tensor.w);
+        src_id1, net->tensors[node.src[0]].w, src_id2,
+        net->tensors[node.src[1]].w);
     bh_check(
-        net->nodes[conn.src[0]].tensor.h == net->nodes[conn.src[1]].tensor.h,
+        net->tensors[node.src[0]].h == net->tensors[node.src[1]].h,
         "Concat layer: inconsistent width size between node %s (w = %d) and "
         "node %s (w = %d)",
-        src_id1, net->nodes[conn.src[0]].tensor.h, src_id2,
-        net->nodes[conn.src[1]].tensor.h);
+        src_id1, net->tensors[node.src[0]].h, src_id2,
+        net->tensors[node.src[1]].h);
 
-    // Setup output node
-    bh_strfill(&dst_node.id, dst_id);
+    // Setup output tensor
     bcnn_tensor_set_shape(
-        &dst_node.tensor, net->nodes[conn.src[0]].tensor.n,
-        net->nodes[conn.src[0]].tensor.c + net->nodes[conn.src[1]].tensor.c,
-        net->nodes[conn.src[0]].tensor.h, net->nodes[conn.src[0]].tensor.w, 1);
-    bcnn_tensor_allocate(&dst_node.tensor);
+        &dst_tensor, net->tensors[node.src[0]].n,
+        net->tensors[node.src[0]].c + net->tensors[node.src[1]].c,
+        net->tensors[node.src[0]].h, net->tensors[node.src[0]].w, 1);
+    bcnn_tensor_allocate(&dst_tensor);
+    bh_strfill(&dst_tensor.name, dst_id);
+    // Add tensor to net
+    bcnn_net_add_tensor(net, dst_tensor);
+    // Add tensor output index to node
+    bcnn_node_add_output(&node, net->num_tensors - 1);
     // Add node to net
-    bcnn_net_add_node(net, dst_node);
-    // Add node pointer to connection
-    bcnn_connection_add_dst_node(&conn, net->num_nodes - 1);
-    // Add connection to net
-    bcnn_net_add_connection(net, conn);
+    bcnn_net_add_node(net, node);
 
     bh_log_info(
         "[Concat] input1_shape= %dx%dx%d input2_shape= %dx%dx%d output_shape= "
         "%dx%dx%d",
-        net->nodes[conn.src[0]].tensor.w, net->nodes[conn.src[0]].tensor.h,
-        net->nodes[conn.src[0]].tensor.c, net->nodes[conn.src[1]].tensor.w,
-        net->nodes[conn.src[1]].tensor.h, net->nodes[conn.src[1]].tensor.c,
-        net->nodes[conn.dst[0]].tensor.w, net->nodes[conn.dst[0]].tensor.h,
-        net->nodes[conn.dst[0]].tensor.c);
+        net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
+        net->tensors[node.src[0]].c, net->tensors[node.src[1]].w,
+        net->tensors[node.src[1]].h, net->tensors[node.src[1]].c,
+        net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
+        net->tensors[node.dst[0]].c);
 
     return BCNN_SUCCESS;
 }
 
-int bcnn_forward_concat_layer_cpu(bcnn_node *src0_node, bcnn_node *src1_node,
-                                  bcnn_node *dst_node) {
+int bcnn_forward_concat_layer_cpu(bcnn_tensor *src0_tensor,
+                                  bcnn_tensor *src1_tensor,
+                                  bcnn_tensor *dst_tensor) {
     int j;
-    bcnn_tensor src0 = src0_node->tensor;
-    bcnn_tensor src1 = src1_node->tensor;
-    bcnn_tensor dst = dst_node->tensor;
-    int src0_sz = bcnn_tensor_get_size3d(&src0);
-    int src1_sz = bcnn_tensor_get_size3d(&src1);
-    int dst_sz = bcnn_tensor_get_size3d(&dst);
+    int src0_sz = bcnn_tensor_get_size3d(src0_tensor);
+    int src1_sz = bcnn_tensor_get_size3d(src1_tensor);
+    int dst_sz = bcnn_tensor_get_size3d(dst_tensor);
 
-    for (j = 0; j < src0.n; ++j) {
-        bcnn_copy_f32(src0_sz, src0.data + j * src0_sz, dst.data + j * dst_sz);
+    for (j = 0; j < src0_tensor->n; ++j) {
+        bcnn_copy_f32(src0_sz, src0_tensor->data + j * src0_sz,
+                      dst_tensor->data + j * dst_sz);
     }
-    for (j = 0; j < src1.n; ++j) {
-        bcnn_copy_f32(src1_sz, src1.data + j * src1_sz,
-                      dst.data + src0_sz + j * dst_sz);
+    for (j = 0; j < src1_tensor->n; ++j) {
+        bcnn_copy_f32(src1_sz, src1_tensor->data + j * src1_sz,
+                      dst_tensor->data + src0_sz + j * dst_sz);
     }
 
     return BCNN_SUCCESS;
 }
 
-int bcnn_backward_concat_layer_cpu(bcnn_node *src0_node, bcnn_node *src1_node,
-                                   bcnn_node *dst_node) {
+int bcnn_backward_concat_layer_cpu(bcnn_tensor *src0_tensor,
+                                   bcnn_tensor *src1_tensor,
+                                   bcnn_tensor *dst_tensor) {
     int j;
-    bcnn_tensor src0 = src0_node->tensor;
-    bcnn_tensor src1 = src1_node->tensor;
-    bcnn_tensor dst = dst_node->tensor;
-    int src0_sz = bcnn_tensor_get_size3d(&src0);
-    int src1_sz = bcnn_tensor_get_size3d(&src1);
-    int dst_sz = bcnn_tensor_get_size3d(&dst);
+    int src0_sz = bcnn_tensor_get_size3d(src0_tensor);
+    int src1_sz = bcnn_tensor_get_size3d(src1_tensor);
+    int dst_sz = bcnn_tensor_get_size3d(dst_tensor);
 
-    for (j = 0; j < src0.n; ++j) {
-        bcnn_axpy(src0_sz, 1.0f, dst.grad_data + j * dst_sz,
-                  src0.grad_data + j * src0_sz);
+    for (j = 0; j < src0_tensor->n; ++j) {
+        bcnn_axpy(src0_sz, 1.0f, dst_tensor->grad_data + j * dst_sz,
+                  src0_tensor->grad_data + j * src0_sz);
     }
-    for (j = 0; j < src1.n; ++j) {
-        bcnn_axpy(src1_sz, 1.0f, dst.grad_data + src0_sz + j * dst_sz,
-                  src1.grad_data + j * src1_sz);
+    for (j = 0; j < src1_tensor->n; ++j) {
+        bcnn_axpy(src1_sz, 1.0f, dst_tensor->grad_data + src0_sz + j * dst_sz,
+                  src1_tensor->grad_data + j * src1_sz);
     }
 
     return BCNN_SUCCESS;
@@ -145,45 +142,42 @@ int bcnn_backward_concat_layer_cpu(bcnn_node *src0_node, bcnn_node *src1_node,
 
 #ifdef BCNN_USE_CUDA
 
-int bcnn_forward_concat_layer_gpu(bcnn_node *src0_node, bcnn_node *src1_node,
-                                  bcnn_node *dst_node) {
+int bcnn_forward_concat_layer_gpu(bcnn_tensor *src0_tensor,
+                                  bcnn_tensor *src1_tensor,
+                                  bcnn_tensor *dst_tensor) {
     int j;
-    bcnn_tensor src0 = src0_node->tensor;
-    bcnn_tensor src1 = src1_node->tensor;
-    bcnn_tensor dst = dst_node->tensor;
-    int src0_sz = bcnn_tensor_get_size3d(&src0);
-    int src1_sz = bcnn_tensor_get_size3d(&src1);
-    int dst_sz = bcnn_tensor_get_size3d(&dst);
+    int src0_sz = bcnn_tensor_get_size3d(&src0_tensor);
+    int src1_sz = bcnn_tensor_get_size3d(&src1_tensor);
+    int dst_sz = bcnn_tensor_get_size3d(&dst_tensor);
 
-    for (j = 0; j < src0.n; ++j) {
-        bcnn_cuda_copy_f32(src0_sz, src0.data_gpu + j * src0_sz, 1,
-                           dst.data_gpu + j * dst_sz, 1);
+    for (j = 0; j < src0_tensor->n; ++j) {
+        bcnn_cuda_copy_f32(src0_sz, src0_tensor->data_gpu + j * src0_sz, 1,
+                           dst_tensor.data_gpu + j * dst_sz, 1);
     }
-    for (j = 0; j < src0.n; ++j) {
-        bcnn_cuda_copy_f32(src1_sz, src1.data_gpu + j * src1_sz, 1,
-                           dst.data_gpu + src0_sz + j * dst_sz, 1);
+    for (j = 0; j < src0_tensor->n; ++j) {
+        bcnn_cuda_copy_f32(src1_sz, src1_tensor->data_gpu + j * src1_sz, 1,
+                           dst_tensor.data_gpu + src0_sz + j * dst_sz, 1);
     }
 
     return BCNN_SUCCESS;
 }
 
-int bcnn_backward_concat_layer_gpu(bcnn_node *src0_node, bcnn_node *src1_node,
-                                   bcnn_node *dst_node) {
+int bcnn_backward_concat_layer_gpu(bcnn_tensor *src0_tensor,
+                                   bcnn_tensor *src1_tensor,
+                                   bcnn_tensor *dst_tensor) {
     int j;
-    bcnn_tensor src0 = src0_node->tensor;
-    bcnn_tensor src1 = src1_node->tensor;
-    bcnn_tensor dst = dst_node->tensor;
-    int src0_sz = bcnn_tensor_get_size3d(&src0);
-    int src1_sz = bcnn_tensor_get_size3d(&src1);
-    int dst_sz = bcnn_tensor_get_size3d(&dst);
+    int src0_sz = bcnn_tensor_get_size3d(&src0_tensor);
+    int src1_sz = bcnn_tensor_get_size3d(&src1_tensor);
+    int dst_sz = bcnn_tensor_get_size3d(&dst_tensor);
 
-    for (j = 0; j < src0.n; ++j) {
-        bcnn_cuda_axpy(src0_sz, 1.0f, dst.grad_data_gpu + j * dst_sz, 1,
-                       src0.grad_data_gpu + j * src0_sz, 1);
+    for (j = 0; j < src0_tensor->n; ++j) {
+        bcnn_cuda_axpy(src0_sz, 1.0f, dst_tensor.grad_data_gpu + j * dst_sz, 1,
+                       src0_tensor.grad_data_gpu + j * src0_sz, 1);
     }
-    for (j = 0; j < src0.n; ++j) {
-        bcnn_cuda_axpy(src1_sz, 1.0f, dst.grad_data_gpu + src0_sz + j * dst_sz,
-                       1, src1.grad_data_gpu + j * src1_sz, 1);
+    for (j = 0; j < src0_tensor->n; ++j) {
+        bcnn_cuda_axpy(src1_sz, 1.0f,
+                       dst_tensor.grad_data_gpu + src0_sz + j * dst_sz, 1,
+                       src1_tensor->grad_data_gpu + j * src1_sz, 1);
     }
 
     return BCNN_SUCCESS;
@@ -191,26 +185,26 @@ int bcnn_backward_concat_layer_gpu(bcnn_node *src0_node, bcnn_node *src1_node,
 
 #endif
 
-int bcnn_forward_concat_layer(bcnn_net *net, bcnn_connection *conn) {
-    bh_check(conn->num_src == 2, "Concat layer: invalid setup");
-    bcnn_node *src0 = &net->nodes[conn->src[0]];
-    bcnn_node *src1 = &net->nodes[conn->src[1]];
-    bcnn_node *dst = &net->nodes[conn->dst[0]];
+int bcnn_forward_concat_layer(bcnn_net *net, bcnn_node *node) {
+    bh_check(node->num_src == 2, "Concat layer: invalid setup");
+    bcnn_tensor *src0_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *src1_tensor = &net->tensors[node->src[1]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_concat_layer_gpu(src0, src1, dst);
+    return bcnn_forward_concat_layer_gpu(src0_tensor, src1_tensor, dst_tensor);
 #else
-    return bcnn_forward_concat_layer_cpu(src0, src1, dst);
+    return bcnn_forward_concat_layer_cpu(src0_tensor, src1_tensor, dst_tensor);
 #endif
 }
 
-int bcnn_backward_concat_layer(bcnn_net *net, bcnn_connection *conn) {
-    bh_check(conn->num_src == 2, "Concat layer: invalid setup");
-    bcnn_node *src0 = &net->nodes[conn->src[0]];
-    bcnn_node *src1 = &net->nodes[conn->src[1]];
-    bcnn_node *dst = &net->nodes[conn->dst[0]];
+int bcnn_backward_concat_layer(bcnn_net *net, bcnn_node *node) {
+    bh_check(node->num_src == 2, "Concat layer: invalid setup");
+    bcnn_tensor *src0_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *src1_tensor = &net->tensors[node->src[1]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_concat_layer_gpu(src0, src1, dst);
+    return bcnn_backward_concat_layer_gpu(src0_tensor, src1_tensor, dst_tensor);
 #else
-    return bcnn_backward_concat_layer_cpu(src0, src1, dst);
+    return bcnn_backward_concat_layer_cpu(src0_tensor, src1_tensor, dst_tensor);
 #endif
 }

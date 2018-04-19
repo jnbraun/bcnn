@@ -673,12 +673,12 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
     if (use_buffer_img) bh_free(img_tmp);
 
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_host2dev(net->tensors[0].tensor.data_gpu,
-                              net->tensors[0].tensor.data, input_size);
+    bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu,
+                              net->tensors[0].data, input_size);
     if (net->task != PREDICT) {
         bcnn_cuda_memcpy_host2dev(
-            net->tensors[1].tensor.data_gpu, net->tensors[1].tensor.data,
-            bcnn_tensor_get_size(&net->tensors[net->nodes[en].dst[0]].tensor));
+            net->tensors[1].data_gpu, net->tensors[1].data,
+            bcnn_tensor_get_size(&net->tensors[net->nodes[en].dst[0]]));
     }
 #endif
     return BCNN_SUCCESS;

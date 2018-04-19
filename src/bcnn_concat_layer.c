@@ -146,17 +146,17 @@ int bcnn_forward_concat_layer_gpu(bcnn_tensor *src0_tensor,
                                   bcnn_tensor *src1_tensor,
                                   bcnn_tensor *dst_tensor) {
     int j;
-    int src0_sz = bcnn_tensor_get_size3d(&src0_tensor);
-    int src1_sz = bcnn_tensor_get_size3d(&src1_tensor);
-    int dst_sz = bcnn_tensor_get_size3d(&dst_tensor);
+    int src0_sz = bcnn_tensor_get_size3d(src0_tensor);
+    int src1_sz = bcnn_tensor_get_size3d(src1_tensor);
+    int dst_sz = bcnn_tensor_get_size3d(dst_tensor);
 
     for (j = 0; j < src0_tensor->n; ++j) {
         bcnn_cuda_copy_f32(src0_sz, src0_tensor->data_gpu + j * src0_sz, 1,
-                           dst_tensor.data_gpu + j * dst_sz, 1);
+                           dst_tensor->data_gpu + j * dst_sz, 1);
     }
     for (j = 0; j < src0_tensor->n; ++j) {
         bcnn_cuda_copy_f32(src1_sz, src1_tensor->data_gpu + j * src1_sz, 1,
-                           dst_tensor.data_gpu + src0_sz + j * dst_sz, 1);
+                           dst_tensor->data_gpu + src0_sz + j * dst_sz, 1);
     }
 
     return BCNN_SUCCESS;
@@ -166,17 +166,17 @@ int bcnn_backward_concat_layer_gpu(bcnn_tensor *src0_tensor,
                                    bcnn_tensor *src1_tensor,
                                    bcnn_tensor *dst_tensor) {
     int j;
-    int src0_sz = bcnn_tensor_get_size3d(&src0_tensor);
-    int src1_sz = bcnn_tensor_get_size3d(&src1_tensor);
-    int dst_sz = bcnn_tensor_get_size3d(&dst_tensor);
+    int src0_sz = bcnn_tensor_get_size3d(src0_tensor);
+    int src1_sz = bcnn_tensor_get_size3d(src1_tensor);
+    int dst_sz = bcnn_tensor_get_size3d(dst_tensor);
 
     for (j = 0; j < src0_tensor->n; ++j) {
-        bcnn_cuda_axpy(src0_sz, 1.0f, dst_tensor.grad_data_gpu + j * dst_sz, 1,
-                       src0_tensor.grad_data_gpu + j * src0_sz, 1);
+        bcnn_cuda_axpy(src0_sz, 1.0f, dst_tensor->grad_data_gpu + j * dst_sz, 1,
+                       src0_tensor->grad_data_gpu + j * src0_sz, 1);
     }
     for (j = 0; j < src0_tensor->n; ++j) {
         bcnn_cuda_axpy(src1_sz, 1.0f,
-                       dst_tensor.grad_data_gpu + src0_sz + j * dst_sz, 1,
+                       dst_tensor->grad_data_gpu + src0_sz + j * dst_sz, 1,
                        src1_tensor->grad_data_gpu + j * src1_sz, 1);
     }
 

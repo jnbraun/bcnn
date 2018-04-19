@@ -123,11 +123,11 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     bcnn_cudnn_check(cudnnCreateConvolutionDescriptor(&node.layer->conv_desc));
     bcnn_cudnn_check(cudnnSetTensor4dDescriptor(
         node.layer->src_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-        net->tensors[node.dst[0]].tensor.n, net->tensors[node.src[0]].c,
+        net->tensors[node.dst[0]].n, net->tensors[node.src[0]].c,
         net->tensors[node.src[0]].h, net->tensors[node.src[0]].w));
     bcnn_cudnn_check(cudnnSetTensor4dDescriptor(
         node.layer->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-        net->tensors[node.dst[0]].tensor.n, net->tensors[node.dst[0]].c,
+        net->tensors[node.dst[0]].n, net->tensors[node.dst[0]].c,
         net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].w));
     bcnn_cudnn_check(cudnnSetFilter4dDescriptor(
         node.layer->filter_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,

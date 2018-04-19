@@ -82,11 +82,11 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *src_id,
         node.layer->stride));
     bcnn_cudnn_check(cudnnSetTensor4dDescriptor(
         node.layer->src_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-        net->tensors[node.src[0]].tensor.n, net->tensors[node.src[0]].c,
+        net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
         net->tensors[node.src[0]].h, net->tensors[node.src[0]].w));
     bcnn_cudnn_check(cudnnSetTensor4dDescriptor(
         node.layer->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-        net->tensors[node.dst[0]].tensor.n, net->tensors[node.dst[0]].c,
+        net->tensors[node.dst[0]].n, net->tensors[node.dst[0]].c,
         net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].w));
 #endif
 #endif

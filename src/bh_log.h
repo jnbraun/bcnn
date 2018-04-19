@@ -31,14 +31,16 @@ extern "C" {
 
 // Error log handle
 typedef enum {
-    INFO = 0,
-    WARNING = 1,
-    ERROR = 2,
-    SILENT = 3
+    DEBUG = 0,
+    INFO = 1,
+    WARNING = 2,
+    ERROR = 3,
+    FATAL = 4,
+    SILENT = 5
 } log_level;
 
 #ifndef BCNN_LOG_LEVEL
-#define BCNN_LOG_LEVEL 0 // INFO
+#define BCNN_LOG_LEVEL 1 // INFO
 #endif
 
 static bh_inline void bh_check(int exp, const char *fmt, ...)
@@ -90,6 +92,18 @@ static bh_inline void bh_log_info(const char *fmt, ...)
     vsnprintf(msg, sizeof(msg), fmt, args);
     va_end(args);
     fprintf(stderr, "[INFO] %s\n", msg);
+#endif
+}
+
+static bh_inline void bh_log_debug(const char *fmt, ...)
+{
+#if (BCNN_LOG_LEVEL <= DEBUG)
+    char msg[2048];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, args);
+    va_end(args);
+    fprintf(stderr, "[DEBUG] %s\n", msg);
 #endif
 }
 

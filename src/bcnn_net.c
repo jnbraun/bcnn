@@ -807,12 +807,12 @@ int bcnn_load_model(bcnn_net *net, char *filename) {
             int weights_size = bcnn_tensor_get_size(&layer->weights);
             int biases_size = bcnn_tensor_get_size(&layer->biases);
             nb_read = fread(layer->biases.data, sizeof(float), biases_size, fp);
-            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d\n",
+            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d",
                         i, (unsigned long)nb_read, biases_size);
             nb_read =
                 fread(layer->weights.data, sizeof(float), weights_size, fp);
             bh_log_info(
-                "layer= %d nbread_weight= %lu weight_size_expected= %d\n", i,
+                "layer= %d nbread_weight= %lu weight_size_expected= %d", i,
                 (unsigned long)nb_read, weights_size);
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(layer->weights.data_gpu,
@@ -825,20 +825,20 @@ int bcnn_load_model(bcnn_net *net, char *filename) {
             int weights_size = bcnn_tensor_get_size(&layer->weights);
             nb_read =
                 fread(layer->weights.data, sizeof(float), weights_size, fp);
-            bh_log_info("PReLU layer= %d nbread= %lu expected= %d\n", i,
+            bh_log_info("PReLU layer= %d nbread= %lu expected= %d", i,
                         (unsigned long)nb_read, weights_size);
         }
         if (layer->type == BATCHNORM) {
             int sz = net->tensors[net->nodes[i].dst[0]].c;
             nb_read = fread(layer->running_mean.data, sizeof(float), sz, fp);
             bh_log_info(
-                "batchnorm layer= %d nbread_mean= %lu mean_size_expected= %d\n",
+                "batchnorm layer= %d nbread_mean= %lu mean_size_expected= %d",
                 i, (unsigned long)nb_read, sz);
             nb_read =
                 fread(layer->running_variance.data, sizeof(float), sz, fp);
             bh_log_info(
                 "batchnorm layer= %d nbread_variance= %lu "
-                "variance_size_expected= %d\n",
+                "variance_size_expected= %d",
                 i, (unsigned long)nb_read, sz);
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(layer->running_mean.data_gpu,
@@ -850,7 +850,7 @@ int bcnn_load_model(bcnn_net *net, char *filename) {
     }
     if (fp != NULL) fclose(fp);
 
-    bh_log_info("Model %s loaded succesfully\n", filename);
+    bh_log_info("Model %s loaded succesfully", filename);
     fflush(stdout);
 
     return BCNN_SUCCESS;

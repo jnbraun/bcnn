@@ -452,8 +452,8 @@ int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
 
 /* Core network routines */
 int bcnn_update(bcnn_net *net);
-int bcnn_sgd_optimizer(bcnn_node *node, int batch_size, float learning_rate,
-                       float momentum, float decay);
+int bcnn_sgd_optimizer(bcnn_net *net, bcnn_node *node, int batch_size,
+                       float learning_rate, float momentum, float decay);
 int bcnn_visualize_network(bcnn_net *net);
 int bcnn_forward(bcnn_net *net);
 int bcnn_backward(bcnn_net *net);

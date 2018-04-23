@@ -63,18 +63,30 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id) {
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = BATCHNORM;
     channels = net->tensors[node.dst[0]].c;
-    bcnn_tensor_create(&node.layer->saved_mean, 1, 1, 1, channels, 1);
-    bcnn_tensor_create(&node.layer->saved_variance, 1, 1, 1, channels, 1);
-    bcnn_tensor_create(&node.layer->running_mean, 1, 1, 1, channels,
-                       0);  // no gradients
-    bcnn_tensor_create(&node.layer->running_variance, 1, 1, 1, channels,
-                       0);  // no gradients
+    char saved_mean_name[256], saved_var_name[256], running_mean_name[256],
+        running_var_name[256];
+    sprintf(saved_mean_name, "%s_sav_mean", src_id);
+    bcnn_tensor_create(&node.layer->saved_mean, 1, 1, 1, channels, 1,
+                       saved_mean_name);
+    sprintf(saved_var_name, "%s_sav_var", src_id);
+    bcnn_tensor_create(&node.layer->saved_variance, 1, 1, 1, channels, 1,
+                       saved_var_name);
+    sprintf(running_mean_name, "%s_run_mean", src_id);
+    bcnn_tensor_create(&node.layer->running_mean, 1, 1, 1, channels, 0,
+                       running_mean_name);  // no gradients
+    sprintf(running_mean_name, "%s_run_var", src_id);
+    bcnn_tensor_create(&node.layer->running_variance, 1, 1, 1, channels, 0,
+                       running_var_name);  // no gradients
     node.layer->x_norm = (float *)calloc(sz, sizeof(float));
     node.layer->bn_workspace = (float *)calloc(sz, sizeof(float));
-    bcnn_tensor_create(&node.layer->scales, 1, 1, 1, channels, 1);
+    char scales_name[256];
+    sprintf(scales_name, "%s_scales", src_id);
+    bcnn_tensor_create(&node.layer->scales, 1, 1, 1, channels, 1, scales_name);
     bcnn_tensor_filler filler = {.value = 1.0f, .type = FIXED};
     bcnn_tensor_fill(&node.layer->scales, filler);
-    bcnn_tensor_create(&node.layer->biases, 1, 1, 1, channels, 1);
+    char biases_name[256];
+    sprintf(biases_name, "%s_b", src_id);
+    bcnn_tensor_create(&node.layer->biases, 1, 1, 1, channels, 1, biases_name);
 #ifdef BCNN_USE_CUDA
     node.layer->x_norm_gpu =
         bcnn_cuda_memcpy_f32(net->tensors[node.dst[0]].data, sz);

@@ -75,12 +75,17 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_filler_type init,
 
     input_size = bcnn_tensor_get_size3d(&net->tensors[node.src[0]]);
     // Setup layer weights
+    char weights_name[256];
+    sprintf(weights_name, "%s_w", src_id);
     bcnn_tensor_create(&node.layer->weights, 1, 1, 1, input_size * output_size,
-                       1);
+                       1, weights_name);
     bcnn_tensor_filler w_filler = {.range = input_size, .type = init};
     bcnn_tensor_fill(&node.layer->weights, w_filler);
     // Setup layer biases
-    bcnn_tensor_create(&node.layer->biases, 1, 1, 1, output_size, 1);
+    char biases_name[256];
+    sprintf(biases_name, "%s_b", src_id);
+    bcnn_tensor_create(&node.layer->biases, 1, 1, 1, output_size, 1,
+                       biases_name);
 
     if (net->learner.optimizer == ADAM) {
         int weights_size = bcnn_tensor_get_size(&node.layer->weights);

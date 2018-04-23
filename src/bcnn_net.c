@@ -343,19 +343,20 @@ int bcnn_forward(bcnn_net *net) {
     int i, j;
     int output_size = 0;
     bcnn_node node = {0};
-
     for (i = 0; i < net->num_nodes; ++i) {
         node = net->nodes[i];
         for (j = 0; j < node.num_dst; ++j) {
             output_size = bcnn_tensor_get_size(&net->tensors[node.dst[j]]);
 #ifdef BCNN_USE_CUDA
-            if (net->tensors[node.dst[j]].grad_data_gpu != NULL)
+            if (net->tensors[node.dst[j]].grad_data_gpu != NULL) {
                 bcnn_cuda_fill_f32(output_size, 0.0f,
                                    net->tensors[node.dst[j]].grad_data_gpu, 1);
+            }
 #else
-            if (net->tensors[node.dst[j]].grad_data != NULL)
+            if (net->tensors[node.dst[j]].grad_data != NULL) {
                 memset(net->tensors[node.dst[j]].grad_data, 0,
                        output_size * sizeof(float));
+            }
 #endif
         }
         switch (node.layer->type) {
@@ -673,8 +674,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
     if (use_buffer_img) bh_free(img_tmp);
 
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu,
-                              net->tensors[0].data, input_size);
+    bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
+                              input_size);
     if (net->task != PREDICT) {
         bcnn_cuda_memcpy_host2dev(
             net->tensors[1].data_gpu, net->tensors[1].data,
@@ -807,13 +808,12 @@ int bcnn_load_model(bcnn_net *net, char *filename) {
             int weights_size = bcnn_tensor_get_size(&layer->weights);
             int biases_size = bcnn_tensor_get_size(&layer->biases);
             nb_read = fread(layer->biases.data, sizeof(float), biases_size, fp);
-            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d",
-                        i, (unsigned long)nb_read, biases_size);
+            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d", i,
+                        (unsigned long)nb_read, biases_size);
             nb_read =
                 fread(layer->weights.data, sizeof(float), weights_size, fp);
-            bh_log_info(
-                "layer= %d nbread_weight= %lu weight_size_expected= %d", i,
-                (unsigned long)nb_read, weights_size);
+            bh_log_info("layer= %d nbread_weight= %lu weight_size_expected= %d",
+                        i, (unsigned long)nb_read, weights_size);
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(layer->weights.data_gpu,
                                       layer->weights.data, weights_size);

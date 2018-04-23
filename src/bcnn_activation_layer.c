@@ -52,8 +52,10 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
 
     node.layer->activation = type;
     if (type == PRELU) {
+        char weights_name[256];
+        sprintf(weights_name, "%s_w", src_id);
         bcnn_tensor_create(&node.layer->weights, 1, 1, 1,
-                           net->tensors[node.src[0]].c, 1);
+                           net->tensors[node.src[0]].c, 1, weights_name);
     }
 
     bcnn_net_add_node(net, node);

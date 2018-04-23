@@ -30,9 +30,10 @@
 #include "bh_log.h"
 
 void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
-                        int has_grad) {
+                        int has_grad, char *name) {
     bcnn_tensor_set_shape(t, n, c, h, w, has_grad);
     bcnn_tensor_allocate(t);
+    bh_strfill(&t->name, name);
 }
 
 void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler) {
@@ -70,6 +71,7 @@ void bcnn_tensor_destroy(bcnn_tensor *t) {
     t->h = 0;
     t->w = 0;
     t->has_grad = 0;
+    bh_free(t->name);
 }
 
 void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w,

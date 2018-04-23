@@ -63,7 +63,7 @@ typedef struct tensor_filler {
 } bcnn_tensor_filler;
 
 void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
-                        int has_grad);
+                        int has_grad, char *name);
 
 void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler);
 

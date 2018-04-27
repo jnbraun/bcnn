@@ -219,10 +219,12 @@ typedef enum {
     ACTIVATION,
     FULL_CONNECTED,
     MAXPOOL,
+    AVGPOOL,
     SOFTMAX,
     DROPOUT,
     BATCHNORM,
     CONCAT,
+    YOLO,
     COST
 } bcnn_layer_type;
 
@@ -238,7 +240,8 @@ typedef enum {
     LRELU, /**< Leaky relu (alpha (negative slope) set to 0.01) */
     ABS,
     CLAMP,
-    PRELU /**< Parametric ReLU */
+    PRELU, /**< Parametric ReLU */
+    LOGISTIC
 } bcnn_activation;
 
 /**
@@ -321,8 +324,11 @@ typedef struct bcnn_layer {
     cudnnConvolutionBwdFilterAlgo_t bwd_filter_algo;
 #endif
 #endif
-
     float num_constraints;
+    int classes;  // Yolo: # classes
+    int coords;   // Yolo: # coords
+    int truths;   // Yolo
+    float *cost;  // Yolo
 } bcnn_layer;
 
 typedef struct {
@@ -449,6 +455,10 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
 int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                         bcnn_loss_metric loss_metric, float scale, char *src_id,
                         char *label_id, char *dst_id);
+
+/* YOLO */
+int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
+                        char *src_id, char *dst_id);
 
 /* Core network routines */
 int bcnn_update(bcnn_net *net);

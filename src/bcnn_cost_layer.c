@@ -35,7 +35,6 @@ int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
     int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
-    bcnn_tensor label_node = {0};
     // Create layer
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = COST;
@@ -63,7 +62,7 @@ int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                           net->tensors[node.src[0]].w, 0);
     bcnn_tensor_allocate(&net->tensors[1]);
     // Add pointer to label node to connection
-    bcnn_node_add_input(&node, 1);
+    bcnn_node_add_input(&node, 1 /* LABEL_NODE_ID */);
 
     // Create output node
     bcnn_tensor_set_shape(

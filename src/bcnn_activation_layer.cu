@@ -46,6 +46,9 @@ __global__ void _bcnn_forward_activation_layer_kernel(float *x, int sz, bcnn_act
         case CLAMP:
             x[i] = bh_clamp(x[i], 0, 1);
             break;
+        case LOGISTIC:
+            x[i] = 1.0f / (1.0f + (float)exp(-x[i]));
+            break;
         case NONE:
             break;
         default:
@@ -76,22 +79,25 @@ int bcnn_forward_activation_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor
 }
 
 
-__global__ void _bcnn_backward_activation_layer_kernel(float *x, float *diff, int sz, bcnn_activation a)
+__global__ void _bcnn_backward_activation_layer_kernel(float *x, float *dx, int sz, bcnn_activation a)
 {
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
     if (i < sz) {
         switch (a) {
         case TANH:
-            diff[i] *= (1 - x[i] * x[i]);
+            dx[i] *= (1 - x[i] * x[i]);
             break;
         case RELU:
-            diff[i] *= ((float)(x[i] > 0));
+            dx[i] *= ((float)(x[i] > 0));
             break;
         case RAMP:
-            diff[i] *= ((float)(x[i] > 0) + 0.1f);
+            dx[i] *= ((float)(x[i] > 0) + 0.1f);
             break;
         case CLAMP:
-            diff[i] *= (float)(x[i] > 0.0f && (x[i] < 1.0f));
+            dx[i] *= (float)(x[i] > 0.0f && (x[i] < 1.0f));
+            break;
+        case LOGISTIC:
+            dx[i] *= (1 - x[i]) * x[i];
             break;
         case NONE:
             break;

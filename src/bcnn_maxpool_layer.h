@@ -20,8 +20,8 @@
 * SOFTWARE.
 */
 
-#ifndef BCNN_POOLING_LAYER_H
-#define BCNN_POOLING_LAYER_H
+#ifndef BCNN_MAXPOOL_LAYER_H
+#define BCNN_MAXPOOL_LAYER_H
 
 #include <bcnn/bcnn.h>
 
@@ -42,4 +42,4 @@ int bcnn_backward_maxpool_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 }
 #endif
 
-#endif  // BCNN_POOLING_LAYER_H
+#endif  // BCNN_MAXPOOL_LAYER_H

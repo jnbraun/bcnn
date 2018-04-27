@@ -32,6 +32,7 @@
 
 #include "bcnn/bcnn.h"
 #include "bcnn_activation_layer.h"
+#include "bcnn_avgpool_layer.h"
 #include "bcnn_batchnorm_layer.h"
 #include "bcnn_concat_layer.h"
 #include "bcnn_conv_layer.h"
@@ -41,7 +42,7 @@
 #include "bcnn_dropout_layer.h"
 #include "bcnn_fc_layer.h"
 #include "bcnn_mat.h"
-#include "bcnn_pooling_layer.h"
+#include "bcnn_maxpool_layer.h"
 #include "bcnn_softmax_layer.h"
 #include "bcnn_utils.h"
 #include "bh_log.h"
@@ -381,6 +382,9 @@ int bcnn_forward(bcnn_net *net) {
             case MAXPOOL:
                 bcnn_forward_maxpool_layer(net, &node);
                 break;
+            case AVGPOOL:
+                bcnn_forward_avgpool_layer(net, &node);
+                break;
             case SOFTMAX:
                 bcnn_forward_softmax_layer(net, &node);
                 break;
@@ -426,6 +430,9 @@ int bcnn_backward(bcnn_net *net) {
                 break;
             case MAXPOOL:
                 bcnn_backward_maxpool_layer(net, &node);
+                break;
+            case AVGPOOL:
+                bcnn_backward_avgpool_layer(net, &node);
                 break;
             case SOFTMAX:
                 bcnn_backward_softmax_layer(net, &node);
@@ -963,6 +970,7 @@ int bcnn_free_layer(bcnn_layer **layer) {
     bh_free(p_layer->adam_v);
     bh_free(p_layer->binary_weight);
     bh_free(p_layer->binary_workspace);
+    bh_free(p_layer->cost);
 #ifdef BCNN_USE_CUDA
     if (p_layer->indexes_gpu) bcnn_cuda_free(p_layer->indexes_gpu);
     if (p_layer->x_norm_gpu) bcnn_cuda_free(p_layer->x_norm_gpu);

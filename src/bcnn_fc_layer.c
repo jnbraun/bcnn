@@ -59,7 +59,7 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_filler_type init,
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = FULL_CONNECTED;
 
-    // Setup output node
+    // Setup output tensor
     bcnn_tensor_set_shape(&dst_tensor,
                           net->tensors[node.src[0]].n,  // batch size
                           output_size,                  // depth
@@ -68,7 +68,7 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_filler_type init,
                           1);
     bcnn_tensor_allocate(&dst_tensor);
     bh_strfill(&dst_tensor.name, dst_id);
-    // Add node to net
+    // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
     bcnn_node_add_output(&node, net->num_tensors - 1);

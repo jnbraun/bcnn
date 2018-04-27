@@ -75,7 +75,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     node.layer->pad = pad;
 
     // Setup layer weights
-    /*char weights_name[256];
+    char weights_name[256];
     sprintf(weights_name, "%s_w", src_id);
     bcnn_tensor_create(&node.layer->weights, 1, 1, 1,
                        net->tensors[node.src[0]].c * n * size * size, 1,
@@ -86,10 +86,10 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     // Setup layer biases
     char biases_name[256];
     sprintf(biases_name, "%s_b", src_id);
-    bcnn_tensor_create(&node.layer->biases, 1, 1, 1, n, 1, biases_name);*/
+    bcnn_tensor_create(&node.layer->biases, 1, 1, 1, n, 1, biases_name);
 
     // Create weights tensor
-    bcnn_tensor weights = {0};
+    /*bcnn_tensor weights = {0};
     char weights_name[256];
     sprintf(weights_name, "%s_w", src_id);
     bcnn_tensor_create(&weights, 1, 1, 1,
@@ -106,7 +106,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     sprintf(biases_name, "%s_b", src_id);
     bcnn_tensor_create(&biases, 1, 1, 1, n, 1, biases_name);
     bcnn_net_add_tensor(net, biases);
-    bcnn_node_add_input(&node, net->num_tensors - 1);
+    bcnn_node_add_input(&node, net->num_tensors - 1);*/
 
     if (net->learner.optimizer == ADAM) {
         int weights_size = bcnn_tensor_get_size(&node.layer->weights);

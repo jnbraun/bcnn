@@ -139,6 +139,11 @@ int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a) {
                 x[i] = bh_clamp(x[i], 0, 1);
             }
             break;
+        case LOGISTIC:
+            for (i = 0; i < sz; ++i) {
+                x[i] = 1.0f / (1.0f + (float)exp(-x[i]));
+            }
+            break;
         case NONE:
             break;
         default:
@@ -208,6 +213,11 @@ int bcnn_backward_activation_cpu(float *x, float *dx, int sz,
         case CLAMP:
             for (i = 0; i < sz; ++i) {
                 dx[i] *= ((float)(x[i] > 0.0f && x[i] < 1.0f));
+            }
+            break;
+        case LOGISTIC:
+            for (i = 0; i < sz; ++i) {
+                dx[i] *= (1 - x[i]) * x[i];
             }
             break;
         case NONE:

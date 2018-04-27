@@ -19,7 +19,7 @@
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 * SOFTWARE.
 */
-#include "bcnn_pooling_layer.h"
+#include "bcnn_maxpool_layer.h"
 
 #include <bh/bh.h>
 #include <bh/bh_string.h>

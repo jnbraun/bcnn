@@ -457,8 +457,28 @@ int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                         char *label_id, char *dst_id);
 
 /* YOLO */
+typedef struct { float x, y, w, h; } yolo_box;
+
+typedef struct yolo_detection {
+    yolo_box bbox;
+    int classes;
+    float *prob;
+    float *mask;
+    float objectness;
+    int sort_class;
+} yolo_detection;
+
 int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
                         char *src_id, char *dst_id);
+void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
+                              int netw, int neth, float thresh, int relative,
+                              yolo_detection *dets);
+
+// Temporary put these functions here
+float overlap(float x1, float w1, float x2, float w2);
+float box_intersection(yolo_box a, yolo_box b);
+float box_union(yolo_box a, yolo_box b);
+float box_iou(yolo_box a, yolo_box b);
 
 /* Core network routines */
 int bcnn_update(bcnn_net *net);
@@ -496,6 +516,10 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter);
 int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c,
                               int no_input_norm, int swap_to_bgr, float mean_r,
                               float mean_g, float mean_b, float *dst);
+// TODO replace bcnn_convert_img_to_float by version 2
+void bcnn_convert_img_to_float2(unsigned char *src, int w, int h, int c,
+                                float norm_coeff, int swap_to_bgr, float mean_r,
+                                float mean_g, float mean_b, float *dst);
 
 /* Cuda kernels routines */
 #ifdef BCNN_USE_CUDA

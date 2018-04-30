@@ -1,5 +1,9 @@
+#include "bcnn_yolo.h"
 
-
+#include "bcnn_activation_layer.h"
+#include "bcnn_mat.h"
+#include "bcnn_utils.h"
+#include "bh_log.h"
 /** From yolo darknet */
 
 int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
@@ -10,7 +14,7 @@ int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
     bh_check(net->num_nodes >= 1,
              "Yolo layer can't be the first layer of the network");
     int is_src_node_found = 0;
-    for (i = net->num_tensors - 1; i >= 0; --i) {
+    for (int i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id) == 0) {
             bcnn_node_add_input(&node, i);
             is_src_node_found = 1;
@@ -22,9 +26,6 @@ int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
 
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = YOLO;
-
-    // l.type = REGION;
-
     node.layer->num = n;  // num bboxes per cell
     // Setup output tensor
     bcnn_tensor dst_tensor = {0};
@@ -82,11 +83,37 @@ for (i = 0; i < n * 2; ++i) {
     return 0;
 }
 
-typedef struct { float x, y, w, h; } box;
+float overlap(float x1, float w1, float x2, float w2) {
+    float l1 = x1 - w1 / 2;
+    float l2 = x2 - w2 / 2;
+    float left = l1 > l2 ? l1 : l2;
+    float r1 = x1 + w1 / 2;
+    float r2 = x2 + w2 / 2;
+    float right = r1 < r2 ? r1 : r2;
+    return right - left;
+}
 
-static box get_region_box(float *x, float *biases, int n, int index, int i,
-                          int j, int w, int h, int stride) {
-    box b;
+float box_intersection(yolo_box a, yolo_box b) {
+    float w = overlap(a.x, a.w, b.x, b.w);
+    float h = overlap(a.y, a.h, b.y, b.h);
+    if (w < 0 || h < 0) return 0;
+    float area = w * h;
+    return area;
+}
+
+float box_union(yolo_box a, yolo_box b) {
+    float i = box_intersection(a, b);
+    float u = a.w * a.h + b.w * b.h - i;
+    return u;
+}
+
+float box_iou(yolo_box a, yolo_box b) {
+    return box_intersection(a, b) / box_union(a, b);
+}
+
+static yolo_box get_region_box(float *x, float *biases, int n, int index, int i,
+                               int j, int w, int h, int stride) {
+    yolo_box b;
     b.x = (i + x[index + 0 * stride]) / w;
     b.y = (j + x[index + 1 * stride]) / h;
     b.w = exp(x[index + 2 * stride]) * biases[2 * n] / w;
@@ -94,10 +121,10 @@ static box get_region_box(float *x, float *biases, int n, int index, int i,
     return b;
 }
 
-static float delta_region_box(box truth, float *x, float *biases, int n,
+static float delta_region_box(yolo_box truth, float *x, float *biases, int n,
                               int index, int i, int j, int w, int h,
                               float *delta, float scale, int stride) {
-    box pred = get_region_box(x, biases, n, index, i, j, w, h, stride);
+    yolo_box pred = get_region_box(x, biases, n, index, i, j, w, h, stride);
     float iou = box_iou(pred, truth);
 
     float tx = (truth.x * w - i);
@@ -140,17 +167,18 @@ static float logit(float x) { return log(x / (1. - x)); }
 
 static float tisnan(float x) { return (x != x); }
 
-int entry_index(bcnn_layer *layer, bcnn_tensor *dst_tensor, int location,
-                int entry) {
+int entry_index(bcnn_layer *layer, bcnn_tensor *dst_tensor, int batch,
+                int location, int entry) {
     int n = location / (dst_tensor->w * dst_tensor->h);
     int loc = location % (dst_tensor->w * dst_tensor->h);
-    return dst_tensor->n * bcnn_tensor_get_size3d(dst_tensor) +
-           n * (dst_tensor->w * dst_tensor->h) * (l->coords + l->classes + 1) +
+    return batch * bcnn_tensor_get_size3d(dst_tensor) +
+           n * (dst_tensor->w * dst_tensor->h) *
+               (layer->coords + layer->classes + 1) +
            entry * (dst_tensor->w * dst_tensor->h) + loc;
 }
 
-static box float_to_box(float *f, int stride) {
-    box b = {0};
+static yolo_box float_to_box(float *f, int stride) {
+    yolo_box b = {0};
     b.x = f[0];
     b.y = f[1 * stride];
     b.w = f[2 * stride];
@@ -158,8 +186,8 @@ static box float_to_box(float *f, int stride) {
     return b;
 }
 
-int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                bcnn_tensor *dst_tensor) {
+void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+                                 bcnn_tensor *label, bcnn_tensor *dst_tensor) {
     int i, j, b, t, n;
     memcpy(dst_tensor->data, src_tensor->data,
            bcnn_tensor_get_size(dst_tensor) * sizeof(float));
@@ -167,19 +195,19 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     //#ifndef BCNN_USE_CUDA
     for (b = 0; b < dst_tensor->n; ++b) {
         for (n = 0; n < layer->num; ++n) {
-            int index = entry_index(layer, dst_tensor,
+            int index = entry_index(layer, dst_tensor, b,
                                     n * src_tensor->w * src_tensor->h, 0);
             bcnn_forward_activation_cpu(dst_tensor->data + index,
                                         2 * src_tensor->w * src_tensor->h,
                                         LOGISTIC);
             index =
-                entry_index(layer, dst_tensor,
+                entry_index(layer, dst_tensor, b,
                             n * src_tensor->w * src_tensor->h, layer->coords);
             bcnn_forward_activation_cpu(dst_tensor->data + index,
                                         src_tensor->w * src_tensor->h,
                                         LOGISTIC);
 
-            index = entry_index(layer, dst_tensor,
+            index = entry_index(layer, dst_tensor, b,
                                 n * src_tensor->w * src_tensor->h,
                                 layer->coords + 1);
             bcnn_forward_activation_cpu(
@@ -192,10 +220,9 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     memset(dst_tensor->grad_data, 0,
            bcnn_tensor_get_size(dst_tensor) * sizeof(float));
     if (!layer->net_state) {  // state != train
-        return 0;
+        return;
     }
     // This part is for training
-    bcnn_tensor *label = &net->tensors[1];
     float avg_iou = 0;
     float recall = 0;
     float avg_cat = 0;
@@ -208,17 +235,18 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
         for (j = 0; j < src_tensor->h; ++j) {
             for (i = 0; i < src_tensor->w; ++i) {
                 for (n = 0; n < layer->num; ++n) {
-                    int box_index = entry_index(
-                        layer, b, n * src_tensor->w * src_tensor->h +
-                                      j * src_tensor->w + i,
-                        0);
-                    box pred = get_region_box(
+                    int box_index =
+                        entry_index(layer, dst_tensor, b,
+                                    n * src_tensor->w * src_tensor->h +
+                                        j * src_tensor->w + i,
+                                    0);
+                    yolo_box pred = get_region_box(
                         dst_tensor->data, layer->biases.data, n, box_index, i,
                         j, src_tensor->w, src_tensor->h,
                         src_tensor->w * src_tensor->h);
                     float best_iou = 0;
                     for (t = 0; t < 30; ++t) {
-                        box truth =
+                        yolo_box truth =
                             float_to_box(label->data + t * (layer->coords + 1) +
                                              b * layer->truths,
                                          1);
@@ -228,10 +256,11 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                             best_iou = iou;
                         }
                     }
-                    int obj_index = entry_index(
-                        layer, b, n * src_tensor->w * src_tensor->h +
-                                      j * src_tensor->w + i,
-                        layer->coords);
+                    int obj_index =
+                        entry_index(layer, dst_tensor, b,
+                                    n * src_tensor->w * src_tensor->h +
+                                        j * src_tensor->w + i,
+                                    layer->coords);
                     avg_anyobj += dst_tensor->data[obj_index];
                     dst_tensor->grad_data[obj_index] =
                         /*l.noobject_scale **/ (0 -
@@ -240,9 +269,11 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                         dst_tensor->grad_data[obj_index] = 0;
                     }
 
+// Comment this part for now
+#if 0
                     if (*(net.seen) <
                         12800) {  // TODO make it a parameter for training
-                        box truth = {0};
+                        yolo_box truth = {0};
                         truth.x = (i + .5) / src_tensor->w;
                         truth.y = (j + .5) / src_tensor->h;
                         truth.w = layer->biases.data[2 * n] / src_tensor->w;
@@ -253,11 +284,12 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                          dst_tensor->grad_data, .01,
                                          src_tensor->w * src_tensor->h);
                     }
+#endif
                 }
             }
         }
         for (t = 0; t < 30; ++t) {
-            box truth = float_to_box(
+            yolo_box truth = float_to_box(
                 label->data + t * (layer->coords + 1) + b * layer->truths, 1);
 
             if (!truth.x) break;
@@ -265,18 +297,18 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             int best_n = 0;
             i = (truth.x * src_tensor->w);
             j = (truth.y * src_tensor->h);
-            box truth_shift = truth;
+            yolo_box truth_shift = truth;
             truth_shift.x = 0;
             truth_shift.y = 0;
             for (n = 0; n < layer->num; ++n) {
                 int box_index = entry_index(
-                    layer, b,
+                    layer, dst_tensor, b,
                     n * src_tensor->w * src_tensor->h + j * src_tensor->w + i,
                     0);
-                box pred = get_region_box(dst_tensor->data, layer->biases.data,
-                                          n, box_index, i, j, src_tensor->w,
-                                          src_tensor->h,
-                                          src_tensor->w * src_tensor->h);
+                yolo_box pred = get_region_box(
+                    dst_tensor->data, layer->biases.data, n, box_index, i, j,
+                    src_tensor->w, src_tensor->h,
+                    src_tensor->w * src_tensor->h);
                 // if (l.bias_match) { // bias match set to 1?
                 pred.w = layer->biases.data[2 * n] / src_tensor->w;
                 pred.h = layer->biases.data[2 * n + 1] / src_tensor->h;
@@ -291,7 +323,7 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             }
 
             int box_index = entry_index(
-                layer, b,
+                layer, dst_tensor, b,
                 best_n * src_tensor->w * src_tensor->h + j * src_tensor->w + i,
                 0);
             float iou = delta_region_box(
@@ -299,10 +331,11 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                 i, j, src_tensor->w, src_tensor->h, dst_tensor->grad_data,
                 (2 - truth.w * truth.h), src_tensor->w * src_tensor->h);
             if (layer->coords > 4) {
-                int mask_index = entry_index(
-                    layer, b, best_n * src_tensor->w * src_tensor->h +
-                                  j * src_tensor->w + i,
-                    4);
+                int mask_index =
+                    entry_index(layer, dst_tensor, b,
+                                best_n * src_tensor->w * src_tensor->h +
+                                    j * src_tensor->w + i,
+                                4);
                 delta_region_mask(label->data + t * (layer->coords + 1) +
                                       b * layer->truths + 5,
                                   dst_tensor->data, layer->coords - 4,
@@ -316,7 +349,7 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             avg_iou += iou;
 
             int obj_index = entry_index(
-                layer, b,
+                layer, dst_tensor, b,
                 best_n * src_tensor->w * src_tensor->h + j * src_tensor->w + i,
                 layer->coords);
             avg_obj += dst_tensor->data[obj_index];
@@ -329,7 +362,7 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                 class = l.map[class];
             }*/
             int class_index = entry_index(
-                layer, b,
+                layer, dst_tensor, b,
                 best_n * src_tensor->w * src_tensor->h + j * src_tensor->w + i,
                 layer->coords + 1);
             delta_region_class(dst_tensor->data, dst_tensor->grad_data,
@@ -340,8 +373,10 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             ++class_count;
         }
     }
-    *(layer->cost) = pow(
-        mag_array(dst_tensor->grad_data, bcnn_tensor_get_size(dst_tensor)), 2);
+    *(layer->cost) =
+        powf(sqrtf(bcnn_dot(bcnn_tensor_get_size(dst_tensor),
+                            dst_tensor->grad_data, dst_tensor->grad_data)),
+             2);
     fprintf(
         stderr,
         "Region Avg IOU: %f, Class: %f, Obj: %f, No Obj: %f, Avg Recall: %f,  "
@@ -354,7 +389,7 @@ int bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 
 #ifdef BCNN_USE_CUDA
 void bcnn_forward_yolo_layer_gpu(bcnn_net *net, bcnn_tensor *src_tensor,
-                                 bcnn_tensor *dst_tensor) {
+                                 bcnn_tensor *label, bcnn_tensor *dst_tensor) {
     return;
 }
 
@@ -371,15 +406,16 @@ void bcnn_backward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 
 void bcnn_forward_yolo_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
+    bcnn_tensor *label = &net->tensors[1];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_yolo_layer_gpu(node->layer, src, dst);
+    return bcnn_forward_yolo_layer_gpu(node->layer, src, label, dst);
 #else
-    return bcnn_forward_yolo_layer_cpu(node->layer, src, dst);
+    return bcnn_forward_yolo_layer_cpu(node->layer, src, label, dst);
 #endif
 }
 
-int bcnn_backward_yolo_layer(bcnn_net *net, bcnn_node *node) {
+void bcnn_backward_yolo_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
@@ -387,4 +423,84 @@ int bcnn_backward_yolo_layer(bcnn_net *net, bcnn_node *node) {
 #else
     return bcnn_backward_yolo_layer_cpu(node->layer, src, dst);
 #endif
+}
+
+static void correct_region_boxes(yolo_detection *dets, int n, int w, int h,
+                                 int netw, int neth, int relative) {
+    int i;
+    int new_w = 0;
+    int new_h = 0;
+    if (((float)netw / w) < ((float)neth / h)) {
+        new_w = netw;
+        new_h = (h * netw) / w;
+    } else {
+        new_h = neth;
+        new_w = (w * neth) / h;
+    }
+    for (i = 0; i < n; ++i) {
+        yolo_box b = dets[i].bbox;
+        b.x = (b.x - (netw - new_w) / 2. / netw) / ((float)new_w / netw);
+        b.y = (b.y - (neth - new_h) / 2. / neth) / ((float)new_h / neth);
+        b.w *= (float)netw / new_w;
+        b.h *= (float)neth / new_h;
+        if (!relative) {
+            b.x *= w;
+            b.w *= w;
+            b.y *= h;
+            b.h *= h;
+        }
+        dets[i].bbox = b;
+    }
+}
+
+// w = 640 h = 480 netw = 416 neth = 416
+void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
+                              int netw, int neth, float thresh, int relative,
+                              yolo_detection *dets) {
+    int i, j, n, z;
+    bcnn_layer *layer = node->layer;
+    bcnn_tensor *dst = &net->tensors[node->dst[0]];
+    float *predictions = dst->data;
+
+    for (i = 0; i < dst->w * dst->h; ++i) {
+        int row = i / dst->w;
+        int col = i % dst->w;
+        for (n = 0; n < layer->num; ++n) {
+            int index = n * dst->w * dst->h + i;
+            for (j = 0; j < layer->classes; ++j) {
+                dets[index].prob[j] = 0;
+            }
+            int obj_index = entry_index(layer, dst, 0, n * dst->w * dst->h + i,
+                                        layer->coords);
+            int box_index =
+                entry_index(layer, dst, 0, n * dst->w * dst->h + i, 0);
+            int mask_index =
+                entry_index(layer, dst, 0, n * dst->w * dst->h + i, 4);
+            float scale = predictions[obj_index];
+            dets[index].bbox =
+                get_region_box(predictions, layer->biases.data, n, box_index,
+                               col, row, dst->w, dst->h, dst->w * dst->h);
+            dets[index].objectness = scale > thresh ? scale : 0;
+            if (dets[index].mask) {
+                for (j = 0; j < layer->coords - 4; ++j) {
+                    dets[index].mask[j] =
+                        dst->data[mask_index + j * dst->w * dst->h];
+                }
+            }
+
+            int class_index = entry_index(
+                layer, dst, 0, n * dst->w * dst->h + i, layer->coords + 1);
+            if (dets[index].objectness) {
+                for (j = 0; j < layer->classes; ++j) {
+                    int class_index =
+                        entry_index(layer, dst, 0, n * dst->w * dst->h + i,
+                                    layer->coords + 1 + j);
+                    float prob = scale * predictions[class_index];
+                    dets[index].prob[j] = (prob > thresh) ? prob : 0;
+                }
+            }
+        }
+    }
+    correct_region_boxes(dets, dst->w * dst->h * layer->num, w, h, netw, neth,
+                         relative);
 }

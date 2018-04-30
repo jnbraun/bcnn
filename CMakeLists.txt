@@ -177,6 +177,7 @@ endif()
 if (BUILD_EXAMPLES)
 add_subdirectory(examples/mnist)
 add_subdirectory(examples/cifar10)
+add_subdirectory(examples/yolo)
 endif()
 
 if (BUILD_TOOLS)

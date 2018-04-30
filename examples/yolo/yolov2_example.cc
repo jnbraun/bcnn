@@ -1,0 +1,331 @@
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+
+#include <bh/bh.h>
+#include <bh/bh_error.h>
+#include <bh/bh_mem.h>
+#include <bh/bh_string.h>
+#include <bh/bh_timer.h>
+#include <bip/bip.h>
+
+#include "bcnn/bcnn.h"
+#include "bcnn_mat.h"
+#include "bh_log.h"
+
+int setup_yolo_tiny_net(bcnn_net *net, int input_width, int input_height,
+                        char *model) {
+    bcnn_net_set_input_shape(net, input_width, input_height, 3, 1);
+
+    bcnn_add_convolutional_layer(net, 16, 3, 1, 1, 0, XAVIER, LRELU, 0,
+                                 (char *)"input", (char *)"conv1");
+    bcnn_add_batchnorm_layer(net, (char *)"conv1", (char *)"bn1");
+    bcnn_add_maxpool_layer(net, 2, 2, (char *)"bn1", (char *)"pool1");
+
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, LRELU, 0,
+                                 (char *)"pool1", (char *)"conv2");
+    bcnn_add_batchnorm_layer(net, (char *)"conv2", (char *)"bn2");
+    bcnn_add_maxpool_layer(net, 2, 2, (char *)"bn2", (char *)"pool2");
+
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, LRELU, 0,
+                                 (char *)"pool2", (char *)"conv3");
+    bcnn_add_batchnorm_layer(net, (char *)"conv3", (char *)"bn3");
+    bcnn_add_maxpool_layer(net, 2, 2, (char *)"bn3", (char *)"pool3");
+
+    bcnn_add_convolutional_layer(net, 128, 3, 1, 1, 0, XAVIER, LRELU, 0,
+                                 (char *)"pool3", (char *)"conv4");
+    bcnn_add_batchnorm_layer(net, (char *)"conv4", (char *)"bn4");
+    bcnn_add_maxpool_layer(net, 2, 2, (char *)"bn4", (char *)"pool4");
+
+    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 0, XAVIER, LRELU, 0,
+                                 (char *)"pool4", (char *)"conv5");
+    bcnn_add_batchnorm_layer(net, (char *)"conv5", (char *)"bn5");
+    bcnn_add_maxpool_layer(net, 2, 2, (char *)"bn5", (char *)"pool5");
+
+    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 0, XAVIER, LRELU, 0,
+                                 (char *)"pool5", (char *)"conv6");
+    bcnn_add_batchnorm_layer(net, (char *)"conv6", (char *)"bn6");
+    bcnn_add_maxpool_layer(net, 2, 1, (char *)"bn6", (char *)"pool6");
+
+    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 0, XAVIER, LRELU, 0,
+                                 (char *)"pool6", (char *)"conv7");
+    bcnn_add_batchnorm_layer(net, (char *)"conv7", (char *)"bn7");
+
+    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 0, XAVIER, LRELU, 0,
+                                 (char *)"bn7", (char *)"conv8");
+    bcnn_add_batchnorm_layer(net, (char *)"conv8", (char *)"bn8");
+
+    // 80 classes
+    bcnn_add_convolutional_layer(net, 425, 1, 1, 1, 0, XAVIER, NONE, 0,
+                                 (char *)"bn8", (char *)"conv9");
+    bcnn_add_yolo_layer(net, 5, 80, 4, (char *)"conv9", (char *)"yolo");
+    bcnn_compile_net(net, (char *)"predict");
+    bcnn_load_model(net, model);
+}
+
+void prepare_frame(cv::Mat frame, float *img, int w, int h) {
+    if (!img) {
+        return;
+    }
+    int new_w = frame.cols;
+    int new_h = frame.rows;
+    if (((float)w / frame.cols) < ((float)h / frame.rows)) {
+        new_w = w;
+        new_h = (frame.rows * w) / frame.cols;
+    } else {
+        new_h = h;
+        new_w = (frame.cols * h) / frame.rows;
+    }
+    unsigned char *img_rz =
+        (unsigned char *)calloc(new_w * new_h * 3, sizeof(unsigned char));
+    bip_resize_bilinear(frame.data, frame.cols, frame.rows, frame.step, img_rz,
+                        new_w, new_h, new_w * 3, 3);
+    unsigned char *canvas =
+        (unsigned char *)calloc(w * h * 3, sizeof(unsigned char));
+    for (int i = 0; i < w * h * 3; ++i) {
+        canvas[i] = 128;
+    }
+    int x_offset = (w - new_w) / 2;
+    int y_offset = (h - new_h) / 2;
+    for (int c = 0; c < 3; ++c) {
+        for (int y = 0; y < new_h; ++y) {
+            for (int x = 0; x < new_w; ++x) {
+                canvas[((y + y_offset) * w + (x + x_offset)) * 3 + c] =
+                    img_rz[(y * new_w + x) * 3 + c];
+            }
+        }
+    }
+
+    bcnn_convert_img_to_float2(canvas, w, h, 3, 1.0f / 255.0f, 1, 0.0f, 0.0f,
+                               0.0f, img);
+    bh_free(img_rz);
+    bh_free(canvas);
+    return;
+}
+
+void prepare_detection_results(bcnn_net *net, yolo_detection **dets,
+                               int *num_dets) {
+    // Get yolo_detection boxes
+    if (net->nodes[net->num_nodes - 1].layer->type == YOLO) {
+        bcnn_layer *yolo_layer = net->nodes[net->num_nodes - 1].layer;
+        // Number detections: num boxes (5) * spatial output size (number of
+        // cells)
+        int n = bcnn_tensor_get_size2d(&net->tensors[net->num_tensors - 1]) *
+                yolo_layer->num;
+        (*num_dets) = n;
+        yolo_detection *p_dets =
+            (yolo_detection *)calloc(n, sizeof(yolo_detection));
+        for (int i = 0; i < n; ++i) {
+            p_dets[i].prob =
+                (float *)calloc(yolo_layer->classes, sizeof(float));
+            if (yolo_layer->coords > 4) {
+                p_dets[i].mask =
+                    (float *)calloc(yolo_layer->coords - 4, sizeof(float));
+            }
+        }
+        *dets = p_dets;
+    }
+}
+
+static int nms_comparator(const void *pa, const void *pb) {
+    yolo_detection a = *(yolo_detection *)pa;
+    yolo_detection b = *(yolo_detection *)pb;
+    float diff = 0;
+    if (b.sort_class >= 0) {
+        diff = a.prob[b.sort_class] - b.prob[b.sort_class];
+    } else {
+        diff = a.objectness - b.objectness;
+    }
+    if (diff < 0)
+        return 1;
+    else if (diff > 0)
+        return -1;
+    return 0;
+}
+
+static void do_nms_obj(yolo_detection *dets, int total, int classes,
+                       float thresh) {
+    int i, j, k;
+    k = total - 1;
+    for (i = 0; i <= k; ++i) {
+        if (dets[i].objectness == 0) {
+            yolo_detection swap = dets[i];
+            dets[i] = dets[k];
+            dets[k] = swap;
+            --k;
+            --i;
+        }
+    }
+    total = k + 1;
+
+    for (i = 0; i < total; ++i) {
+        dets[i].sort_class = -1;
+    }
+
+    qsort(dets, total, sizeof(yolo_detection), nms_comparator);
+    for (i = 0; i < total; ++i) {
+        if (dets[i].objectness == 0) {
+            continue;
+        }
+        yolo_box a = dets[i].bbox;
+        for (j = i + 1; j < total; ++j) {
+            if (dets[j].objectness == 0) {
+                continue;
+            }
+            yolo_box b = dets[j].bbox;
+            if (box_iou(a, b) > thresh) {
+                dets[j].objectness = 0;
+                for (k = 0; k < classes; ++k) {
+                    dets[j].prob[k] = 0;
+                }
+            }
+        }
+    }
+}
+
+void predict_detections(int w_frame, int h_frame, float *input, bcnn_net *net,
+                        float *pred, int avg_window, float *avg_pred,
+                        yolo_detection *dets, int num_dets) {
+    float nms_tresh = 0.4f;
+    net->tensors[0].data = input;
+    bcnn_forward(net);
+
+    bcnn_node *last_node = &net->nodes[net->num_nodes - 1];
+    int out_sz = bcnn_tensor_get_size(&net->tensors[net->num_tensors - 1]);
+    if (last_node->layer->type == YOLO) {
+        for (int i = 0; i < avg_window - 1; ++i) {
+            memcpy(pred + i * out_sz, pred + (i + 1) * out_sz,
+                   out_sz * sizeof(float));
+        }
+        memcpy(pred + (avg_window - 1) * out_sz,
+               net->tensors[net->num_tensors - 1].data, out_sz * sizeof(float));
+    } else {
+        bh_log_error("Incorrect last layer. Should be a yolo layer");
+    }
+
+    // Average predictions on the sliding time window
+    for (int i = 0; i < avg_window; ++i) {
+        bcnn_axpy(out_sz, 1.0f / avg_window, pred + i * avg_window, avg_pred);
+    }
+    // Get yolo_detection boxes
+    bcnn_yolo_get_detections(net, last_node, w_frame, h_frame, net->input_width,
+                             net->input_height, 0.5, 1, dets);
+    // Non max suppression
+    do_nms_obj(dets, num_dets, last_node->layer->classes, nms_tresh);
+}
+
+bool open_video(std::string video_path, cv::VideoCapture &capture) {
+    if (video_path == "0") {
+        capture.open(0);
+    } else if (video_path == "1") {
+        capture.open(1);
+    } else {
+        capture.open(video_path);
+    }
+    if (!capture.isOpened()) {
+        fprintf(stderr, "Failed to open %s\n", video_path.c_str());
+        return false;
+    } else {
+        return true;
+    }
+}
+
+static std::string str_objs[80] = {
+    "person",      "bicycle",    "car",          "motorbike",   "aeroplane",
+    "bus",         "train",      "truck",        "boat",        "traffic",
+    "fire",        "stop",       "parking",      "bench",       "bird",
+    "cat",         "dog",        "horse",        "sheep",       "cow",
+    "elephant",    "bear",       "zebra",        "giraffe",     "backpack",
+    "umbrella",    "handbag",    "tie",          "suitcase",    "frisbee",
+    "skis",        "snowboard",  "sports",       "kite",        "baseball",
+    "baseball",    "skateboard", "surfboard",    "tennis",      "bottle",
+    "wine",        "cup",        "fork",         "knife",       "spoon",
+    "bowl",        "banana",     "apple",        "sandwich",    "orange",
+    "broccoli",    "carrot",     "hot",          "pizza",       "donut",
+    "cake",        "chair",      "sofa",         "pottedplant", "bed",
+    "diningtable", "toilet",     "tvmonitor",    "laptop",      "mouse",
+    "remote",      "keyboard",   "cell",         "microwave",   "oven",
+    "toaster",     "sink",       "refrigerator", "book",        "clock",
+    "vase",        "scissors",   "teddy",        "hair",        "toothbrush"};
+
+void display_detections(cv::Mat &frame, yolo_detection *dets, int num_dets,
+                        float thresh, int num_classes) {
+    for (int i = 0; i < num_dets; ++i) {
+        for (int j = 0; j < num_classes; ++j) {
+            if (dets[i].prob[j] > thresh) {
+                int x_tl = (dets[i].bbox.x - dets[i].bbox.w / 2) * frame.cols;
+                int y_tl = (dets[i].bbox.y - dets[i].bbox.h / 2) * frame.rows;
+                cv::Rect box = cv::Rect(x_tl, y_tl, dets[i].bbox.w * frame.cols,
+                                        dets[i].bbox.h * frame.rows);
+                cv::rectangle(frame, box,
+                              cv::Scalar(40, 255 * dets[i].prob[j],
+                                         255 - 255 * dets[i].prob[j]),
+                              2, 8, 0);
+                cv::putText(frame, str_objs[j], cv::Point(x_tl, y_tl - 20),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                            cv::Scalar(40, 255 * dets[i].prob[j],
+                                       255 - 255 * dets[i].prob[j]),
+                            2.0);
+            }
+        }
+    }
+}
+
+int run(int argc, char **argv) {
+    cv::VideoCapture cap;
+    if (!open_video(argv[1], cap)) {
+        return -1;
+    }
+    cv::Mat frame;
+    cap >> frame;
+
+    // Init net
+    bcnn_net *net = NULL;
+    bcnn_init_net(&net);
+    // Setup net and weights
+    int w = 416, h = 416;
+    setup_yolo_tiny_net(net, w, h, argv[2]);
+    float *input = (float *)calloc(w * h * 3, sizeof(float));
+
+    int out_sz = bcnn_tensor_get_size(&net->tensors[net->num_tensors - 1]);
+    int avg_window = 3;
+    float *pred = (float *)calloc(avg_window * out_sz, sizeof(float));
+    float *avg_pred = (float *)calloc(out_sz, sizeof(float));
+    // Prepare yolo_detection results
+    yolo_detection *dets = NULL;
+    int num_dets = 0;
+    prepare_detection_results(net, &dets, &num_dets);
+
+    while (!frame.empty()) {
+        cap >> frame;
+        prepare_frame(frame, input, w, h);
+        predict_detections(frame.cols, frame.rows, input, net, pred, avg_window,
+                           avg_pred, dets, num_dets);
+        display_detections(frame, dets, num_dets, 0.6, 80);
+        cv::imshow("yolov2-tiny example", frame);
+        int q = cv::waitKey(10);
+        if (q == 27) {
+            break;
+        }
+    }
+
+    bcnn_end_net(&net);
+
+    free(pred);
+    free(avg_pred);
+    free(dets);
+    return 0;
+}
+
+void show_usage(int argc, char **argv) {
+    fprintf(stderr, "Usage: ./%s <video path/source> <model>\n", argv[0]);
+}
+
+int main(int argc, char **argv) {
+    if (argc < 4) {
+        show_usage(argc, argv);
+        return 1;
+    }
+    run(argc, argv);
+
+    return 0;
+}

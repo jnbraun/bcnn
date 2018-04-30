@@ -27,6 +27,7 @@
 #include <bip/bip.h>
 
 #include "bcnn/bcnn.h"
+#include "bh_log.h"
 
 int bcnn_pack_data(char *list, int label_width, bcnn_label_type type,
                    char *out_pack) {
@@ -156,6 +157,35 @@ int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c,
         }
     }
     return 0;
+}
+
+void bcnn_convert_img_to_float2(unsigned char *src, int w, int h, int c,
+                                float norm_coeff, int swap_to_bgr, float mean_r,
+                                float mean_g, float mean_b, float *dst) {
+    float m[3] = {mean_r, mean_g, mean_b};
+    if (swap_to_bgr) {
+        bh_check(c == 3,
+                 "bcnn_convert_img_to_float2: number of channels %d is "
+                 "inconsistent. Expected 3",
+                 c);
+        for (int k = 0; k < c; ++k) {
+            for (int y = 0; y < h; ++y) {
+                for (int x = 0; x < w; ++x) {
+                    dst[w * (h * (2 - k) + y) + x] =
+                        ((float)src[c * (x + w * y) + k] - m[k]) * norm_coeff;
+                }
+            }
+        }
+    } else {
+        for (int k = 0; k < c; ++k) {
+            for (int y = 0; y < h; ++y) {
+                for (int x = 0; x < w; ++x) {
+                    dst[w * (h * k + y) + x] =
+                        ((float)src[c * (x + w * y) + k] - m[k]) * norm_coeff;
+                }
+            }
+        }
+    }
 }
 
 /* IO */

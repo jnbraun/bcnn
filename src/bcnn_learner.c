@@ -65,59 +65,38 @@ static float bcnn_update_learning_rate(bcnn_net *net) {
 int bcnn_sgd_optimizer(bcnn_net *net, bcnn_node *node, int batch_size,
                        float learning_rate, float momentum, float decay) {
     bcnn_layer *layer = node->layer;
-    if (layer->type != CONVOLUTIONAL) {
-        int biases_size = bcnn_tensor_get_size(&layer->biases);
-        int weights_size = bcnn_tensor_get_size(&layer->weights);
+    int biases_size = bcnn_tensor_get_size(&layer->biases);
+    int weights_size = bcnn_tensor_get_size(&layer->weights);
 #ifdef BCNN_USE_CUDA
-        if (layer->biases.data_gpu && layer->biases.grad_data_gpu) {
-            bcnn_cuda_axpy(biases_size, -learning_rate / batch_size,
-                           layer->biases.grad_data_gpu, 1,
-                           layer->biases.data_gpu, 1);
-            bcnn_cuda_scal(biases_size, momentum, layer->biases.grad_data_gpu,
-                           1);
-        }
-        if (layer->weights.data_gpu && layer->weights.grad_data_gpu) {
-            bcnn_cuda_axpy(weights_size, decay * batch_size,
-                           layer->weights.data_gpu, 1,
-                           layer->weights.grad_data_gpu, 1);
-            bcnn_cuda_axpy(weights_size, -learning_rate / batch_size,
-                           layer->weights.grad_data_gpu, 1,
-                           layer->weights.data_gpu, 1);
-            bcnn_cuda_scal(weights_size, momentum, layer->weights.grad_data_gpu,
-                           1);
-        }
-#else
-        if (layer->biases.data && layer->biases.grad_data) {
-            bcnn_axpy(biases_size, -learning_rate / batch_size,
-                      layer->biases.grad_data, layer->biases.data);
-            bcnn_scal(biases_size, momentum, layer->biases.grad_data);
-        }
-        if (layer->weights.data && layer->weights.grad_data) {
-            bcnn_axpy(weights_size, decay * batch_size, layer->weights.data,
-                      layer->weights.grad_data);
-            bcnn_axpy(weights_size, -learning_rate / batch_size,
-                      layer->weights.grad_data, layer->weights.data);
-            bcnn_scal(weights_size, momentum, layer->weights.grad_data);
-        }
-#endif
-    } else {
-        int biases_size = bcnn_tensor_get_size(&net->tensors[node->src[2]]);
-        int weights_size = bcnn_tensor_get_size(&net->tensors[node->src[1]]);
-        bcnn_tensor *weights = &net->tensors[node->src[1]];
-        bcnn_tensor *biases = &net->tensors[node->src[2]];
-        if (biases->data && biases->grad_data) {
-            bcnn_axpy(biases_size, -learning_rate / batch_size,
-                      biases->grad_data, biases->data);
-            bcnn_scal(biases_size, momentum, biases->grad_data);
-        }
-        if (weights->data && weights->grad_data) {
-            bcnn_axpy(weights_size, decay * batch_size, weights->data,
-                      weights->grad_data);
-            bcnn_axpy(weights_size, -learning_rate / batch_size,
-                      weights->grad_data, weights->data);
-            bcnn_scal(weights_size, momentum, weights->grad_data);
-        }
+    if (layer->biases.data_gpu && layer->biases.grad_data_gpu) {
+        bcnn_cuda_axpy(biases_size, -learning_rate / batch_size,
+                       layer->biases.grad_data_gpu, 1, layer->biases.data_gpu,
+                       1);
+        bcnn_cuda_scal(biases_size, momentum, layer->biases.grad_data_gpu, 1);
     }
+    if (layer->weights.data_gpu && layer->weights.grad_data_gpu) {
+        bcnn_cuda_axpy(weights_size, decay * batch_size,
+                       layer->weights.data_gpu, 1, layer->weights.grad_data_gpu,
+                       1);
+        bcnn_cuda_axpy(weights_size, -learning_rate / batch_size,
+                       layer->weights.grad_data_gpu, 1, layer->weights.data_gpu,
+                       1);
+        bcnn_cuda_scal(weights_size, momentum, layer->weights.grad_data_gpu, 1);
+    }
+#else
+    if (layer->biases.data && layer->biases.grad_data) {
+        bcnn_axpy(biases_size, -learning_rate / batch_size,
+                  layer->biases.grad_data, layer->biases.data);
+        bcnn_scal(biases_size, momentum, layer->biases.grad_data);
+    }
+    if (layer->weights.data && layer->weights.grad_data) {
+        bcnn_axpy(weights_size, decay * batch_size, layer->weights.data,
+                  layer->weights.grad_data);
+        bcnn_axpy(weights_size, -learning_rate / batch_size,
+                  layer->weights.grad_data, layer->weights.data);
+        bcnn_scal(weights_size, momentum, layer->weights.grad_data);
+    }
+#endif
     return 0;
 }
 

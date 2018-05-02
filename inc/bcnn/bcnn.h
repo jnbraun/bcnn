@@ -291,6 +291,7 @@ typedef struct bcnn_layer {
     float *conv_workspace_gpu;
     float *rand_gpu;
 #endif
+    int batch_norm;
     float *bn_workspace;
     bcnn_tensor saved_mean;
     bcnn_tensor saved_variance;

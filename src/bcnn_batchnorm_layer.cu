@@ -232,6 +232,10 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                dst_tensor->c, dst_tensor->h * dst_tensor->w);
         bcnn_cuda_copy_f32(batch_size * sz, dst_tensor->data_gpu, 1, layer->x_norm_gpu,
                            1);
+        bcnn_scales_gpu(dst_tensor->data_gpu, layer->scales.data_gpu, batch_size,
+                               dst_tensor->c, dst_tensor->h * dst_tensor->w);
+        bcnn_cuda_add_bias(dst_tensor->data_gpu, layer->biases.data_gpu, batch_size,
+                               dst_tensor->c, dst_tensor->h * dst_tensor->w);
 #endif
     } else {
 #ifdef BCNN_USE_CUDNN
@@ -248,6 +252,10 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
         // Normalize with global mean / variance
         bcnn_cuda_norm_forward(dst_tensor->data_gpu, layer->running_mean.data_gpu,
                                layer->running_variance.data_gpu, batch_size,
+                               dst_tensor->c, dst_tensor->h * dst_tensor->w);
+        bcnn_scales_gpu(dst_tensor->data_gpu, layer->scales.data_gpu, batch_size,
+                               dst_tensor->c, dst_tensor->h * dst_tensor->w);
+        bcnn_cuda_add_bias(dst_tensor->data_gpu, layer->biases.data_gpu, batch_size,
                                dst_tensor->c, dst_tensor->h * dst_tensor->w);
 #endif
     }
@@ -281,6 +289,14 @@ int bcnn_backward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor
         layer->scales.grad_data_gpu, layer->biases.grad_data_gpu, 0.0001,
         layer->saved_mean.data_gpu, layer->saved_variance.data_gpu));
 #else
+    bcnn_cuda_grad_bias(layer->biases.grad_data_gpu, dst_tensor->grad_data_gpu, batch_size,
+                   dst_tensor->c, dst_tensor->h * dst_tensor->w);
+    bcnn_grad_scales_gpu(layer->x_norm_gpu, dst_tensor->grad_data_gpu, batch_size,
+                     dst_tensor->c, dst_tensor->h * dst_tensor->w,
+                     layer->scales.grad_data_gpu);
+    bcnn_scales_gpu(dst_tensor->grad_data_gpu, layer->scales.data_gpu, batch_size,
+                dst_tensor->c, dst_tensor->h * dst_tensor->w);
+
     fast_mean_delta_gpu(dst_tensor->grad_data_gpu, layer->saved_variance.data_gpu,
                         batch_size, dst_tensor->c, dst_tensor->w * dst_tensor->h,
                         layer->saved_mean.grad_data_gpu);

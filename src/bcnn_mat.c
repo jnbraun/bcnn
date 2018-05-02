@@ -741,6 +741,32 @@ void bcnn_add_bias(float *output, float *bias, int batch_size, int num_channels,
     }
 }
 
+void bcnn_scales(float *output, float *scales, int batch_size, int num_channels,
+                 int spatial_size) {
+    int i, j, b;
+    for (b = 0; b < batch_size; ++b) {
+        for (i = 0; i < num_channels; ++i) {
+            bcnn_scal(spatial_size, scales[i], output + i * spatial_size);
+        }
+        output += num_channels * spatial_size;
+    }
+}
+
+void bcnn_grad_scales(float *x_norm, float *delta, int batch, int n, int size,
+                      float *scale_updates) {
+    int i, b, f;
+    for (f = 0; f < n; ++f) {
+        float sum = 0;
+        for (b = 0; b < batch; ++b) {
+            for (i = 0; i < size; ++i) {
+                int index = i + size * (f + n * b);
+                sum += delta[index] * x_norm[index];
+            }
+        }
+        scale_updates[f] += sum;
+    }
+}
+
 void bcnn_grad_bias(float *grad_bias, float *grad_data, int batch_size,
                     int num_channels, int spatial_size) {
     int i, j, b;
@@ -749,7 +775,9 @@ void bcnn_grad_bias(float *grad_bias, float *grad_data, int batch_size,
     for (b = 0; b < batch_size; ++b) {
         for (i = 0; i < num_channels; ++i) {
             p = grad_data + spatial_size * (i + b * num_channels);
-            for (j = 0; j < spatial_size; ++j) grad_bias[i] += p[j];
+            for (j = 0; j < spatial_size; ++j) {
+                grad_bias[i] += p[j];
+            }
         }
     }
 }

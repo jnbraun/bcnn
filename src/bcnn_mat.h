@@ -73,6 +73,10 @@ int bcnn_varnorm(int n, float *a, float c, float *y);
 int bcnn_varmean(int n, float *m, float a, float *var);
 void bcnn_add_bias(float *output, float *bias, int batch_size, int num_channels, int spatial_size);
 void bcnn_grad_bias(float *grad_bias, float *grad_data, int batch_size, int num_channels, int spatial_size);
+void bcnn_scales(float *output, float *scales, int batch_size,
+                     int num_channels, int spatial_size);
+void bcnn_grad_scales(float *x_norm, float *delta, int batch, int n, int size,
+                     float *scale_updates);
 void bcnn_im2col(const float *data_im, const int channels, const int height, const int width,
     const int kernel_size, const int pad, const int stride, float *data_col);
 void bcnn_col2im(const float *data_col, const int channels, const int height, const int width,
@@ -118,6 +122,9 @@ void bcnn_op_cuda_ramp_grad(int n, float *x, float *dx);
 
 void bcnn_cuda_add_bias(float *output, float *bias, int batch_size, int num_channels, int spatial_size);
 void bcnn_cuda_grad_bias(float *grad_bias, float *grad_data, int batch_size, int num_channels, int spatial_size);
+void bcnn_scales_gpu(float *output, float *biases, int batch, int n, int size);
+void bcnn_grad_scales_gpu(float *x_norm, float *delta, int batch, int n,
+    int size, float *scale_updates);
 
 void bcnn_cuda_im2col(float *im,
          int channels, int height, int width,

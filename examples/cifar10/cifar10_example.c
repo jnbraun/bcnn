@@ -41,33 +41,55 @@ int create_network(bcnn_net *net) {
     net->max_batches = 50000;
 
     bcnn_net_set_input_shape(net, 28, 28, 3, 128);
-
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "input",
+#if 0
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, XAVIER, RELU, 0, "input",
                                  "conv1_1");
-    bcnn_add_batchnorm_layer(net, "conv1_1", "bn1_1");
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "bn1_1",
+    // bcnn_add_batchnorm_layer(net, "conv1_1", "bn1_1");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, XAVIER, RELU, 0, "bn1_1",
                                  "conv1_2");
-    bcnn_add_batchnorm_layer(net, "conv1_2", "bn1_2");
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "bn1_2",
+    // bcnn_add_batchnorm_layer(net, "conv1_2", "bn1_2");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, XAVIER, RELU, 0, "bn1_2",
                                  "conv1_3");
-    bcnn_add_batchnorm_layer(net, "conv1_3", "bn1_3");
+    // bcnn_add_batchnorm_layer(net, "conv1_3", "bn1_3");
     bcnn_add_maxpool_layer(net, 2, 2, "bn1_3", "pool1");
 
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "pool1",
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, XAVIER, RELU, 0, "pool1",
                                  "conv2_1");
-    bcnn_add_batchnorm_layer(net, "conv2_1", "bn2_1");
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "bn2_1",
+    // bcnn_add_batchnorm_layer(net, "conv2_1", "bn2_1");
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, XAVIER, RELU, 0, "bn2_1",
                                  "conv2_2");
-    bcnn_add_batchnorm_layer(net, "conv2_2", "bn2_2");
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "bn2_2",
+    // bcnn_add_batchnorm_layer(net, "conv2_2", "bn2_2");
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, XAVIER, RELU, 0, "bn2_2",
                                  "conv2_3");
-    bcnn_add_batchnorm_layer(net, "conv2_3", "bn2_3");
+    // bcnn_add_batchnorm_layer(net, "conv2_3", "bn2_3");
     bcnn_add_maxpool_layer(net, 2, 2, "bn2_3", "pool2");
 
     bcnn_add_fullc_layer(net, 512, XAVIER, RELU, 0, "pool2", "fc1");
     bcnn_add_batchnorm_layer(net, "fc1", "bn3");
 
     bcnn_add_fullc_layer(net, 10, XAVIER, RELU, 0, "bn3", "fc2");
+#else
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "input",
+                                 "conv1_1");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0,
+                                 "conv1_1", "conv1_2");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0,
+                                 "conv1_2", "conv1_3");
+    bcnn_add_maxpool_layer(net, 2, 2, "conv1_3", "pool1");
+
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "pool1",
+                                 "conv2_1");
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0,
+                                 "conv2_1", "conv2_2");
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0,
+                                 "conv2_2", "conv2_3");
+    bcnn_add_maxpool_layer(net, 2, 2, "conv2_3", "pool2");
+
+    bcnn_add_fullc_layer(net, 512, XAVIER, RELU, 0, "pool2", "fc1");
+    bcnn_add_batchnorm_layer(net, "fc1", "bn3");
+
+    bcnn_add_fullc_layer(net, 10, XAVIER, RELU, 0, "bn3", "fc2");
+#endif
 
     bcnn_add_softmax_layer(net, "fc2", "softmax");
     bcnn_add_cost_layer(net, EUCLIDEAN_LOSS, COST_ERROR, 1.0f, "softmax",

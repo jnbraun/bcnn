@@ -160,7 +160,9 @@ int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     int batch_size = src_tensor->n;
     int sz = dst_tensor->w * dst_tensor->h * dst_tensor->c;
 
-    bcnn_copy_f32(sz * batch_size, src_tensor->data, dst_tensor->data);
+    if (src_tensor != dst_tensor) {
+        bcnn_copy_f32(sz * batch_size, src_tensor->data, dst_tensor->data);
+    }
     bcnn_copy_f32(sz * batch_size, dst_tensor->data, layer->bn_workspace);
 
     if (layer->net_state) {
@@ -186,7 +188,11 @@ int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                       layer->running_variance.data, batch_size, dst_tensor->c,
                       dst_tensor->h * dst_tensor->w);
     }
-
+    // dst <- scale * dst + bias
+    bcnn_scales(dst_tensor->data, layer->scales.data, batch_size, dst_tensor->c,
+                dst_tensor->h * dst_tensor->w);
+    bcnn_add_bias(dst_tensor->data, layer->biases.data, batch_size,
+                  dst_tensor->c, dst_tensor->h * dst_tensor->w);
     return BCNN_SUCCESS;
 }
 
@@ -238,7 +244,13 @@ int bcnn_backward_batchnorm_layer_cpu(bcnn_layer *layer,
         layer->saved_mean.data = layer->running_mean.data;
         layer->saved_variance.data = layer->running_variance.data;
     }
-
+    bcnn_grad_bias(layer->biases.grad_data, dst_tensor->grad_data, batch_size,
+                   dst_tensor->c, dst_tensor->h * dst_tensor->w);
+    bcnn_grad_scales(layer->x_norm, dst_tensor->grad_data, batch_size,
+                     dst_tensor->c, dst_tensor->h * dst_tensor->w,
+                     layer->scales.grad_data);
+    bcnn_scales(dst_tensor->grad_data, layer->scales.data, batch_size,
+                dst_tensor->c, dst_tensor->h * dst_tensor->w);
     _mean_variance_backward(
         layer->bn_workspace, dst_tensor->grad_data, layer->saved_mean.data,
         layer->saved_variance.data, batch_size, dst_tensor->c,
@@ -250,9 +262,10 @@ int bcnn_backward_batchnorm_layer_cpu(bcnn_layer *layer,
                         dst_tensor->c, dst_tensor->w * dst_tensor->h,
                         dst_tensor->grad_data);
 
-    if (src_tensor->grad_data)
+    if (src_tensor->grad_data && src_tensor != dst_tensor) {
         bcnn_copy_f32(sz * batch_size, dst_tensor->grad_data,
                       src_tensor->grad_data);
+    }
 
     return BCNN_SUCCESS;
 }

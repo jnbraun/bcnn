@@ -388,12 +388,12 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 }
 
 #ifdef BCNN_USE_CUDA
-void bcnn_forward_yolo_layer_gpu(bcnn_net *net, bcnn_tensor *src_tensor,
+void bcnn_forward_yolo_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                  bcnn_tensor *label, bcnn_tensor *dst_tensor) {
     return;
 }
 
-void bcnn_backward_yolo_layer_gpu(bcnn_net *net, bcnn_tensor *src_tensor,
+void bcnn_backward_yolo_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                   bcnn_tensor *dst_tensor) {
     return;
 }

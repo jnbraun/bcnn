@@ -32,6 +32,12 @@ extern "C" {
 int bcnn_forward_batchnorm_layer(bcnn_net *net, bcnn_node *node);
 int bcnn_backward_batchnorm_layer(bcnn_net *net, bcnn_node *node);
 
+int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+                                     bcnn_tensor *dst_tensor);
+int bcnn_backward_batchnorm_layer_cpu(bcnn_layer *layer,
+                                      bcnn_tensor *src_tensor,
+                                      bcnn_tensor *dst_tensor);
+
 #ifdef BCNN_USE_CUDA
 int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                      bcnn_tensor *dst_tensor);

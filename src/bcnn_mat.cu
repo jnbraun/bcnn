@@ -419,6 +419,54 @@ void bcnn_cuda_grad_bias(float *grad_bias, float *grad_data, int batch_size, int
     bcnn_cuda_check(cudaPeekAtLastError());
 }
 
+__global__ void bcnn_scales_kernel(float *output, float *biases, int n, int size)
+{
+    int offset = blockIdx.x * blockDim.x + threadIdx.x;
+    int filter = blockIdx.y;
+    int batch = blockIdx.z;
+
+    if(offset < size) {
+        output[(batch*n+filter)*size + offset] *= biases[filter];
+    }
+}
+
+void bcnn_scales_gpu(float *output, float *biases, int batch, int n, int size)
+{
+    dim3 dimGrid((size-1)/BCNN_CUDA_THREADS + 1, n, batch);
+    dim3 dimBlock(BCNN_CUDA_THREADS, 1, 1);
+
+    bcnn_scales_kernel<<<dimGrid, dimBlock>>>(output, biases, n, size);
+    bcnn_cuda_check(cudaPeekAtLastError());
+}
+
+__global__ void bcnn_grad_scales_kernel(float *x_norm, float *delta, int batch,
+    int n, int size, float *scale_updates)
+{
+    __shared__ float part[BCNN_CUDA_THREADS];
+    int i,b;
+    int filter = blockIdx.x;
+    int p = threadIdx.x;
+    float sum = 0;
+    for(b = 0; b < batch; ++b){
+        for(i = 0; i < size; i += BCNN_CUDA_THREADS){
+            int index = p + i + size*(filter + n*b);
+            sum += (p+i < size) ? delta[index]*x_norm[index] : 0;
+        }
+    }
+    part[p] = sum;
+    __syncthreads();
+    if (p == 0) {
+        for(i = 0; i < BCNN_CUDA_THREADS; ++i) scale_updates[filter] += part[i];
+    }
+}
+
+void bcnn_grad_scales_gpu(float *x_norm, float *delta, int batch, int n,
+    int size, float *scale_updates)
+{
+    bcnn_grad_scales_kernel<<<n, BCNN_CUDA_THREADS>>>(x_norm, delta, batch, n, size, scale_updates);
+    bcnn_cuda_check(cudaPeekAtLastError());
+}
+
 
 // im2col and col2im functions from caffe
 // Reference https://github.com/BVLC/caffe/blob/master/src/caffe/util/im2col.cu

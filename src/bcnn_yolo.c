@@ -71,7 +71,8 @@ for (i = 0; i < n * 2; ++i) {
 // l.output_gpu = cuda_make_array(dst_tensor->data, batch * l.outputs);
 // l.delta_gpu = cuda_make_array(dst_tensor->grad_data, batch * l.outputs);
 #endif
-
+    // Add connection to net
+    bcnn_net_add_node(net, node);
     bh_log_info(
         "[Yolo] input_shape= %dx%dx%d num_classes= %d num_coords= %d "
         "output_shape= %dx%dx%d",
@@ -191,7 +192,6 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     int i, j, b, t, n;
     memcpy(dst_tensor->data, src_tensor->data,
            bcnn_tensor_get_size(dst_tensor) * sizeof(float));
-
     //#ifndef BCNN_USE_CUDA
     for (b = 0; b < dst_tensor->n; ++b) {
         for (n = 0; n < layer->num; ++n) {
@@ -437,6 +437,8 @@ static void correct_region_boxes(yolo_detection *dets, int n, int w, int h,
         new_h = neth;
         new_w = (w * neth) / h;
     }
+    fprintf(stderr, "netw %d neth %d new_w %d new_h %d\n", netw, neth, new_w,
+            new_h);
     for (i = 0; i < n; ++i) {
         yolo_box b = dets[i].bbox;
         b.x = (b.x - (netw - new_w) / 2. / netw) / ((float)new_w / netw);
@@ -450,6 +452,8 @@ static void correct_region_boxes(yolo_detection *dets, int n, int w, int h,
             b.h *= h;
         }
         dets[i].bbox = b;
+        // fprintf(stderr, "idet %d x %f y %f w %f h %f\n", i, b.x, b.y, b.w,
+        // b.h);
     }
 }
 
@@ -461,7 +465,8 @@ void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
     bcnn_layer *layer = node->layer;
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
     float *predictions = dst->data;
-
+    fprintf(stderr, "get_detections %f\n", dst->data[785]);
+    float max_objectness = 0.0f;
     for (i = 0; i < dst->w * dst->h; ++i) {
         int row = i / dst->w;
         int col = i % dst->w;
@@ -472,6 +477,7 @@ void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
             }
             int obj_index = entry_index(layer, dst, 0, n * dst->w * dst->h + i,
                                         layer->coords);
+            // fprintf(stderr, "obj_index %d\n", obj_index);
             int box_index =
                 entry_index(layer, dst, 0, n * dst->w * dst->h + i, 0);
             int mask_index =
@@ -481,6 +487,9 @@ void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
                 get_region_box(predictions, layer->biases.data, n, box_index,
                                col, row, dst->w, dst->h, dst->w * dst->h);
             dets[index].objectness = scale > thresh ? scale : 0;
+            if (max_objectness < dets[index].objectness) {
+                max_objectness = dets[index].objectness;
+            }
             if (dets[index].mask) {
                 for (j = 0; j < layer->coords - 4; ++j) {
                     dets[index].mask[j] =
@@ -491,16 +500,24 @@ void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
             int class_index = entry_index(
                 layer, dst, 0, n * dst->w * dst->h + i, layer->coords + 1);
             if (dets[index].objectness) {
+                fprintf(stderr,
+                        "dets[index].objectness %f filter %d w %d h %d\n",
+                        dets[index].objectness, n, col, row);
                 for (j = 0; j < layer->classes; ++j) {
                     int class_index =
                         entry_index(layer, dst, 0, n * dst->w * dst->h + i,
                                     layer->coords + 1 + j);
                     float prob = scale * predictions[class_index];
                     dets[index].prob[j] = (prob > thresh) ? prob : 0;
+                    if (dets[index].prob[j]) {
+                        fprintf(stderr, "class %d prob %f\n", j,
+                                dets[index].prob[j]);
+                    }
                 }
             }
         }
     }
+    fprintf(stderr, "max_objectness %f\n", max_objectness);
     correct_region_boxes(dets, dst->w * dst->h * layer->num, w, h, netw, neth,
                          relative);
 }

@@ -45,6 +45,7 @@
 #include "bcnn_maxpool_layer.h"
 #include "bcnn_softmax_layer.h"
 #include "bcnn_utils.h"
+#include "bcnn_yolo.h"
 #include "bh_log.h"
 
 int bcnn_init_net(bcnn_net **net) {
@@ -394,6 +395,9 @@ int bcnn_forward(bcnn_net *net) {
             case CONCAT:
                 bcnn_forward_concat_layer(net, &node);
                 break;
+            case YOLO:
+                bcnn_forward_yolo_layer(net, &node);
+                break;
             case COST:
                 bcnn_forward_cost_layer(net, &node);
                 break;
@@ -442,6 +446,9 @@ int bcnn_backward(bcnn_net *net) {
                 break;
             case CONCAT:
                 bcnn_backward_concat_layer(net, &node);
+                break;
+            case YOLO:
+                bcnn_backward_yolo_layer(net, &node);
                 break;
             case COST:
                 bcnn_backward_cost_layer(net, &node);

@@ -116,7 +116,7 @@ int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a) {
             break;
         case LRELU:
             for (i = 0; i < sz; ++i) {
-                x[i] = (x[i] > 0 ? x[i] : 0.01f * x[i]);
+                x[i] = (x[i] > 0 ? x[i] : 0.1f * x[i]);
             }
             break;
         case RAMP:
@@ -192,7 +192,7 @@ int bcnn_backward_activation_cpu(float *x, float *dx, int sz,
             break;
         case LRELU:
             for (i = 0; i < sz; ++i) {
-                dx[i] *= (x[i] > 0 ? 1.0f : 0.01f);
+                dx[i] *= (x[i] > 0 ? 1.0f : 0.1f);
             }
             break;
         case RAMP:

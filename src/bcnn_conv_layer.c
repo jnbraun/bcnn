@@ -276,6 +276,12 @@ int bcnn_forward_conv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     a = layer->weights.data;
     b = layer->conv_workspace;
     c = dst_tensor->data;
+
+    /*for (int j = src_tensor->h / 2 * src_tensor->w / 2;
+         j < src_tensor->h / 2 * src_tensor->w / 2 + 20; ++j) {
+        fprintf(stderr, "%f ", src_tensor->data[j]);
+    }
+    fprintf(stderr, "\n");*/
     for (i = 0; i < batch_size; ++i) {
         if (layer->size == 1) {
             b = src_tensor->data + i * sz;
@@ -292,6 +298,12 @@ int bcnn_forward_conv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 #endif
         c += n * m;
     }
+
+    /*for (int j = dst_tensor->h / 2 * dst_tensor->w / 2;
+         j < dst_tensor->h / 2 * dst_tensor->w / 2 + 20; ++j) {
+        fprintf(stderr, "%f ", dst_tensor->data[j]);
+    }
+    fprintf(stderr, "\n");*/
 
     if (layer->batch_norm) {  // inplace batch norm
         bcnn_forward_batchnorm_layer_cpu(layer, dst_tensor, dst_tensor);

@@ -12,54 +12,213 @@
 #include "bcnn_mat.h"
 #include "bh_log.h"
 
+static void transpose_matrix(float *a, int rows, int cols) {
+    float *transpose = (float *)calloc(rows * cols, sizeof(float));
+    int x, y;
+    for (x = 0; x < rows; ++x) {
+        for (y = 0; y < cols; ++y) {
+            transpose[y * rows + x] = a[x * cols + y];
+        }
+    }
+    memcpy(a, transpose, rows * cols * sizeof(float));
+    free(transpose);
+}
+
+void load_yolo_weights(bcnn_net *net, char *model) {
+    FILE *fp = NULL;
+    fp = fopen(model, "rb");
+    if (fp == NULL) {
+        fprintf(stderr, "[ERROR] Could not open file %s\n", model);
+    }
+    int major;
+    int minor;
+    int revision;
+    size_t nr = fread(&major, sizeof(int), 1, fp);
+    nr = fread(&minor, sizeof(int), 1, fp);
+    nr = fread(&revision, sizeof(int), 1, fp);
+    if ((major * 10 + minor) >= 2 && major < 1000 && minor < 1000) {
+        size_t lseen = 0;
+        nr = fread(&lseen, sizeof(size_t), 1, fp);
+        net->seen = lseen;
+    } else {
+        int iseen = 0;
+        nr = fread(&iseen, sizeof(int), 1, fp);
+        net->seen = iseen;
+    }
+    fprintf(stderr, "version %d.%d seen %d\n", major, minor, net->seen);
+    int transpose = (major > 1000) || (minor > 1000);
+    for (int i = 0; i < net->num_nodes; ++i) {
+        bcnn_layer *layer = net->nodes[i].layer;
+        if (layer->type == CONVOLUTIONAL) {
+            int weights_size = bcnn_tensor_get_size(&layer->weights);
+            int biases_size = bcnn_tensor_get_size(&layer->biases);
+            nr = fread(layer->biases.data, sizeof(float), biases_size, fp);
+            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d", i,
+                        (unsigned long)nr, biases_size);
+            if (layer->batch_norm) {
+                int scales_size = bcnn_tensor_get_size(&layer->scales);
+                nr = fread(layer->scales.data, sizeof(float), scales_size, fp);
+                bh_log_info(
+                    "layer= %d nbread_scales= %lu scales_size_expected= %d", i,
+                    (unsigned long)nr, scales_size);
+                int sz = net->tensors[net->nodes[i].dst[0]].c;
+                nr = fread(layer->running_mean.data, sizeof(float), sz, fp);
+                bh_log_info(
+                    "layer= %d nbread_mean= %lu mean_size_expected= "
+                    "%d",
+                    i, (unsigned long)nr, sz);
+                nr = fread(layer->running_variance.data, sizeof(float), sz, fp);
+                bh_log_info(
+                    "layer= %d nbread_variance= %lu "
+                    "variance_size_expected= %d",
+                    i, (unsigned long)nr, sz);
+#if 0
+                for (int j = 0; j < sz; ++j) {
+                    printf("%g, ", layer->running_mean.data[j]);
+                }
+                printf("\n");
+                for (int j = 0; j < sz; ++j) {
+                    printf("%g, ", layer->running_variance.data[j]);
+                }
+                printf("\n");
+#endif
+            }
+            nr = fread(layer->weights.data, sizeof(float), weights_size, fp);
+            bh_log_info("layer= %d nbread_weight= %lu weight_size_expected= %d",
+                        i, (unsigned long)nr, weights_size);
+#ifdef BCNN_USE_CUDA
+            bcnn_cuda_memcpy_host2dev(layer->weights.data_gpu,
+                                      layer->weights.data, weights_size);
+            bcnn_cuda_memcpy_host2dev(layer->biases.data_gpu,
+                                      layer->biases.data, biases_size);
+            if (layer->batch_norm) {
+                bcnn_cuda_memcpy_host2dev(layer->scales.data_gpu,
+                                          layer->scales.data, sz);
+                bcnn_cuda_memcpy_host2dev(layer->running_mean.data_gpu,
+                                          layer->running_mean.data, sz);
+                bcnn_cuda_memcpy_host2dev(layer->running_variance.data_gpu,
+                                          layer->running_variance.data, sz);
+            }
+#endif
+        } else if (layer->type == FULL_CONNECTED) {
+            int weights_size = bcnn_tensor_get_size(&layer->weights);
+            int biases_size = bcnn_tensor_get_size(&layer->biases);
+            nr = fread(layer->biases.data, sizeof(float), biases_size, fp);
+            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d", i,
+                        (unsigned long)nr, biases_size);
+            nr = fread(layer->weights.data, sizeof(float), weights_size, fp);
+            bh_log_info("layer= %d nbread_weight= %lu weight_size_expected= %d",
+                        i, (unsigned long)nr, weights_size);
+            if (transpose) {
+                transpose_matrix(
+                    layer->weights.data,
+                    bcnn_tensor_get_size3d(&net->tensors[net->nodes[i].src[0]]),
+                    bcnn_tensor_get_size3d(
+                        &net->tensors[net->nodes[i].dst[0]]));
+            }
+            if (layer->batch_norm) {
+                int scales_size = bcnn_tensor_get_size(&layer->scales);
+                nr = fread(layer->scales.data, sizeof(float), scales_size, fp);
+                bh_log_info(
+                    "layer= %d nbread_scales= %lu scales_size_expected= %d", i,
+                    (unsigned long)nr, scales_size);
+                int sz = net->tensors[net->nodes[i].dst[0]].c;
+                nr = fread(layer->running_mean.data, sizeof(float), sz, fp);
+                bh_log_info(
+                    "layer= %d nbread_mean= %lu mean_size_expected= "
+                    "%d",
+                    i, (unsigned long)nr, sz);
+                nr = fread(layer->running_variance.data, sizeof(float), sz, fp);
+                bh_log_info(
+                    "layer= %d nbread_variance= %lu "
+                    "variance_size_expected= %d",
+                    i, (unsigned long)nr, sz);
+            }
+#ifdef BCNN_USE_CUDA
+            bcnn_cuda_memcpy_host2dev(layer->weights.data_gpu,
+                                      layer->weights.data, weights_size);
+            bcnn_cuda_memcpy_host2dev(layer->biases.data_gpu,
+                                      layer->biases.data, biases_size);
+            if (layer->batch_norm) {
+                bcnn_cuda_memcpy_host2dev(layer->scales.data_gpu,
+                                          layer->scales.data, sz);
+                bcnn_cuda_memcpy_host2dev(layer->running_mean.data_gpu,
+                                          layer->running_mean.data, sz);
+                bcnn_cuda_memcpy_host2dev(layer->running_variance.data_gpu,
+                                          layer->running_variance.data, sz);
+            }
+#endif
+        } else if (layer->type == BATCHNORM) {
+            int scales_size = bcnn_tensor_get_size(&layer->scales);
+            nr = fread(layer->scales.data, sizeof(float), scales_size, fp);
+            bh_log_info("layer= %d nbread_scales= %lu scales_size_expected= %d",
+                        i, (unsigned long)nr, scales_size);
+            int sz = net->tensors[net->nodes[i].dst[0]].c;
+            nr = fread(layer->running_mean.data, sizeof(float), sz, fp);
+            bh_log_info(
+                "layer= %d nbread_mean= %lu mean_size_expected= "
+                "%d",
+                i, (unsigned long)nr, sz);
+            nr = fread(layer->running_variance.data, sizeof(float), sz, fp);
+            bh_log_info(
+                "layer= %d nbread_variance= %lu "
+                "variance_size_expected= %d",
+                i, (unsigned long)nr, sz);
+#ifdef BCNN_USE_CUDA
+            bcnn_cuda_memcpy_host2dev(layer->scales.data_gpu,
+                                      layer->scales.data, sz);
+            bcnn_cuda_memcpy_host2dev(layer->running_mean.data_gpu,
+                                      layer->running_mean.data, sz);
+            bcnn_cuda_memcpy_host2dev(layer->running_variance.data_gpu,
+                                      layer->running_variance.data, sz);
+#endif
+        }
+    }
+
+    fclose(fp);
+    return;
+}
+
 int setup_yolo_tiny_net(bcnn_net *net, int input_width, int input_height,
                         char *model) {
     bcnn_net_set_input_shape(net, input_width, input_height, 3, 1);
 
-    bcnn_add_convolutional_layer(net, 16, 3, 1, 1, 0, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 16, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"input", (char *)"conv1");
-    bcnn_add_batchnorm_layer(net, (char *)"conv1", (char *)"bn1");
-    bcnn_add_maxpool_layer(net, 2, 2, (char *)"bn1", (char *)"pool1");
+    bcnn_add_maxpool_layer(net, 2, 2, (char *)"conv1", (char *)"pool1");
 
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool1", (char *)"conv2");
-    bcnn_add_batchnorm_layer(net, (char *)"conv2", (char *)"bn2");
-    bcnn_add_maxpool_layer(net, 2, 2, (char *)"bn2", (char *)"pool2");
+    bcnn_add_maxpool_layer(net, 2, 2, (char *)"conv2", (char *)"pool2");
 
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool2", (char *)"conv3");
-    bcnn_add_batchnorm_layer(net, (char *)"conv3", (char *)"bn3");
-    bcnn_add_maxpool_layer(net, 2, 2, (char *)"bn3", (char *)"pool3");
+    bcnn_add_maxpool_layer(net, 2, 2, (char *)"conv3", (char *)"pool3");
 
-    bcnn_add_convolutional_layer(net, 128, 3, 1, 1, 0, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 128, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool3", (char *)"conv4");
-    bcnn_add_batchnorm_layer(net, (char *)"conv4", (char *)"bn4");
-    bcnn_add_maxpool_layer(net, 2, 2, (char *)"bn4", (char *)"pool4");
+    bcnn_add_maxpool_layer(net, 2, 2, (char *)"conv4", (char *)"pool4");
 
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 0, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool4", (char *)"conv5");
-    bcnn_add_batchnorm_layer(net, (char *)"conv5", (char *)"bn5");
-    bcnn_add_maxpool_layer(net, 2, 2, (char *)"bn5", (char *)"pool5");
+    bcnn_add_maxpool_layer(net, 2, 2, (char *)"conv5", (char *)"pool5");
 
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 0, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool5", (char *)"conv6");
-    bcnn_add_batchnorm_layer(net, (char *)"conv6", (char *)"bn6");
-    bcnn_add_maxpool_layer(net, 2, 1, (char *)"bn6", (char *)"pool6");
+    bcnn_add_maxpool_layer(net, 2, 1, (char *)"conv6", (char *)"pool6");
 
-    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 0, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool6", (char *)"conv7");
-    bcnn_add_batchnorm_layer(net, (char *)"conv7", (char *)"bn7");
-
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 0, XAVIER, LRELU, 0,
-                                 (char *)"bn7", (char *)"conv8");
-    bcnn_add_batchnorm_layer(net, (char *)"conv8", (char *)"bn8");
+    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, XAVIER, LRELU, 0,
+                                 (char *)"conv7", (char *)"conv8");
 
     // 80 classes
     bcnn_add_convolutional_layer(net, 425, 1, 1, 1, 0, XAVIER, NONE, 0,
-                                 (char *)"bn8", (char *)"conv9");
+                                 (char *)"conv8", (char *)"conv9");
     bcnn_add_yolo_layer(net, 5, 80, 4, (char *)"conv9", (char *)"yolo");
     bcnn_compile_net(net, (char *)"predict");
-    bcnn_load_model(net, model);
+    // Load yolo parameters
+    load_yolo_weights(net, model);
 }
 
 void prepare_frame(cv::Mat frame, float *img, int w, int h) {
@@ -94,7 +253,6 @@ void prepare_frame(cv::Mat frame, float *img, int w, int h) {
             }
         }
     }
-
     bcnn_convert_img_to_float2(canvas, w, h, 3, 1.0f / 255.0f, 1, 0.0f, 0.0f,
                                0.0f, img);
     bh_free(img_rz);
@@ -203,12 +361,53 @@ void predict_detections(int w_frame, int h_frame, float *input, bcnn_net *net,
     }
 
     // Average predictions on the sliding time window
+    memset(avg_pred, 0, out_sz * sizeof(float));
     for (int i = 0; i < avg_window; ++i) {
         bcnn_axpy(out_sz, 1.0f / avg_window, pred + i * avg_window, avg_pred);
     }
+    int id_tensor = net->num_tensors - 1;
+    fprintf(stderr, "tensor %s\n", net->tensors[id_tensor].name);
+    out_sz = bcnn_tensor_get_size(&net->tensors[id_tensor]);
+    for (int i = 0; i < out_sz / 1000; ++i) {
+        // fprintf(stderr, "%f ", net->tensors[id_tensor].data[i]);
+        fprintf(stderr, "%f ", avg_pred[i]);
+    }
+    fprintf(stderr, "\n");
     // Get yolo_detection boxes
     bcnn_yolo_get_detections(net, last_node, w_frame, h_frame, net->input_width,
-                             net->input_height, 0.5, 1, dets);
+                             net->input_height, 0.1, 1, dets);
+    // Non max suppression
+    do_nms_obj(dets, num_dets, last_node->layer->classes, nms_tresh);
+}
+
+void predict_detections_img(int w_frame, int h_frame, float *input,
+                            bcnn_net *net, float *pred, yolo_detection *dets,
+                            int num_dets) {
+    float nms_tresh = 0.4f;
+    net->tensors[0].data = input;
+    bcnn_forward(net);
+
+    bcnn_node *last_node = &net->nodes[net->num_nodes - 1];
+    int out_sz = bcnn_tensor_get_size(&net->tensors[net->num_tensors - 1]);
+    if (last_node->layer->type == YOLO) {
+        memcpy(pred, net->tensors[net->num_tensors - 1].data,
+               out_sz * sizeof(float));
+    } else {
+        bh_log_error("Incorrect last layer. Should be a yolo layer");
+    }
+
+    // Average predictions on the sliding time window
+    int id_tensor = net->num_tensors - 1;
+    fprintf(stderr, "tensor %s\n", net->tensors[id_tensor].name);
+    out_sz = bcnn_tensor_get_size(&net->tensors[id_tensor]);
+    for (int i = 0; i < out_sz / 1000; ++i) {
+        // fprintf(stderr, "%f ", net->tensors[id_tensor].data[i]);
+        fprintf(stderr, "%f ", pred[770 + i]);
+    }
+    fprintf(stderr, "\n");
+    // Get yolo_detection boxes
+    bcnn_yolo_get_detections(net, last_node, w_frame, h_frame, net->input_width,
+                             net->input_height, 0.4, 1, dets);
     // Non max suppression
     do_nms_obj(dets, num_dets, last_node->layer->classes, nms_tresh);
 }
@@ -254,6 +453,11 @@ void display_detections(cv::Mat &frame, yolo_detection *dets, int num_dets,
             if (dets[i].prob[j] > thresh) {
                 int x_tl = (dets[i].bbox.x - dets[i].bbox.w / 2) * frame.cols;
                 int y_tl = (dets[i].bbox.y - dets[i].bbox.h / 2) * frame.rows;
+                fprintf(stderr,
+                        "det %d class %d bbox x %f y %f w %f h %f x_tl %d y_tl "
+                        "%d\n",
+                        i, j, dets[i].bbox.x, dets[i].bbox.y, dets[i].bbox.w,
+                        dets[i].bbox.h, x_tl, y_tl);
                 cv::Rect box = cv::Rect(x_tl, y_tl, dets[i].bbox.w * frame.cols,
                                         dets[i].bbox.h * frame.rows);
                 cv::rectangle(frame, box,
@@ -270,20 +474,21 @@ void display_detections(cv::Mat &frame, yolo_detection *dets, int num_dets,
     }
 }
 
-int run(int argc, char **argv) {
-    cv::VideoCapture cap;
-    if (!open_video(argv[1], cap)) {
-        return -1;
-    }
-    cv::Mat frame;
-    cap >> frame;
+void show_usage(int argc, char **argv) {
+    fprintf(stderr, "Usage: ./%s <mode> <video path/source> <model>\n",
+            argv[0]);
+    fprintf(stderr,
+            "\t<mode>: can either be 'img' or 'video' for video on disk or "
+            "webcam stream.\n");
+}
 
+int run(int argc, char **argv) {
     // Init net
     bcnn_net *net = NULL;
     bcnn_init_net(&net);
     // Setup net and weights
     int w = 416, h = 416;
-    setup_yolo_tiny_net(net, w, h, argv[2]);
+    setup_yolo_tiny_net(net, w, h, argv[3]);
     float *input = (float *)calloc(w * h * 3, sizeof(float));
 
     int out_sz = bcnn_tensor_get_size(&net->tensors[net->num_tensors - 1]);
@@ -295,17 +500,43 @@ int run(int argc, char **argv) {
     int num_dets = 0;
     prepare_detection_results(net, &dets, &num_dets);
 
-    while (!frame.empty()) {
-        cap >> frame;
-        prepare_frame(frame, input, w, h);
-        predict_detections(frame.cols, frame.rows, input, net, pred, avg_window,
-                           avg_pred, dets, num_dets);
-        display_detections(frame, dets, num_dets, 0.6, 80);
-        cv::imshow("yolov2-tiny example", frame);
-        int q = cv::waitKey(10);
-        if (q == 27) {
-            break;
+    if (strcmp(argv[1], "video") == 0) {
+        cv::VideoCapture cap;
+        if (!open_video(argv[2], cap)) {
+            return -1;
         }
+        cv::Mat frame;
+        cap >> frame;
+        while (!frame.empty()) {
+            cap >> frame;
+            prepare_frame(frame, input, w, h);
+            predict_detections(frame.cols, frame.rows, input, net, pred,
+                               avg_window, avg_pred, dets, num_dets);
+            display_detections(frame, dets, num_dets, 0.5, 80);
+            cv::imshow("yolov2-tiny example", frame);
+            int q = cv::waitKey(10);
+            if (q == 27) {
+                break;
+            }
+        }
+    } else if (strcmp(argv[1], "img") == 0) {
+        cv::Mat img = cv::imread(argv[2]);
+        if (img.empty()) {
+            fprintf(stderr, "[ERROR] Failed to open image %s\n", argv[2]);
+            return -1;
+        }
+        prepare_frame(img, input, w, h);
+        predict_detections_img(img.cols, img.rows, input, net, pred, dets,
+                               num_dets);
+        display_detections(img, dets, num_dets, 0.5, 80);
+        std::string in_path = argv[2];
+        std::string out_path = in_path + "_dets.png";
+        cv::imwrite(out_path, img);
+    } else {
+        fprintf(stderr, "[ERROR] Incorrect mode %s. Should be 'img' or 'video'",
+                argv[1]);
+        show_usage(argc, argv);
+        return -1;
     }
 
     bcnn_end_net(&net);
@@ -314,10 +545,6 @@ int run(int argc, char **argv) {
     free(avg_pred);
     free(dets);
     return 0;
-}
-
-void show_usage(int argc, char **argv) {
-    fprintf(stderr, "Usage: ./%s <video path/source> <model>\n", argv[0]);
 }
 
 int main(int argc, char **argv) {

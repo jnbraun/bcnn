@@ -7,7 +7,7 @@
 /** From yolo darknet */
 
 int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
-                        char *src_id, char *dst_id) {
+                        float *anchors, char *src_id, char *dst_id) {
     // layer l = {0};
     bcnn_node node = {0};
 
@@ -51,6 +51,9 @@ int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
     bcnn_tensor_create(&node.layer->biases, 1, 1, 1, n * 2, 1, biases_name);
     bcnn_tensor_filler w_filler = {.value = 0.5f, .type = FIXED};
     bcnn_tensor_fill(&node.layer->biases, w_filler);
+    if (anchors != NULL) {
+        memcpy(node.layer->biases.data, anchors, n * 2 * sizeof(float));
+    }
     // layer->biases.data = calloc(n * 2, sizeof(float));
     // l.bias_updates = calloc(n * 2, sizeof(float));
     // l.outputs = h * w * n * (classes + coords + 1);
@@ -58,9 +61,9 @@ int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
     node.layer->truths = 30 * (coords + 1);
 // dst_tensor->grad_data = calloc(batch * l.outputs, sizeof(float));
 // dst_tensor->data = calloc(batch * l.outputs, sizeof(float));
-/*int i;
-for (i = 0; i < n * 2; ++i) {
-    layer->biases.data[i] = .5;
+
+/*for (int i = 0; i < n * 2; ++i) {
+    node.layer->biases.data[i] = .5;
 }*/
 
 // l.forward = forward_region_layer;
@@ -117,8 +120,12 @@ static yolo_box get_region_box(float *x, float *biases, int n, int index, int i,
     yolo_box b;
     b.x = (i + x[index + 0 * stride]) / w;
     b.y = (j + x[index + 1 * stride]) / h;
-    b.w = exp(x[index + 2 * stride]) * biases[2 * n] / w;
-    b.h = exp(x[index + 3 * stride]) * biases[2 * n + 1] / h;
+    b.w = expf(x[index + 2 * stride]) * biases[2 * n] / w;
+    b.h = expf(x[index + 3 * stride]) * biases[2 * n + 1] / h;
+    /*fprintf(stderr, "w %f expw %f lw %d bw %f\n", x[index + 2 * stride],
+            biases[2 * n], w, b.w);
+    fprintf(stderr, "h %f exph %f lh %d bh %f\n", x[index + 3 * stride],
+            biases[2 * n + 1], h, b.h);*/
     return b;
 }
 
@@ -187,6 +194,36 @@ static yolo_box float_to_box(float *f, int stride) {
     return b;
 }
 
+static void softmax(float *input, int n, float temp, int stride,
+                    float *output) {
+    int i;
+    float sum = 0;
+    float largest = -FLT_MAX;
+    for (i = 0; i < n; ++i) {
+        if (input[i * stride] > largest) largest = input[i * stride];
+    }
+    for (i = 0; i < n; ++i) {
+        float e = exp(input[i * stride] / temp - largest / temp);
+        sum += e;
+        output[i * stride] = e;
+    }
+    for (i = 0; i < n; ++i) {
+        output[i * stride] /= sum;
+    }
+}
+
+static void softmax_cpu(float *input, int n, int batch, int batch_offset,
+                        int groups, int group_offset, int stride, float temp,
+                        float *output) {
+    int g, b;
+    for (b = 0; b < batch; ++b) {
+        for (g = 0; g < groups; ++g) {
+            softmax(input + b * batch_offset + g * group_offset, n, temp,
+                    stride, output + b * batch_offset + g * group_offset);
+        }
+    }
+}
+
 void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                  bcnn_tensor *label, bcnn_tensor *dst_tensor) {
     int i, j, b, t, n;
@@ -206,13 +243,21 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             bcnn_forward_activation_cpu(dst_tensor->data + index,
                                         src_tensor->w * src_tensor->h,
                                         LOGISTIC);
-
+            /*
             index = entry_index(layer, dst_tensor, b,
                                 n * src_tensor->w * src_tensor->h,
                                 layer->coords + 1);
             bcnn_forward_activation_cpu(
                 dst_tensor->data + index,
                 layer->classes * src_tensor->w * src_tensor->h, LOGISTIC);
+            */
+            index = entry_index(layer, dst_tensor, 0, 0, layer->coords + 1);
+            softmax_cpu(src_tensor->data + index, layer->classes,
+                        src_tensor->n * layer->num,
+                        bcnn_tensor_get_size(src_tensor) / layer->num,
+                        src_tensor->w * src_tensor->h, 1,
+                        src_tensor->w * src_tensor->h, 1,
+                        dst_tensor->data + index);
         }
     }
     //#endif
@@ -465,7 +510,11 @@ void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
     bcnn_layer *layer = node->layer;
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
     float *predictions = dst->data;
-    fprintf(stderr, "get_detections %f\n", dst->data[785]);
+    FILE *flog = fopen("lolo.txt", "wt");
+    for (i = 0; i < dst->w * dst->h * dst->c; ++i) {
+        fprintf(flog, "%d %f\n", i, dst->data[i]);
+    }
+    fclose(flog);
     float max_objectness = 0.0f;
     for (i = 0; i < dst->w * dst->h; ++i) {
         int row = i / dst->w;
@@ -500,19 +549,12 @@ void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
             int class_index = entry_index(
                 layer, dst, 0, n * dst->w * dst->h + i, layer->coords + 1);
             if (dets[index].objectness) {
-                fprintf(stderr,
-                        "dets[index].objectness %f filter %d w %d h %d\n",
-                        dets[index].objectness, n, col, row);
                 for (j = 0; j < layer->classes; ++j) {
                     int class_index =
                         entry_index(layer, dst, 0, n * dst->w * dst->h + i,
                                     layer->coords + 1 + j);
                     float prob = scale * predictions[class_index];
                     dets[index].prob[j] = (prob > thresh) ? prob : 0;
-                    if (dets[index].prob[j]) {
-                        fprintf(stderr, "class %d prob %f\n", j,
-                                dets[index].prob[j]);
-                    }
                 }
             }
         }

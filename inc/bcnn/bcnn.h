@@ -470,7 +470,7 @@ typedef struct yolo_detection {
 } yolo_detection;
 
 int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
-                        char *src_id, char *dst_id);
+                        float *anchors, char *src_id, char *dst_id);
 void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
                               int netw, int neth, float thresh, int relative,
                               yolo_detection *dets);

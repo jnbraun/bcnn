@@ -213,9 +213,12 @@ int setup_yolo_tiny_net(bcnn_net *net, int input_width, int input_height,
                                  (char *)"conv7", (char *)"conv8");
 
     // 80 classes
-    bcnn_add_convolutional_layer(net, 425, 1, 1, 1, 0, XAVIER, NONE, 0,
+    bcnn_add_convolutional_layer(net, 425, 1, 1, 0, 0, XAVIER, NONE, 0,
                                  (char *)"conv8", (char *)"conv9");
-    bcnn_add_yolo_layer(net, 5, 80, 4, (char *)"conv9", (char *)"yolo");
+    float anchors[10] = {0.57273, 0.677385, 1.87446, 2.06253, 3.33843,
+                         5.47434, 7.88282,  3.52778, 9.77052, 9.16828};
+    bcnn_add_yolo_layer(net, 5, 80, 4, anchors, (char *)"conv9",
+                        (char *)"yolo");
     bcnn_compile_net(net, (char *)"predict");
     // Load yolo parameters
     load_yolo_weights(net, model);
@@ -345,7 +348,11 @@ void predict_detections(int w_frame, int h_frame, float *input, bcnn_net *net,
                         yolo_detection *dets, int num_dets) {
     float nms_tresh = 0.4f;
     net->tensors[0].data = input;
+    bh_timer t = {0};
+    bh_timer_start(&t);
     bcnn_forward(net);
+    bh_timer_stop(&t);
+    fprintf(stderr, "time= %lf msec\n", bh_timer_get_msec(&t));
 
     bcnn_node *last_node = &net->nodes[net->num_nodes - 1];
     int out_sz = bcnn_tensor_get_size(&net->tensors[net->num_tensors - 1]);
@@ -365,17 +372,9 @@ void predict_detections(int w_frame, int h_frame, float *input, bcnn_net *net,
     for (int i = 0; i < avg_window; ++i) {
         bcnn_axpy(out_sz, 1.0f / avg_window, pred + i * avg_window, avg_pred);
     }
-    int id_tensor = net->num_tensors - 1;
-    fprintf(stderr, "tensor %s\n", net->tensors[id_tensor].name);
-    out_sz = bcnn_tensor_get_size(&net->tensors[id_tensor]);
-    for (int i = 0; i < out_sz / 1000; ++i) {
-        // fprintf(stderr, "%f ", net->tensors[id_tensor].data[i]);
-        fprintf(stderr, "%f ", avg_pred[i]);
-    }
-    fprintf(stderr, "\n");
     // Get yolo_detection boxes
     bcnn_yolo_get_detections(net, last_node, w_frame, h_frame, net->input_width,
-                             net->input_height, 0.1, 1, dets);
+                             net->input_height, 0.45, 1, dets);
     // Non max suppression
     do_nms_obj(dets, num_dets, last_node->layer->classes, nms_tresh);
 }
@@ -385,7 +384,11 @@ void predict_detections_img(int w_frame, int h_frame, float *input,
                             int num_dets) {
     float nms_tresh = 0.4f;
     net->tensors[0].data = input;
+    bh_timer t = {0};
+    bh_timer_start(&t);
     bcnn_forward(net);
+    bh_timer_stop(&t);
+    fprintf(stderr, "time= %lf msec\n", bh_timer_get_msec(&t));
 
     bcnn_node *last_node = &net->nodes[net->num_nodes - 1];
     int out_sz = bcnn_tensor_get_size(&net->tensors[net->num_tensors - 1]);
@@ -396,18 +399,9 @@ void predict_detections_img(int w_frame, int h_frame, float *input,
         bh_log_error("Incorrect last layer. Should be a yolo layer");
     }
 
-    // Average predictions on the sliding time window
-    int id_tensor = net->num_tensors - 1;
-    fprintf(stderr, "tensor %s\n", net->tensors[id_tensor].name);
-    out_sz = bcnn_tensor_get_size(&net->tensors[id_tensor]);
-    for (int i = 0; i < out_sz / 1000; ++i) {
-        // fprintf(stderr, "%f ", net->tensors[id_tensor].data[i]);
-        fprintf(stderr, "%f ", pred[770 + i]);
-    }
-    fprintf(stderr, "\n");
     // Get yolo_detection boxes
     bcnn_yolo_get_detections(net, last_node, w_frame, h_frame, net->input_width,
-                             net->input_height, 0.4, 1, dets);
+                             net->input_height, 0.45, 1, dets);
     // Non max suppression
     do_nms_obj(dets, num_dets, last_node->layer->classes, nms_tresh);
 }
@@ -453,21 +447,20 @@ void display_detections(cv::Mat &frame, yolo_detection *dets, int num_dets,
             if (dets[i].prob[j] > thresh) {
                 int x_tl = (dets[i].bbox.x - dets[i].bbox.w / 2) * frame.cols;
                 int y_tl = (dets[i].bbox.y - dets[i].bbox.h / 2) * frame.rows;
-                fprintf(stderr,
+                /*fprintf(stderr,
                         "det %d class %d bbox x %f y %f w %f h %f x_tl %d y_tl "
                         "%d\n",
                         i, j, dets[i].bbox.x, dets[i].bbox.y, dets[i].bbox.w,
-                        dets[i].bbox.h, x_tl, y_tl);
+                        dets[i].bbox.h, x_tl, y_tl);*/
                 cv::Rect box = cv::Rect(x_tl, y_tl, dets[i].bbox.w * frame.cols,
                                         dets[i].bbox.h * frame.rows);
-                cv::rectangle(frame, box,
-                              cv::Scalar(40, 255 * dets[i].prob[j],
-                                         255 - 255 * dets[i].prob[j]),
-                              2, 8, 0);
-                cv::putText(frame, str_objs[j], cv::Point(x_tl, y_tl - 20),
-                            cv::FONT_HERSHEY_SIMPLEX, 0.8,
-                            cv::Scalar(40, 255 * dets[i].prob[j],
-                                       255 - 255 * dets[i].prob[j]),
+                int r, g, b;
+                b = (j % 6) * 51;
+                g = ((80 - j) % 11) * 25;
+                r = (j % 4) * 70 + 45;
+                cv::rectangle(frame, box, cv::Scalar(r, g, b), 2, 8, 0);
+                cv::putText(frame, str_objs[j], cv::Point(x_tl, y_tl - 10),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(r, g, b),
                             2.0);
             }
         }
@@ -512,7 +505,7 @@ int run(int argc, char **argv) {
             prepare_frame(frame, input, w, h);
             predict_detections(frame.cols, frame.rows, input, net, pred,
                                avg_window, avg_pred, dets, num_dets);
-            display_detections(frame, dets, num_dets, 0.5, 80);
+            display_detections(frame, dets, num_dets, 0.45, 80);
             cv::imshow("yolov2-tiny example", frame);
             int q = cv::waitKey(10);
             if (q == 27) {
@@ -528,7 +521,7 @@ int run(int argc, char **argv) {
         prepare_frame(img, input, w, h);
         predict_detections_img(img.cols, img.rows, input, net, pred, dets,
                                num_dets);
-        display_detections(img, dets, num_dets, 0.5, 80);
+        display_detections(img, dets, num_dets, 0.45, 80);
         std::string in_path = argv[2];
         std::string out_path = in_path + "_dets.png";
         cv::imwrite(out_path, img);

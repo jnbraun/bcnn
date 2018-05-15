@@ -240,6 +240,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     net->workspace_size =
         bh_max(net->workspace_size, node.layer->workspace_size);
     if (node.layer->batch_norm) {
+        int sz = bcnn_tensor_get_size(&net->tensors[node.dst[0]]);
         node.layer->x_norm_gpu = bcnn_cuda_memcpy_f32(node.layer->x_norm, sz);
         node.layer->bn_workspace_gpu =
             bcnn_cuda_memcpy_f32(node.layer->bn_workspace, sz);

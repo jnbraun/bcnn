@@ -10,6 +10,7 @@
 
 #include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
+#include "bcnn_utils.h"
 #include "bh_log.h"
 
 static void transpose_matrix(float *a, int rows, int cols) {
@@ -92,8 +93,10 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             bcnn_cuda_memcpy_host2dev(layer->biases.data_gpu,
                                       layer->biases.data, biases_size);
             if (layer->batch_norm) {
+                int scales_size = bcnn_tensor_get_size(&layer->scales);
                 bcnn_cuda_memcpy_host2dev(layer->scales.data_gpu,
-                                          layer->scales.data, sz);
+                                          layer->scales.data, scales_size);
+                int sz = net->tensors[net->nodes[i].dst[0]].c;
                 bcnn_cuda_memcpy_host2dev(layer->running_mean.data_gpu,
                                           layer->running_mean.data, sz);
                 bcnn_cuda_memcpy_host2dev(layer->running_variance.data_gpu,
@@ -140,8 +143,10 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             bcnn_cuda_memcpy_host2dev(layer->biases.data_gpu,
                                       layer->biases.data, biases_size);
             if (layer->batch_norm) {
+                int scales_size = bcnn_tensor_get_size(&layer->scales);
                 bcnn_cuda_memcpy_host2dev(layer->scales.data_gpu,
-                                          layer->scales.data, sz);
+                                          layer->scales.data, scales_size);
+                int sz = net->tensors[net->nodes[i].dst[0]].c;
                 bcnn_cuda_memcpy_host2dev(layer->running_mean.data_gpu,
                                           layer->running_mean.data, sz);
                 bcnn_cuda_memcpy_host2dev(layer->running_variance.data_gpu,

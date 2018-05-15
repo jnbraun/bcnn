@@ -55,25 +55,10 @@ int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
         memcpy(node.layer->biases.data, anchors, n * 2 * sizeof(float));
     }
     // layer->biases.data = calloc(n * 2, sizeof(float));
-    // l.bias_updates = calloc(n * 2, sizeof(float));
-    // l.outputs = h * w * n * (classes + coords + 1);
-    // l.inputs = l.outputs;
     node.layer->truths = 30 * (coords + 1);
-// dst_tensor->grad_data = calloc(batch * l.outputs, sizeof(float));
-// dst_tensor->data = calloc(batch * l.outputs, sizeof(float));
+    // dst_tensor->grad_data = calloc(batch * l.outputs, sizeof(float));
+    // dst_tensor->data = calloc(batch * l.outputs, sizeof(float));
 
-/*for (int i = 0; i < n * 2; ++i) {
-    node.layer->biases.data[i] = .5;
-}*/
-
-// l.forward = forward_region_layer;
-// l.backward = backward_region_layer;
-#ifdef GPU
-// l.forward_gpu = forward_region_layer_gpu;
-// l.backward_gpu = backward_region_layer_gpu;
-// l.output_gpu = cuda_make_array(dst_tensor->data, batch * l.outputs);
-// l.delta_gpu = cuda_make_array(dst_tensor->grad_data, batch * l.outputs);
-#endif
     // Add connection to net
     bcnn_net_add_node(net, node);
     bh_log_info(
@@ -243,14 +228,6 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             bcnn_forward_activation_cpu(dst_tensor->data + index,
                                         src_tensor->w * src_tensor->h,
                                         LOGISTIC);
-            /*
-            index = entry_index(layer, dst_tensor, b,
-                                n * src_tensor->w * src_tensor->h,
-                                layer->coords + 1);
-            bcnn_forward_activation_cpu(
-                dst_tensor->data + index,
-                layer->classes * src_tensor->w * src_tensor->h, LOGISTIC);
-            */
             index = entry_index(layer, dst_tensor, 0, 0, layer->coords + 1);
             softmax_cpu(src_tensor->data + index, layer->classes,
                         src_tensor->n * layer->num,
@@ -435,6 +412,9 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 #ifdef BCNN_USE_CUDA
 void bcnn_forward_yolo_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                  bcnn_tensor *label, bcnn_tensor *dst_tensor) {
+    int sz = bcnn_tensor_get_size(src_tensor);
+    bcnn_cuda_memcpy_dev2host(src_tensor->data_gpu, src_tensor->data, sz);
+    bcnn_forward_yolo_layer_cpu(layer, src_tensor, label, dst_tensor);
     return;
 }
 

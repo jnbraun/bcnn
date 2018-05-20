@@ -292,6 +292,13 @@ void prepare_detection_results(bcnn_net *net, yolo_detection **dets,
     }
 }
 
+void free_detection_results(yolo_detection *dets, int num_dets) {
+    for (int i = 0; i < num_dets; ++i) {
+        free(dets[i].prob);
+        free(dets[i].mask);
+    }
+}
+
 static int nms_comparator(const void *pa, const void *pb) {
     yolo_detection a = *(yolo_detection *)pa;
     yolo_detection b = *(yolo_detection *)pb;
@@ -348,11 +355,14 @@ static void do_nms_obj(yolo_detection *dets, int total, int classes,
     }
 }
 
-void predict_detections(int w_frame, int h_frame, float *input, bcnn_net *net,
-                        float *pred, int avg_window, float *avg_pred,
-                        yolo_detection *dets, int num_dets) {
+void predict_detections(int w_frame, int h_frame, bcnn_net *net, float *pred,
+                        int avg_window, float *avg_pred, yolo_detection *dets,
+                        int num_dets) {
     float nms_tresh = 0.4f;
-    net->tensors[0].data = input;
+#ifdef BCNN_USE_CUDA
+    bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
+                              bcnn_tensor_get_size(&net->tensors[0]));
+#endif
     bh_timer t = {0};
     bh_timer_start(&t);
     bcnn_forward(net);
@@ -384,11 +394,13 @@ void predict_detections(int w_frame, int h_frame, float *input, bcnn_net *net,
     do_nms_obj(dets, num_dets, last_node->layer->classes, nms_tresh);
 }
 
-void predict_detections_img(int w_frame, int h_frame, float *input,
-                            bcnn_net *net, float *pred, yolo_detection *dets,
-                            int num_dets) {
+void predict_detections_img(int w_frame, int h_frame, bcnn_net *net,
+                            float *pred, yolo_detection *dets, int num_dets) {
     float nms_tresh = 0.4f;
-    net->tensors[0].data = input;
+#ifdef BCNN_USE_CUDA
+    bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
+                              bcnn_tensor_get_size(&net->tensors[0]));
+#endif
     bh_timer t = {0};
     bh_timer_start(&t);
     bcnn_forward(net);
@@ -487,7 +499,6 @@ int run(int argc, char **argv) {
     // Setup net and weights
     int w = 416, h = 416;
     setup_yolo_tiny_net(net, w, h, argv[3]);
-    float *input = (float *)calloc(w * h * 3, sizeof(float));
 
     int out_sz = bcnn_tensor_get_size(&net->tensors[net->num_tensors - 1]);
     int avg_window = 3;
@@ -507,9 +518,9 @@ int run(int argc, char **argv) {
         cap >> frame;
         while (!frame.empty()) {
             cap >> frame;
-            prepare_frame(frame, input, w, h);
-            predict_detections(frame.cols, frame.rows, input, net, pred,
-                               avg_window, avg_pred, dets, num_dets);
+            prepare_frame(frame, net->tensors[0].data, w, h);
+            predict_detections(frame.cols, frame.rows, net, pred, avg_window,
+                               avg_pred, dets, num_dets);
             display_detections(frame, dets, num_dets, 0.45, 80);
             cv::imshow("yolov2-tiny example", frame);
             int q = cv::waitKey(10);
@@ -523,9 +534,8 @@ int run(int argc, char **argv) {
             fprintf(stderr, "[ERROR] Failed to open image %s\n", argv[2]);
             return -1;
         }
-        prepare_frame(img, input, w, h);
-        predict_detections_img(img.cols, img.rows, input, net, pred, dets,
-                               num_dets);
+        prepare_frame(img, net->tensors[0].data, w, h);
+        predict_detections_img(img.cols, img.rows, net, pred, dets, num_dets);
         display_detections(img, dets, num_dets, 0.45, 80);
         std::string in_path = argv[2];
         std::string out_path = in_path + "_dets.png";
@@ -538,9 +548,9 @@ int run(int argc, char **argv) {
     }
 
     bcnn_end_net(&net);
-
     free(pred);
     free(avg_pred);
+    free_detection_results(dets, num_dets);
     free(dets);
     return 0;
 }

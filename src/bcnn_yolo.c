@@ -214,6 +214,11 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     int i, j, b, t, n;
     memcpy(dst_tensor->data, src_tensor->data,
            bcnn_tensor_get_size(dst_tensor) * sizeof(float));
+    FILE *flog = fopen("yolo_in.txt", "wt");
+    for (i = 0; i < dst_tensor->w * dst_tensor->h * dst_tensor->c; ++i) {
+        fprintf(flog, "%d %f\n", i, dst_tensor->data[i]);
+    }
+    fclose(flog);
     //#ifndef BCNN_USE_CUDA
     for (b = 0; b < dst_tensor->n; ++b) {
         for (n = 0; n < layer->num; ++n) {
@@ -414,6 +419,7 @@ void bcnn_forward_yolo_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                  bcnn_tensor *label, bcnn_tensor *dst_tensor) {
     int sz = bcnn_tensor_get_size(src_tensor);
     bcnn_cuda_memcpy_dev2host(src_tensor->data_gpu, src_tensor->data, sz);
+    fprintf(stderr, "eeee\n");
     bcnn_forward_yolo_layer_cpu(layer, src_tensor, label, dst_tensor);
     return;
 }
@@ -433,6 +439,7 @@ void bcnn_forward_yolo_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *label = &net->tensors[1];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
+    fprintf(stderr, "eeee0\n");
 #ifdef BCNN_USE_CUDA
     return bcnn_forward_yolo_layer_gpu(node->layer, src, label, dst);
 #else

@@ -20,7 +20,6 @@
 * SOFTWARE.
 */
 
-
 #ifdef BCNN_USE_CUDA
 
 #include "bcnn_activation_layer.h"
@@ -29,46 +28,47 @@
 
 #include "bcnn_utils.h"
 
-__global__ void _bcnn_forward_activation_layer_kernel(float *x, int sz, bcnn_activation a)
-{
+__global__ void _bcnn_forward_activation_layer_kernel(float *x, int sz,
+                                                      bcnn_activation a) {
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
     if (i < sz) {
         switch (a) {
-        case TANH:
-            x[i] = (exp(2 * x[i]) - 1) / (exp(2 * x[i]) + 1);
-            break;
-        case RELU:
-            x[i] = x[i] * (x[i] > 0);
-            break;
-        case RAMP:
-            x[i] = x[i] * (x[i] > 0) + 0.1 * x[i];
-            break;
-        case CLAMP:
-            x[i] = bh_clamp(x[i], 0, 1);
-            break;
-        case LOGISTIC:
-            x[i] = 1.0f / (1.0f + (float)exp(-x[i]));
-            break;
-        case NONE:
-            break;
-        default:
-            break;
+            case TANH:
+                x[i] = (exp(2 * x[i]) - 1) / (exp(2 * x[i]) + 1);
+                break;
+            case RELU:
+                x[i] = x[i] * (x[i] > 0);
+                break;
+            case LRELU:
+                x[i] = (x[i] > 0 ? x[i] : 0.1f * x[i]);
+                break;
+            case RAMP:
+                x[i] = x[i] * (x[i] > 0) + 0.1 * x[i];
+                break;
+            case CLAMP:
+                x[i] = bh_clamp(x[i], 0, 1);
+                break;
+            case LOGISTIC:
+                x[i] = 1.0f / (1.0f + (float)exp(-x[i]));
+                break;
+            case NONE:
+                break;
+            default:
+                break;
         }
     }
     return;
 }
 
-int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a)
-{
-    _bcnn_forward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(x,
-        sz, a);
+int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a) {
+    _bcnn_forward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz),
+                                            BCNN_CUDA_THREADS>>>(x, sz, a);
     return BCNN_SUCCESS;
 }
 
-int bcnn_forward_activation_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor, bcnn_tensor *dst_tensor)
-{
-    
-    
+int bcnn_forward_activation_layer_gpu(bcnn_layer *layer,
+                                      bcnn_tensor *src_tensor,
+                                      bcnn_tensor *dst_tensor) {
     int sz = bcnn_tensor_get_size(dst_tensor);
 
     dst_tensor->data_gpu = src_tensor->data_gpu;
@@ -78,54 +78,56 @@ int bcnn_forward_activation_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor
     return BCNN_SUCCESS;
 }
 
-
-__global__ void _bcnn_backward_activation_layer_kernel(float *x, float *dx, int sz, bcnn_activation a)
-{
+__global__ void _bcnn_backward_activation_layer_kernel(float *x, float *dx,
+                                                       int sz,
+                                                       bcnn_activation a) {
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
     if (i < sz) {
         switch (a) {
-        case TANH:
-            dx[i] *= (1 - x[i] * x[i]);
-            break;
-        case RELU:
-            dx[i] *= ((float)(x[i] > 0));
-            break;
-        case RAMP:
-            dx[i] *= ((float)(x[i] > 0) + 0.1f);
-            break;
-        case CLAMP:
-            dx[i] *= (float)(x[i] > 0.0f && (x[i] < 1.0f));
-            break;
-        case LOGISTIC:
-            dx[i] *= (1 - x[i]) * x[i];
-            break;
-        case NONE:
-            break;
-        default:
-            break;
+            case TANH:
+                dx[i] *= (1 - x[i] * x[i]);
+                break;
+            case RELU:
+                dx[i] *= ((float)(x[i] > 0));
+                break;
+            case LRELU:
+                dx[i] *= (x[i] > 0 ? 1.0f : 0.1f);
+                break;
+            case RAMP:
+                dx[i] *= ((float)(x[i] > 0) + 0.1f);
+                break;
+            case CLAMP:
+                dx[i] *= (float)(x[i] > 0.0f && (x[i] < 1.0f));
+                break;
+            case LOGISTIC:
+                dx[i] *= (1 - x[i]) * x[i];
+                break;
+            case NONE:
+                break;
+            default:
+                break;
         }
     }
 }
 
-int bcnn_backward_activation_gpu(float *x, float *dx, int sz, bcnn_activation a)
-{
-    _bcnn_backward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz), BCNN_CUDA_THREADS>>>(x, dx, 
-        sz, a);
+int bcnn_backward_activation_gpu(float *x, float *dx, int sz,
+                                 bcnn_activation a) {
+    _bcnn_backward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz),
+                                             BCNN_CUDA_THREADS>>>(x, dx, sz, a);
     return BCNN_SUCCESS;
 }
 
-int bcnn_backward_activation_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor, bcnn_tensor *dst_tensor)
-{
-    
-    
+int bcnn_backward_activation_layer_gpu(bcnn_layer *layer,
+                                       bcnn_tensor *src_tensor,
+                                       bcnn_tensor *dst_tensor) {
     int sz = bcnn_tensor_get_size(dst_tensor);
-    
-    bcnn_backward_activation_gpu(dst_tensor->data_gpu, dst_tensor->grad_data_gpu, sz, layer->activation);
+
+    bcnn_backward_activation_gpu(
+        dst_tensor->data_gpu, dst_tensor->grad_data_gpu, sz, layer->activation);
     bcnn_cuda_check(cudaPeekAtLastError());
     src_tensor->grad_data_gpu = dst_tensor->grad_data_gpu;
 
     return BCNN_SUCCESS;
 }
-
 
 #endif

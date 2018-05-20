@@ -147,7 +147,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
         sprintf(running_mean_name, "%s_run_mean", src_id);
         bcnn_tensor_create(&node.layer->running_mean, 1, 1, 1, channels, 0,
                            running_mean_name);  // no gradients
-        sprintf(running_mean_name, "%s_run_var", src_id);
+        sprintf(running_var_name, "%s_run_var", src_id);
         bcnn_tensor_create(&node.layer->running_variance, 1, 1, 1, channels, 0,
                            running_var_name);  // no gradients
         node.layer->x_norm = (float *)calloc(sz, sizeof(float));

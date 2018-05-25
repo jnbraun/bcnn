@@ -94,15 +94,15 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id) {
         bcnn_cuda_memcpy_f32(node.layer->bn_workspace, sz);
 #ifdef BCNN_USE_CUDNN
     bcnn_cudnn_check(cudnnCreateTensorDescriptor(
-        &node.layer->src_tensor_desc));  // same desc for x, dx, dy
-    bcnn_cudnn_check(cudnnCreateTensorDescriptor(&node.layer->dst_tensor_desc));
+        &node.layer->dst_tensor_desc));  // same desc for x, dx, dy
+    bcnn_cudnn_check(cudnnCreateTensorDescriptor(&node.layer->bias_desc));
     bcnn_cudnn_check(cudnnSetTensor4dDescriptor(
-        node.layer->src_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+        node.layer->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
         net->tensors[node.dst[0]].n, channels, net->tensors[node.dst[0]].h,
         net->tensors[node.dst[0]].w));
-    bcnn_cudnn_check(cudnnSetTensor4dDescriptor(
-        node.layer->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1,
-        channels, 1, 1));
+    bcnn_cudnn_check(
+        cudnnSetTensor4dDescriptor(node.layer->bias_desc, CUDNN_TENSOR_NCHW,
+                                   CUDNN_DATA_FLOAT, 1, channels, 1, 1));
 #endif
 #endif
 

@@ -200,8 +200,8 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 #ifdef BCNN_USE_CUDNN
         bcnn_cudnn_check(cudnnBatchNormalizationForwardTraining(
             bcnn_cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &alpha, &beta,
-            layer->src_tensor_desc, src_tensor->data_gpu, layer->src_tensor_desc,
-            dst_tensor->data_gpu, layer->dst_tensor_desc, layer->scales.data_gpu,
+            layer->dst_tensor_desc, src_tensor->data_gpu, layer->dst_tensor_desc,
+            dst_tensor->data_gpu, layer->bias_desc, layer->scales.data_gpu,
             layer->biases.data_gpu, 0.1, layer->running_mean.data_gpu,
             layer->running_variance.data_gpu, 0.0001,
             layer->saved_mean.data_gpu, layer->saved_variance.data_gpu));
@@ -241,8 +241,8 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 #ifdef BCNN_USE_CUDNN
         bcnn_cudnn_check(cudnnBatchNormalizationForwardInference(
             bcnn_cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &alpha, &beta,
-            layer->src_tensor_desc, src_tensor->data_gpu, layer->src_tensor_desc,
-            dst_tensor->data_gpu, layer->dst_tensor_desc, layer->scales.data_gpu,
+            layer->dst_tensor_desc, src_tensor->data_gpu, layer->dst_tensor_desc,
+            dst_tensor->data_gpu, layer->bias_desc, layer->scales.data_gpu,
             layer->biases.data_gpu, layer->running_mean.data_gpu,
             layer->running_variance.data_gpu, 0.0001));
 #else
@@ -283,9 +283,9 @@ int bcnn_backward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor
 #ifdef BCNN_USE_CUDNN
     bcnn_cudnn_check(cudnnBatchNormalizationBackward(
         bcnn_cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &a_data, &b_data,
-        &a_param, &b_param, layer->src_tensor_desc, src_tensor->data_gpu,
-        layer->src_tensor_desc, dst_tensor->grad_data_gpu, layer->src_tensor_desc,
-        src_tensor->grad_data_gpu, layer->dst_tensor_desc, layer->scales.data_gpu,
+        &a_param, &b_param, layer->dst_tensor_desc, src_tensor->data_gpu,
+        layer->dst_tensor_desc, dst_tensor->grad_data_gpu, layer->dst_tensor_desc,
+        src_tensor->grad_data_gpu, layer->bias_desc, layer->scales.data_gpu,
         layer->scales.grad_data_gpu, layer->biases.grad_data_gpu, 0.0001,
         layer->saved_mean.data_gpu, layer->saved_variance.data_gpu));
 #else

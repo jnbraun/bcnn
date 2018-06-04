@@ -1,3 +1,4 @@
+#include <string>
 #ifdef USE_OPENCV
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -230,10 +231,16 @@ int setup_yolo_tiny_net(bcnn_net *net, int input_width, int input_height,
     load_yolo_weights(net, model);
 }
 
+#ifdef USE_OPENCV
 void prepare_frame(cv::Mat frame, float *img, int w, int h) {
+#else
+void prepare_frame(unsigned char *frame, int w_frame, int h_frame, float *img,
+                   int w, int h) {
+#endif
     if (!img) {
         return;
     }
+#ifdef USE_OPENCV
     int new_w = frame.cols;
     int new_h = frame.rows;
     if (((float)w / frame.cols) < ((float)h / frame.rows)) {
@@ -243,10 +250,26 @@ void prepare_frame(cv::Mat frame, float *img, int w, int h) {
         new_h = h;
         new_w = (frame.cols * h) / frame.rows;
     }
+#else
+    int new_w = w_frame;
+    int new_h = h_frame;
+    if (((float)w / w_frame) < ((float)h / h_frame)) {
+        new_w = w;
+        new_h = (h_frame * w) / w_frame;
+    } else {
+        new_h = h;
+        new_w = (w_frame * h) / h_frame;
+    }
+#endif
     unsigned char *img_rz =
         (unsigned char *)calloc(new_w * new_h * 3, sizeof(unsigned char));
+#ifdef USE_OPENCV
     bip_resize_bilinear(frame.data, frame.cols, frame.rows, frame.step, img_rz,
                         new_w, new_h, new_w * 3, 3);
+#else
+    bip_resize_bilinear(frame, w_frame, h_frame, w_frame * 3, img_rz, new_w,
+                        new_h, new_w * 3, 3);
+#endif
     unsigned char *canvas =
         (unsigned char *)calloc(w * h * 3, sizeof(unsigned char));
     for (int i = 0; i < w * h * 3; ++i) {
@@ -424,6 +447,7 @@ void predict_detections_img(int w_frame, int h_frame, bcnn_net *net,
     do_nms_obj(dets, num_dets, last_node->layer->classes, nms_tresh);
 }
 
+#ifdef USE_OPENCV
 bool open_video(std::string video_path, cv::VideoCapture &capture) {
     if (video_path == "0") {
         capture.open(0);
@@ -439,6 +463,7 @@ bool open_video(std::string video_path, cv::VideoCapture &capture) {
         return true;
     }
 }
+#endif
 
 static std::string str_objs[80] = {
     "person",      "bicycle",    "car",          "motorbike",   "aeroplane",
@@ -458,6 +483,7 @@ static std::string str_objs[80] = {
     "toaster",     "sink",       "refrigerator", "book",        "clock",
     "vase",        "scissors",   "teddy",        "hair",        "toothbrush"};
 
+#ifdef USE_OPENCV
 void display_detections(cv::Mat &frame, yolo_detection *dets, int num_dets,
                         float thresh, int num_classes) {
     for (int i = 0; i < num_dets; ++i) {
@@ -480,6 +506,24 @@ void display_detections(cv::Mat &frame, yolo_detection *dets, int num_dets,
                 cv::putText(frame, str_objs[j], cv::Point(x_tl, y_tl - 10),
                             cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(r, g, b),
                             2.0);
+            }
+        }
+    }
+}
+#endif
+
+void print_detections(int w, int h, yolo_detection *dets, int num_dets,
+                      float thresh, int num_classes) {
+    for (int i = 0; i < num_dets; ++i) {
+        for (int j = 0; j < num_classes; ++j) {
+            if (dets[i].prob[j] > thresh) {
+                int x_tl = (dets[i].bbox.x - dets[i].bbox.w / 2) * w;
+                int y_tl = (dets[i].bbox.y - dets[i].bbox.h / 2) * h;
+                fprintf(stderr,
+                        "det %d class %s bbox x %f y %f w %f h %f x_tl %d y_tl "
+                        "%d\n",
+                        i, str_objs[j].c_str(), dets[i].bbox.x, dets[i].bbox.y,
+                        dets[i].bbox.w, dets[i].bbox.h, x_tl, y_tl);
             }
         }
     }
@@ -536,17 +580,40 @@ int run(int argc, char **argv) {
         return -1;
 #endif
     } else if (strcmp(argv[1], "img") == 0) {
+#ifdef USE_OPENCV
         cv::Mat img = cv::imread(argv[2]);
         if (img.empty()) {
             fprintf(stderr, "[ERROR] Failed to open image %s\n", argv[2]);
             return -1;
         }
+#else
+        unsigned char *img = NULL;
+        int w_frame, h_frame, c_frame;
+        int ret = bip_load_image(argv[2], &img, &w_frame, &h_frame, &c_frame);
+        if (c_frame == 1) {
+            fprintf(stderr, "[ERROR] Gray images are not supported\n");
+            return -1;
+        }
+        if (ret != BIP_SUCCESS) {
+            fprintf(stderr, "[ERROR] Failed to open image %s\n", argv[2]);
+            return -1;
+        }
+#endif
+#ifdef USE_OPENCV
         prepare_frame(img, net->tensors[0].data, w, h);
         predict_detections_img(img.cols, img.rows, net, pred, dets, num_dets);
+#else
+        prepare_frame(img, w_frame, h_frame, net->tensors[0].data, w, h);
+        predict_detections_img(w_frame, h_frame, net, pred, dets, num_dets);
+#endif
+#ifdef USE_OPENCV
         display_detections(img, dets, num_dets, 0.45, 80);
         std::string in_path = argv[2];
         std::string out_path = in_path + "_dets.png";
         cv::imwrite(out_path, img);
+#else
+        print_detections(w_frame, h_frame, dets, num_dets, 0.45, 80);
+#endif
     } else {
         fprintf(stderr, "[ERROR] Incorrect mode %s. Should be 'img' or 'video'",
                 argv[1]);

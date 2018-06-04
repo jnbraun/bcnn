@@ -1,6 +1,7 @@
+#ifdef USE_OPENCV
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-
+#endif
 #include <bh/bh.h>
 #include <bh/bh_error.h>
 #include <bh/bh_mem.h>
@@ -355,9 +356,9 @@ static void do_nms_obj(yolo_detection *dets, int total, int classes,
     }
 }
 
-void predict_detections(int w_frame, int h_frame, bcnn_net *net, float *pred,
-                        int avg_window, float *avg_pred, yolo_detection *dets,
-                        int num_dets) {
+void predict_detections_video(int w_frame, int h_frame, bcnn_net *net,
+                              float *pred, int avg_window, float *avg_pred,
+                              yolo_detection *dets, int num_dets) {
     float nms_tresh = 0.4f;
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
@@ -510,6 +511,7 @@ int run(int argc, char **argv) {
     prepare_detection_results(net, &dets, &num_dets);
 
     if (strcmp(argv[1], "video") == 0) {
+#ifdef USE_OPENCV
         cv::VideoCapture cap;
         if (!open_video(argv[2], cap)) {
             return -1;
@@ -519,8 +521,8 @@ int run(int argc, char **argv) {
         while (!frame.empty()) {
             cap >> frame;
             prepare_frame(frame, net->tensors[0].data, w, h);
-            predict_detections(frame.cols, frame.rows, net, pred, avg_window,
-                               avg_pred, dets, num_dets);
+            predict_detections_video(frame.cols, frame.rows, net, pred,
+                                     avg_window, avg_pred, dets, num_dets);
             display_detections(frame, dets, num_dets, 0.45, 80);
             cv::imshow("yolov2-tiny example", frame);
             int q = cv::waitKey(10);
@@ -528,6 +530,11 @@ int run(int argc, char **argv) {
                 break;
             }
         }
+#else
+        fprintf(stderr,
+                "[ERROR] OpenCV is required for the webcam live example.");
+        return -1;
+#endif
     } else if (strcmp(argv[1], "img") == 0) {
         cv::Mat img = cv::imread(argv[2]);
         if (img.empty()) {

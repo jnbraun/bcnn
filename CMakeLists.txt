@@ -24,6 +24,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # C99
 set (CMAKE_C_STANDARD 99)
 
+# Compiler flags
+set(CMAKE_C_FLAGS "-O3")
+
 # Blas backend
 if (USE_BLAS)
     add_definitions(-DBCNN_USE_BLAS)
@@ -40,7 +43,7 @@ if (USE_BLAS)
     find_library(OpenBLAS_LIB NAMES openblas PATHS ${OpenBLAS_LIB_PATHS})
     if(OpenBLAS_INCLUDE AND OpenBLAS_LIB)
         set(OpenBLAS_FOUND ON)
-        message(STATUS "[bcnn] Found OpenBlas " ${OpenBLAS_LIB})
+        message(STATUS "[bcnn] Found OpenBlas here: " ${OpenBLAS_LIB})
 	include_directories(${OpenBLAS_INC_PATHS})
         set(BLAS_LIBRARY ${OpenBLAS_LIB})
     endif()
@@ -49,7 +52,7 @@ if (USE_BLAS)
         find_package(BLAS QUIET)
         find_library(CBLAS_LIB NAMES cblas PATHS)
         if (BLAS_FOUND AND CBLAS_LIB)
-            message(STATUS "[bcnn] Found Blas " ${CBLAS_LIB})
+            message(STATUS "[bcnn] Found Blas here: " ${CBLAS_LIB})
             set(BLAS_LIBRARY ${CBLAS_LIB})
         elseif(NOT CBLAS_FOUND)
             message(FATAL_ERROR "[bcnn] Could not find any Blas library")

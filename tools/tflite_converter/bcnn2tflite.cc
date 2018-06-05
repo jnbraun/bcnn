@@ -135,6 +135,8 @@ export_operators(
     const details::TensorsMap& tensors_map, FlatBufferBuilder* builder) {
     std::vector<flatbuffers::Offset<tflite::Operator>> op_vector;
     for (int i = 0; i < net->num_nodes; ++i) {
+        // We need to check manually for each type of layer, the inputs /
+        // outputs
         std::vector<int32_t> inputs;
         for (int j = 0; j < net->nodes[i].num_src; ++j) {
             inputs.push_back(net->tensors[net->nodes[i].src[j]]);
@@ -144,7 +146,7 @@ export_operators(
             outputs.push_back(net->tensors[net->nodes[i].dst[j]]);
         }
     }
-
+    // TODO WIP....
     for (const auto& op : model.operators) {
         std::vector<int32_t> inputs;
         for (const string& input : op->inputs) {

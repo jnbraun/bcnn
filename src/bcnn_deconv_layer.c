@@ -69,6 +69,7 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride,
     node.layer->size = size;
     node.layer->pad = pad;
 
+#ifndef GRAPH_TOPOLOGY
     // Setup layer weights
     char weights_name[256];
     sprintf(weights_name, "%s_w", src_id);
@@ -82,9 +83,34 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride,
     char biases_name[256];
     sprintf(biases_name, "%s_b", src_id);
     bcnn_tensor_create(&node.layer->biases, 1, 1, 1, n, 1, biases_name);
+#else
+    // Create weights tensor
+    bcnn_tensor weights = {0};
+    char weights_name[256];
+    sprintf(weights_name, "%s_w", src_id);
+    bcnn_tensor_create(&weights, 1, 1, 1,
+                       net->tensors[node.src[0]].c * n * size * size, 1,
+                       weights_name);
+    bcnn_tensor_filler w_filler = {
+        .range = (size * size * net->tensors[node.src[0]].c), .type = init};
+    bcnn_tensor_fill(&weights, w_filler);
+    bcnn_net_add_tensor(net, weights);
+    bcnn_node_add_input(&node, net->num_tensors - 1);
+    // Create bias tensor
+    bcnn_tensor biases = {0};
+    char biases_name[256];
+    sprintf(biases_name, "%s_b", src_id);
+    bcnn_tensor_create(&biases, 1, 1, 1, n, 1, biases_name);
+    bcnn_net_add_tensor(net, biases);
+    bcnn_node_add_input(&node, net->num_tensors - 1);
+#endif
 
     if (net->learner.optimizer == ADAM) {
+#ifndef GRAPH_TOPOLOGY
         int weights_size = bcnn_tensor_get_size(&node.layer->weights);
+#else
+        int weights_size = bcnn_tensor_get_size(&weights);
+#endif
         node.layer->adam_m = (float *)calloc(weights_size, sizeof(float));
         node.layer->adam_v = (float *)calloc(weights_size, sizeof(float));
     }
@@ -112,7 +138,11 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride,
     node.layer->conv_workspace_gpu =
         bcnn_cuda_memcpy_f32(node.layer->conv_workspace, sz);
     if (net->learner.optimizer == ADAM) {
+#ifndef GRAPH_TOPOLOGY
         int weights_size = bcnn_tensor_get_size(&node.layer->weights);
+#else
+        int weights_size = bcnn_tensor_get_size(&weights);
+#endif
         node.layer->adam_m_gpu =
             bcnn_cuda_memcpy_f32(node.layer->adam_m, weights_size);
         node.layer->adam_v_gpu =
@@ -134,6 +164,39 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride,
     return BCNN_SUCCESS;
 }
 
+#ifdef GRAPH_TOPOLOGY
+int bcnn_forward_deconv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+                                  bcnn_tensor *dst_tensor, bcnn_tensor *weights,
+                                  bcnn_tensor *biases) {
+    int batch_size = src_tensor->n;
+    int i, m, n, k, sz;
+
+    sz = batch_size * dst_tensor->w * dst_tensor->h * dst_tensor->c;
+
+    bcnn_fill_f32(sz, 0.0f, dst_tensor->data);
+
+    m = layer->num * layer->size * layer->size;
+    k = src_tensor->c;
+    n = src_tensor->w * src_tensor->h;
+    sz = src_tensor->c * src_tensor->h * src_tensor->w;
+    for (i = 0; i < batch_size; ++i) {
+        bcnn_gemm(1, 0, m, n, k, 1.0f, weights->data, m,
+                  src_tensor->data + i * sz, n, 0.0f, layer->conv_workspace, n);
+        bcnn_col2im(
+            layer->conv_workspace, layer->num, dst_tensor->h, dst_tensor->w,
+            layer->size, 0, layer->stride,
+            dst_tensor->data + i * layer->num * dst_tensor->w * dst_tensor->h);
+    }
+
+    bcnn_add_bias(dst_tensor->data, biases->data, batch_size, layer->num,
+                  dst_tensor->w * dst_tensor->h);
+
+    sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
+    bcnn_forward_activation_cpu(dst_tensor->data, sz, layer->activation);
+
+    return BCNN_SUCCESS;
+}
+#else
 int bcnn_forward_deconv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                   bcnn_tensor *dst_tensor) {
     int batch_size = src_tensor->n;
@@ -164,7 +227,47 @@ int bcnn_forward_deconv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 
     return BCNN_SUCCESS;
 }
+#endif
 
+#ifdef GRAPH_TOPOLOGY
+int bcnn_backward_deconv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+                                   bcnn_tensor *dst_tensor,
+                                   bcnn_tensor *weights, bcnn_tensor *biases) {
+    int batch_size = src_tensor->n;
+    int i, sz = src_tensor->w * src_tensor->h * src_tensor->c;
+    int m = src_tensor->c;
+    int n = layer->size * layer->size * dst_tensor->c;
+    int k = src_tensor->w * src_tensor->h;
+    float *pdst = NULL;
+    float alpha = 1.0f / batch_size;
+
+    bcnn_backward_activation_cpu(
+        dst_tensor->data, dst_tensor->grad_data,
+        dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size,
+        layer->activation);
+
+    bcnn_grad_bias(biases->grad_data, dst_tensor->grad_data, batch_size,
+                   layer->num, dst_tensor->w * dst_tensor->h);
+
+    for (i = 0; i < batch_size; ++i) {
+        pdst = dst_tensor->grad_data +
+               i * layer->num * dst_tensor->w * dst_tensor->h;
+        bcnn_im2col(pdst, dst_tensor->c, dst_tensor->h, dst_tensor->w,
+                    layer->size, 0, layer->stride, layer->conv_workspace);
+        bcnn_gemm(0, 1, m, n, k, alpha,
+                  src_tensor->data +
+                      i * src_tensor->c * src_tensor->h * src_tensor->w,
+                  k, layer->conv_workspace, k, 1.0f, weights->grad_data, n);
+
+        if (src_tensor->grad_data) {
+            bcnn_gemm(0, 0, src_tensor->c, k, n, 1.0f, weights->data, n,
+                      layer->conv_workspace, k, 0.0f,
+                      src_tensor->grad_data + i * sz, k);
+        }
+    }
+    return BCNN_SUCCESS;
+}
+#else
 int bcnn_backward_deconv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                    bcnn_tensor *dst_tensor) {
     int batch_size = src_tensor->n;
@@ -202,9 +305,43 @@ int bcnn_backward_deconv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     }
     return BCNN_SUCCESS;
 }
+#endif
 
 #ifdef BCNN_USE_CUDA
 
+#ifdef GRAPH_TOPOLOGY
+int bcnn_forward_deconv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+                                  bcnn_tensor *dst_tensor, bcnn_tensor *weights,
+                                  bcnn_tensor *biases) {
+    int i, m, n, k, sz;
+    int batch_size = dst_tensor->n;
+
+    sz = batch_size * dst_tensor->w * dst_tensor->h * dst_tensor->c;
+    bcnn_cuda_fill_f32(sz, 0, dst_tensor->data_gpu, 1);
+
+    m = layer->num * layer->size * layer->size;
+    k = src_tensor->c;
+    n = src_tensor->w * src_tensor->h;
+    sz = src_tensor->c * src_tensor->h * src_tensor->w;
+    for (i = 0; i < batch_size; ++i) {
+        bcnn_cuda_gemm(1, 0, m, n, k, 1.0f, weights->data_gpu, m,
+                       src_tensor->data_gpu + i * sz, n, 0.0f,
+                       layer->conv_workspace_gpu, n);
+        bcnn_cuda_col2im(layer->conv_workspace_gpu, layer->num, dst_tensor->h,
+                         dst_tensor->w, layer->size, layer->stride, 0,
+                         dst_tensor->data_gpu +
+                             i * layer->num * dst_tensor->w * dst_tensor->h);
+    }
+
+    bcnn_cuda_add_bias(dst_tensor->data_gpu, biases->data_gpu, batch_size,
+                       layer->num, dst_tensor->w * dst_tensor->h);
+
+    sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
+    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, layer->activation);
+
+    return BCNN_SUCCESS;
+}
+#else
 int bcnn_forward_deconv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                   bcnn_tensor *dst_tensor) {
     int i, m, n, k, sz;
@@ -235,7 +372,53 @@ int bcnn_forward_deconv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 
     return BCNN_SUCCESS;
 }
+#endif
 
+#ifdef GRAPH_TOPOLOGY
+int bcnn_backward_deconv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+                                   bcnn_tensor *dst_tensor,
+                                   bcnn_tensor *weights, bcnn_tensor *biases) {
+    int i, sz = src_tensor->w * src_tensor->h * src_tensor->c;
+    int m = src_tensor->c;
+    int n = layer->size * layer->size * dst_tensor->c;
+    int k = src_tensor->w * src_tensor->h;
+    int batch_size = src_tensor->n;
+    float *a = NULL, *b = NULL, *c = NULL, *pdst = NULL;
+    float alpha = 1.0f / batch_size;
+
+    bcnn_backward_activation_gpu(
+        dst_tensor->data_gpu, dst_tensor->grad_data_gpu,
+        dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size,
+        layer->activation);
+
+    bcnn_cuda_grad_bias(biases->grad_data_gpu, dst_tensor->grad_data_gpu,
+                        batch_size, layer->num, dst_tensor->h * dst_tensor->w);
+
+    for (i = 0; i < batch_size; ++i) {
+        a = src_tensor->data_gpu +
+            i * src_tensor->c * src_tensor->w * src_tensor->h;
+        b = layer->conv_workspace_gpu;
+        c = weights->grad_data_gpu;
+
+        pdst = dst_tensor->grad_data_gpu +
+               i * dst_tensor->c * dst_tensor->w * dst_tensor->h;
+
+        bcnn_cuda_im2col(pdst, dst_tensor->c, dst_tensor->h, dst_tensor->w,
+                         layer->size, layer->stride, 0,
+                         layer->conv_workspace_gpu);
+        bcnn_cuda_gemm(0, 1, m, n, k, alpha, a, k, b, k, 1.0f, c, n);
+
+        if (src_tensor->grad_data_gpu) {
+            a = weights->data_gpu;
+            b = layer->conv_workspace_gpu;
+            c = src_tensor->grad_data_gpu + i * sz;
+            bcnn_cuda_gemm(0, 0, src_tensor->c, k, n, 1.0f, a, n, b, k, 0.0f, c,
+                           k);
+        }
+    }
+    return 0;
+}
+#else
 int bcnn_backward_deconv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                    bcnn_tensor *dst_tensor) {
     int i, sz = src_tensor->w * src_tensor->h * src_tensor->c;
@@ -278,25 +461,50 @@ int bcnn_backward_deconv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     }
     return 0;
 }
+#endif  // GRAPH_TOPOLOGY
 
 #endif
 
 int bcnn_forward_deconv_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
+#ifdef GRAPH_TOPOLOGY
+    bcnn_tensor *weights = &net->tensors[node->src[1]];
+    bcnn_tensor *biases = &net->tensors[node->src[2]];
+#ifdef BCNN_USE_CUDA
+    return bcnn_forward_deconv_layer_gpu(node->layer, src, dst, weights,
+                                         biases);
+#else
+    return bcnn_forward_deconv_layer_cpu(node->layer, src, dst, weights,
+                                         biases);
+#endif
+#else
 #ifdef BCNN_USE_CUDA
     return bcnn_forward_deconv_layer_gpu(node->layer, src, dst);
 #else
     return bcnn_forward_deconv_layer_cpu(node->layer, src, dst);
 #endif
+#endif  // GRAPH_TOPOLOGY
 }
 
 int bcnn_backward_deconv_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
+#ifdef GRAPH_TOPOLOGY
+    bcnn_tensor *weights = &net->tensors[node->src[1]];
+    bcnn_tensor *biases = &net->tensors[node->src[2]];
+#ifdef BCNN_USE_CUDA
+    return bcnn_backward_deconv_layer_gpu(node->layer, src, dst, weights,
+                                          biases);
+#else
+    return bcnn_backward_deconv_layer_cpu(node->layer, src, dst, weights,
+                                          biases);
+#endif
+#else
 #ifdef BCNN_USE_CUDA
     return bcnn_backward_deconv_layer_gpu(node->layer, src, dst);
 #else
     return bcnn_backward_deconv_layer_cpu(node->layer, src, dst);
 #endif
+#endif  // GRAPH_TOPOLOGY
 }

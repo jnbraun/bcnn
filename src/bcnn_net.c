@@ -347,24 +347,6 @@ int bcnn_forward(bcnn_net *net) {
     bcnn_node node = {0};
     for (i = 0; i < net->num_nodes; ++i) {
         node = net->nodes[i];
-        fprintf(stderr, "type layer %d / %d %d\n", i, net->num_nodes,
-                node.layer->type);
-        /*if (i == 1) {
-            FILE *flog = fopen("yolo_in_layer_1.txt", "wt");
-            bcnn_tensor *t = &net->tensors[node.src[0]];
-#ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_dev2host(t->data_gpu, t->data,
-                                      bcnn_tensor_get_size(t));
-            for (i = 0; i < t->w * t->h * t->c; ++i) {
-                fprintf(flog, "%d %f\n", i, t->data[i]);
-            }
-#else
-            for (i = 0; i < t->w * t->h * t->c; ++i) {
-                fprintf(flog, "%d %f\n", i, t->data[i]);
-            }
-#endif
-            fclose(flog);
-        }*/
         for (j = 0; j < node.num_dst; ++j) {
             output_size = bcnn_tensor_get_size(&net->tensors[node.dst[j]]);
 #ifdef BCNN_USE_CUDA
@@ -828,12 +810,6 @@ int bcnn_load_model(bcnn_net *net, char *filename) {
     for (i = 0; i < net->num_nodes; ++i) {
         layer = net->nodes[i].layer;
         is_ft = 0;
-        /*if (net->nodes[i].id != NULL) {
-            for (j = 0; j < net->nb_finetune; ++j) {
-                if (strcmp(net->nodes[i].id, net->finetune_id[j]) == 0)
-                    is_ft = 1;
-            }
-        }*/
         if ((layer->type == CONVOLUTIONAL || layer->type == DECONVOLUTIONAL ||
              layer->type == DEPTHWISE_CONV || layer->type == FULL_CONNECTED) &&
             is_ft == 0) {

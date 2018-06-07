@@ -100,7 +100,7 @@ static void bcnn_huber_loss(int n, float *x, float *label, float *error,
 static void bcnn_euclidean_loss_forward(bcnn_tensor *src_tensor,
                                         bcnn_tensor *label,
                                         bcnn_tensor *dst_tensor) {
-    int size = bcnn_tensor_get_size(src_tensor);
+    int size = bcnn_tensor_size(src_tensor);
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_copy_f32(size, src_tensor->data_gpu, 1, dst_tensor->grad_data_gpu,
                        1);
@@ -114,7 +114,7 @@ static void bcnn_euclidean_loss_forward(bcnn_tensor *src_tensor,
 static void bcnn_euclidean_loss_backward(bcnn_tensor *src_tensor,
                                          bcnn_tensor *dst_tensor,
                                          bcnn_layer *layer) {
-    int size = bcnn_tensor_get_size(src_tensor);
+    int size = bcnn_tensor_size(src_tensor);
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_axpy(size, layer->scale, dst_tensor->grad_data_gpu, 1,
                    src_tensor->grad_data_gpu, 1);

@@ -50,7 +50,7 @@ int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = DROPOUT;
     node.layer->dropout_rate = rate;
-    sz = bcnn_tensor_get_size(&net->tensors[node.src[0]]);
+    sz = bcnn_tensor_size(&net->tensors[node.src[0]]);
     node.layer->rand = (float *)calloc(sz, sizeof(float));
     node.layer->scale = 1.0f / (1.0f - rate);
 #ifdef BCNN_USE_CUDA
@@ -69,7 +69,7 @@ int bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
 
 int bcnn_forward_dropout_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                    bcnn_tensor *dst_tensor) {
-    int i, sz = bcnn_tensor_get_size(src_tensor);
+    int i, sz = bcnn_tensor_size(src_tensor);
     float r;
 
     if (!layer->net_state)  // state != train
@@ -99,7 +99,7 @@ int bcnn_forward_dropout_layer(bcnn_net *net, bcnn_node *node) {
 
 int bcnn_backward_dropout_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                     bcnn_tensor *dst_tensor) {
-    int i, sz = bcnn_tensor_get_size(src_tensor);
+    int i, sz = bcnn_tensor_size(src_tensor);
     float r;
 
     if (!src_tensor->grad_data) {

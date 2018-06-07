@@ -42,25 +42,25 @@ void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler) {
         float std_init;
         case XAVIER:
             std_init = sqrtf(3.0f / filler.range);
-            for (int i = 0; i < bcnn_tensor_get_size(t); ++i) {
+            for (int i = 0; i < bcnn_tensor_size(t); ++i) {
                 t->data[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);
             }
             break;
         case MSRA:
             std_init = sqrtf(2.0f / filler.range);
             bcnn_gauss_gen g = {0};
-            for (int i = 0; i < bcnn_tensor_get_size(t); ++i) {
+            for (int i = 0; i < bcnn_tensor_size(t); ++i) {
                 t->data[i] = std_init * bcnn_rng_gaussian(&g);
             }
             break;
         case FIXED:
-            for (int i = 0; i < bcnn_tensor_get_size(t); ++i) {
+            for (int i = 0; i < bcnn_tensor_size(t); ++i) {
                 t->data[i] = filler.value;
             }
             break;
     }
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_f32_noalloc(t->data, t->data_gpu, bcnn_tensor_get_size(t));
+    bcnn_cuda_memcpy_f32_noalloc(t->data, t->data_gpu, bcnn_tensor_size(t));
 #endif
 }
 
@@ -91,7 +91,7 @@ void bcnn_tensor_set_shape_from_tensor(bcnn_tensor *dst, bcnn_tensor *src) {
     dst->has_grad = src->has_grad;
 }
 
-int bcnn_tensor_get_size(bcnn_tensor *t) { return t->w * t->h * t->c * t->n; }
+int bcnn_tensor_size(bcnn_tensor *t) { return t->w * t->h * t->c * t->n; }
 
 int bcnn_tensor_get_size3d(bcnn_tensor *t) { return t->w * t->h * t->c; }
 

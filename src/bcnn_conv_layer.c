@@ -60,7 +60,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
         bh_check(is_src_node_found,
                  "Convolution layer: invalid input node name %s", src_id);
     } else {
-        bh_check(bcnn_tensor_get_size(&net->tensors[0]) > 0,
+        bh_check(bcnn_tensor_size(&net->tensors[0]) > 0,
                  "Invalid input size of the network. "
                  "Hint: you can use 'bcnn_net_set_input_shape' to set the "
                  "network input size");
@@ -112,9 +112,9 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
 #endif
     if (net->learner.optimizer == ADAM) {
 #ifndef GRAPH_TOPOLOGY
-        int weights_size = bcnn_tensor_get_size(&node.layer->weights);
+        int weights_size = bcnn_tensor_size(&node.layer->weights);
 #else
-        int weights_size = bcnn_tensor_get_size(&weights);
+        int weights_size = bcnn_tensor_size(&weights);
 #endif
         node.layer->adam_m = (float *)calloc(weights_size, sizeof(float));
         node.layer->adam_v = (float *)calloc(weights_size, sizeof(float));
@@ -140,7 +140,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
 
     if (batch_norm) {
         node.layer->batch_norm = 1;
-        int sz = bcnn_tensor_get_size(&net->tensors[node.dst[0]]);
+        int sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
         int channels = net->tensors[node.dst[0]].c;
         char saved_mean_name[256], saved_var_name[256], running_mean_name[256],
             running_var_name[256], scales_name[256];
@@ -179,6 +179,8 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
         bcnn_tensor_create(&scales, 1, 1, 1, channels, 1, scales_name);
         bcnn_tensor_filler filler = {.value = 1.0f, .type = FIXED};
         bcnn_tensor_fill(&scales, filler);
+        bcnn_net_add_tensor(net, scales);
+        bcnn_node_add_input(&node, net->num_tensors - 1);
 #endif
         // Internal workspace for batch norm
         node.layer->x_norm = (float *)calloc(sz, sizeof(float));
@@ -187,9 +189,9 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
 #ifdef BCNN_USE_CUDA
     if (net->learner.optimizer == ADAM) {
 #ifndef GRAPH_TOPOLOGY
-        int weights_size = bcnn_tensor_get_size(&node.layer->weights);
+        int weights_size = bcnn_tensor_size(&node.layer->weights);
 #else
-        int weights_size = bcnn_tensor_get_size(&weights);
+        int weights_size = bcnn_tensor_size(&weights);
 #endif
         node.layer->adam_m_gpu =
             bcnn_cuda_memcpy_f32(node.layer->adam_m, weights_size);
@@ -270,7 +272,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     net->workspace_size =
         bh_max(net->workspace_size, node.layer->workspace_size);
     if (node.layer->batch_norm) {
-        int sz = bcnn_tensor_get_size(&net->tensors[node.dst[0]]);
+        int sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
         node.layer->x_norm_gpu = bcnn_cuda_memcpy_f32(node.layer->x_norm, sz);
         node.layer->bn_workspace_gpu =
             bcnn_cuda_memcpy_f32(node.layer->bn_workspace, sz);
@@ -297,7 +299,7 @@ int bcnn_forward_conv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     float *a = NULL, *b = NULL, *c = NULL;
     int batch_size = src_tensor->n;
 
-    sz = bcnn_tensor_get_size(dst_tensor);
+    sz = bcnn_tensor_size(dst_tensor);
     memset(dst_tensor->data, 0, sz * sizeof(float));
 
     m = layer->num;
@@ -345,7 +347,7 @@ int bcnn_forward_conv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     float *a = NULL, *b = NULL, *c = NULL;
     int batch_size = src_tensor->n;
 
-    sz = bcnn_tensor_get_size(dst_tensor);
+    sz = bcnn_tensor_size(dst_tensor);
     memset(dst_tensor->data, 0, sz * sizeof(float));
 
     m = layer->num;

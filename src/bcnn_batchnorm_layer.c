@@ -58,7 +58,7 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id) {
     // Add tensor output index to node
     bcnn_node_add_output(&node, net->num_tensors - 1);
 
-    sz = bcnn_tensor_get_size(&net->tensors[node.dst[0]]);
+    sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
     // Setup layer
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = BATCHNORM;

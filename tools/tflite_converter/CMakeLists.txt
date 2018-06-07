@@ -1,5 +1,7 @@
-cmake_minimum_required (VERSION 2.9)
+cmake_minimum_required (VERSION 3.1)
 project (bcnn2tflite)
+
+set(CMAKE_CXX_STANDARD 11)
 
 if(MSVC)
     set(variables
@@ -20,6 +22,7 @@ if(MSVC)
 endif()
 
 include_directories (
+    ${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/../../inc
     ${PROJECT_SOURCE_DIR}/../../bh/inc
     )

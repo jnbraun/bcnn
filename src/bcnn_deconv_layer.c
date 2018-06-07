@@ -107,9 +107,9 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride,
 
     if (net->learner.optimizer == ADAM) {
 #ifndef GRAPH_TOPOLOGY
-        int weights_size = bcnn_tensor_get_size(&node.layer->weights);
+        int weights_size = bcnn_tensor_size(&node.layer->weights);
 #else
-        int weights_size = bcnn_tensor_get_size(&weights);
+        int weights_size = bcnn_tensor_size(&weights);
 #endif
         node.layer->adam_m = (float *)calloc(weights_size, sizeof(float));
         node.layer->adam_v = (float *)calloc(weights_size, sizeof(float));
@@ -139,9 +139,9 @@ int bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size, int stride,
         bcnn_cuda_memcpy_f32(node.layer->conv_workspace, sz);
     if (net->learner.optimizer == ADAM) {
 #ifndef GRAPH_TOPOLOGY
-        int weights_size = bcnn_tensor_get_size(&node.layer->weights);
+        int weights_size = bcnn_tensor_size(&node.layer->weights);
 #else
-        int weights_size = bcnn_tensor_get_size(&weights);
+        int weights_size = bcnn_tensor_size(&weights);
 #endif
         node.layer->adam_m_gpu =
             bcnn_cuda_memcpy_f32(node.layer->adam_m, weights_size);

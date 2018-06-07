@@ -213,7 +213,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                  bcnn_tensor *label, bcnn_tensor *dst_tensor) {
     int i, j, b, t, n;
     memcpy(dst_tensor->data, src_tensor->data,
-           bcnn_tensor_get_size(dst_tensor) * sizeof(float));
+           bcnn_tensor_size(dst_tensor) * sizeof(float));
     FILE *flog = fopen("yolo_in.txt", "wt");
     for (i = 0; i < dst_tensor->w * dst_tensor->h * dst_tensor->c; ++i) {
         fprintf(flog, "%d %f\n", i, dst_tensor->data[i]);
@@ -236,7 +236,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             index = entry_index(layer, dst_tensor, 0, 0, layer->coords + 1);
             softmax_cpu(src_tensor->data + index, layer->classes,
                         src_tensor->n * layer->num,
-                        bcnn_tensor_get_size(src_tensor) / layer->num,
+                        bcnn_tensor_size(src_tensor) / layer->num,
                         src_tensor->w * src_tensor->h, 1,
                         src_tensor->w * src_tensor->h, 1,
                         dst_tensor->data + index);
@@ -245,7 +245,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     //#endif
 
     memset(dst_tensor->grad_data, 0,
-           bcnn_tensor_get_size(dst_tensor) * sizeof(float));
+           bcnn_tensor_size(dst_tensor) * sizeof(float));
     if (!layer->net_state) {  // state != train
         return;
     }
@@ -401,7 +401,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
         }
     }
     *(layer->cost) =
-        powf(sqrtf(bcnn_dot(bcnn_tensor_get_size(dst_tensor),
+        powf(sqrtf(bcnn_dot(bcnn_tensor_size(dst_tensor),
                             dst_tensor->grad_data, dst_tensor->grad_data)),
              2);
     fprintf(
@@ -417,7 +417,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 #ifdef BCNN_USE_CUDA
 void bcnn_forward_yolo_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                  bcnn_tensor *label, bcnn_tensor *dst_tensor) {
-    int sz = bcnn_tensor_get_size(src_tensor);
+    int sz = bcnn_tensor_size(src_tensor);
     bcnn_cuda_memcpy_dev2host(src_tensor->data_gpu, src_tensor->data, sz);
     bcnn_forward_yolo_layer_cpu(layer, src_tensor, label, dst_tensor);
     return;

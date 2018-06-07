@@ -115,9 +115,9 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride,
 
     if (net->learner.optimizer == ADAM) {
 #ifndef GRAPH_TOPOLOGY
-        int weights_size = bcnn_tensor_get_size(&node.layer->weights);
+        int weights_size = bcnn_tensor_size(&node.layer->weights);
 #else
-        int weights_size = bcnn_tensor_get_size(&weights);
+        int weights_size = bcnn_tensor_size(&weights);
 #endif
         node.layer->adam_m = (float *)calloc(weights_size, sizeof(float));
         node.layer->adam_v = (float *)calloc(weights_size, sizeof(float));
@@ -146,9 +146,9 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride,
 #ifdef BCNN_USE_CUDA
     if (net->learner.optimizer == ADAM) {
 #ifndef GRAPH_TOPOLOGY
-        int weights_size = bcnn_tensor_get_size(&node.layer->weights);
+        int weights_size = bcnn_tensor_size(&node.layer->weights);
 #else
-        int weights_size = bcnn_tensor_get_size(&weights);
+        int weights_size = bcnn_tensor_size(&weights);
 #endif
         node.layer->adam_m_gpu =
             bcnn_cuda_memcpy_f32(node.layer->adam_m, weights_size);
@@ -191,7 +191,7 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
     /*bh_timer t = { 0 };
     bh_timer_start(&t);*/
 
-    sz = bcnn_tensor_get_size(dst_tensor);
+    sz = bcnn_tensor_size(dst_tensor);
 
     dst_data = dst_tensor->data;
     memset(dst_data, 0, sz * sizeof(float));
@@ -319,7 +319,7 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
     /*bh_timer t = { 0 };
     bh_timer_start(&t);*/
 
-    sz = bcnn_tensor_get_size(dst_tensor);
+    sz = bcnn_tensor_size(dst_tensor);
 
     dst_data = dst_tensor->data;
     memset(dst_data, 0, sz * sizeof(float));
@@ -451,7 +451,7 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
     /*bh_timer t = { 0 };
     bh_timer_start(&t);*/
 
-    sz = bcnn_tensor_get_size(dst_tensor);
+    sz = bcnn_tensor_size(dst_tensor);
 
     bcnn_backward_activation_cpu(
         dst_tensor->data, dst_tensor->grad_data,
@@ -709,7 +709,7 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
     /*bh_timer t = { 0 };
     bh_timer_start(&t);*/
 
-    sz = bcnn_tensor_get_size(dst_tensor);
+    sz = bcnn_tensor_size(dst_tensor);
 
     bcnn_backward_activation_cpu(
         dst_tensor->data, dst_tensor->grad_data,

@@ -146,7 +146,7 @@ int bcnn_forward_softmax_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 int bcnn_backward_softmax_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                     bcnn_tensor *dst_tensor) {
     int i;
-    int sz = bcnn_tensor_get_size(src_tensor);
+    int sz = bcnn_tensor_size(src_tensor);
 
     for (i = 0; i < sz; ++i)
         src_tensor->grad_data[i] += dst_tensor->grad_data[i];

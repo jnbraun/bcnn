@@ -65,8 +65,8 @@ static float bcnn_update_learning_rate(bcnn_net *net) {
 int bcnn_sgd_optimizer(bcnn_net *net, bcnn_node *node, int batch_size,
                        float learning_rate, float momentum, float decay) {
     bcnn_layer *layer = node->layer;
-    int biases_size = bcnn_tensor_get_size(&layer->biases);
-    int weights_size = bcnn_tensor_get_size(&layer->weights);
+    int biases_size = bcnn_tensor_size(&layer->biases);
+    int weights_size = bcnn_tensor_size(&layer->weights);
 #ifdef BCNN_USE_CUDA
     if (layer->biases.data_gpu && layer->biases.grad_data_gpu) {
         bcnn_cuda_axpy(biases_size, -learning_rate / batch_size,
@@ -105,8 +105,8 @@ int bcnn_sgd_optimizer_graph(bcnn_net *net, bcnn_node *node, int batch_size,
     bcnn_layer *layer = node->layer;
     bcnn_tensor *weights = &net->tensors[node->src[1]];
     bcnn_tensor *biases = &net->tensors[node->src[2]];
-    int biases_size = bcnn_tensor_get_size(biases);
-    int weights_size = bcnn_tensor_get_size(weights);
+    int biases_size = bcnn_tensor_size(biases);
+    int weights_size = bcnn_tensor_size(weights);
 #ifdef BCNN_USE_CUDA
     if (biases->data_gpu && biases->grad_data_gpu) {
         bcnn_cuda_axpy(biases_size, -learning_rate / batch_size,
@@ -143,8 +143,8 @@ int bcnn_adam_optimizer(bcnn_net *net, bcnn_node *node, int iter,
     bcnn_layer *layer = node->layer;
     float mu_correction = sqrtf(1.0f - powf(beta2, (float)iter + 1)) /
                           (1.0f - powf(beta1, (float)iter + 1));
-    int biases_size = bcnn_tensor_get_size(&layer->biases);
-    int weights_size = bcnn_tensor_get_size(&layer->weights);
+    int biases_size = bcnn_tensor_size(&layer->biases);
+    int weights_size = bcnn_tensor_size(&layer->weights);
 #ifdef BCNN_USE_CUDA
     if (layer->biases.data_gpu && layer->biases.grad_data_gpu) {
         bcnn_cuda_axpy(biases_size, -learning_rate / batch_size,
@@ -212,8 +212,8 @@ int bcnn_adam_optimizer_graph(bcnn_net *net, bcnn_node *node, int iter,
                           (1.0f - powf(beta1, (float)iter + 1));
     bcnn_tensor *weights = &net->tensors[node->src[1]];
     bcnn_tensor *biases = &net->tensors[node->src[2]];
-    int biases_size = bcnn_tensor_get_size(biases);
-    int weights_size = bcnn_tensor_get_size(weights);
+    int biases_size = bcnn_tensor_size(biases);
+    int weights_size = bcnn_tensor_size(weights);
 #ifdef BCNN_USE_CUDA
     if (biases->data_gpu && biases->grad_data_gpu) {
         bcnn_cuda_axpy(biases_size, -learning_rate / batch_size,
@@ -284,15 +284,13 @@ int bcnn_update(bcnn_net *net) {
                                    net->learner.momentum, net->learner.decay);
             }
 #else
-            if (type == CONVOLUTIONAL || type == FULL_CONNECTED) {
+            if ((type == CONVOLUTIONAL || type == DECONVOLUTIONAL ||
+                 type == DEPTHWISE_CONV || type == FULL_CONNECTED ||
+                 (type == ACTIVATION &&
+                  net->nodes[i].layer->activation == PRELU))) {
                 bcnn_sgd_optimizer_graph(net, &net->nodes[i], net->batch_size,
                                          lr, net->learner.momentum,
                                          net->learner.decay);
-            } else if ((type == DECONVOLUTIONAL || type == DEPTHWISE_CONV ||
-                        (type == ACTIVATION &&
-                         net->nodes[i].layer->activation == PRELU))) {
-                bcnn_sgd_optimizer(net, &net->nodes[i], net->batch_size, lr,
-                                   net->learner.momentum, net->learner.decay);
             }
 #endif  // GRAPH_TOPOLOGY
         }
@@ -310,18 +308,14 @@ int bcnn_update(bcnn_net *net) {
                                     net->learner.momentum, net->learner.decay);
             }
 #else
-            if (type == CONVOLUTIONAL || type == FULL_CONNECTED) {
+            if ((type == CONVOLUTIONAL || type == DECONVOLUTIONAL ||
+                 type == DEPTHWISE_CONV || type == FULL_CONNECTED ||
+                 (type == ACTIVATION &&
+                  net->nodes[i].layer->activation == PRELU))) {
                 bcnn_adam_optimizer_graph(
                     net, &net->nodes[i], net->seen, net->batch_size,
                     net->learner.beta1, net->learner.beta2, lr,
                     net->learner.momentum, net->learner.decay);
-            } else if ((type == DECONVOLUTIONAL || type == DEPTHWISE_CONV ||
-                        (type == ACTIVATION &&
-                         net->nodes[i].layer->activation == PRELU))) {
-                bcnn_adam_optimizer(net, &net->nodes[i], net->seen,
-                                    net->batch_size, net->learner.beta1,
-                                    net->learner.beta2, lr,
-                                    net->learner.momentum, net->learner.decay);
             }
 #endif  // GRAPH_TOPOLOGY
         }

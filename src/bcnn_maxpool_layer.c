@@ -72,7 +72,7 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *src_id,
     node.layer->size = size;
     node.layer->stride = stride;
 
-    sz = bcnn_tensor_get_size(&net->tensors[node.dst[0]]);
+    sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
     node.layer->indexes = (int *)calloc(sz, sizeof(int));
 #ifdef BCNN_USE_CUDA
     node.layer->indexes_gpu = bcnn_cuda_malloc_i32(sz);
@@ -166,7 +166,7 @@ int bcnn_backward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                     bcnn_tensor *dst_tensor) {
     int i, index;
 
-    int sz = bcnn_tensor_get_size(dst_tensor);
+    int sz = bcnn_tensor_size(dst_tensor);
 
     for (i = 0; i < sz; ++i) {
         index = layer->indexes[i];

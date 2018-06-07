@@ -62,7 +62,7 @@ int bcnn_add_avgpool_layer(bcnn_net *net, int size, int stride, char *src_id,
 
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = AVGPOOL;
-    sz = bcnn_tensor_get_size(&net->tensors[node.dst[0]]);
+    sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
 
     bcnn_net_add_node(net, node);
 

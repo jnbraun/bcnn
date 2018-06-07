@@ -174,7 +174,7 @@ int bcnn_forward_activation_layer_cpu(bcnn_layer *layer,
                                       bcnn_tensor *src_tensor,
                                       bcnn_tensor *dst_tensor,
                                       bcnn_tensor *weights) {
-    int sz = bcnn_tensor_get_size(dst_tensor);
+    int sz = bcnn_tensor_size(dst_tensor);
     dst_tensor->data = src_tensor->data;
     if (layer->activation == PRELU) {
         bcnn_forward_prelu(dst_tensor->data, weights->data, sz,
@@ -188,7 +188,7 @@ int bcnn_forward_activation_layer_cpu(bcnn_layer *layer,
 int bcnn_forward_activation_layer_cpu(bcnn_layer *layer,
                                       bcnn_tensor *src_tensor,
                                       bcnn_tensor *dst_tensor) {
-    int sz = bcnn_tensor_get_size(dst_tensor);
+    int sz = bcnn_tensor_size(dst_tensor);
     dst_tensor->data = src_tensor->data;
     if (layer->activation == PRELU) {
         bcnn_forward_prelu(dst_tensor->data, layer->weights.data, sz,
@@ -272,7 +272,7 @@ int bcnn_backward_activation_layer_cpu(bcnn_layer *layer,
                                        bcnn_tensor *src_tensor,
                                        bcnn_tensor *dst_tensor,
                                        bcnn_tensor *weights) {
-    int sz = bcnn_tensor_get_size(dst_tensor);
+    int sz = bcnn_tensor_size(dst_tensor);
 
     if (layer->activation == PRELU) {
         bcnn_backward_prelu(dst_tensor->data, dst_tensor->grad_data,
@@ -290,7 +290,7 @@ int bcnn_backward_activation_layer_cpu(bcnn_layer *layer,
 int bcnn_backward_activation_layer_cpu(bcnn_layer *layer,
                                        bcnn_tensor *src_tensor,
                                        bcnn_tensor *dst_tensor) {
-    int sz = bcnn_tensor_get_size(dst_tensor);
+    int sz = bcnn_tensor_size(dst_tensor);
 
     if (layer->activation == PRELU) {
         bcnn_backward_prelu(dst_tensor->data, dst_tensor->grad_data,

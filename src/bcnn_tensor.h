@@ -97,7 +97,7 @@ void bcnn_tensor_allocate(bcnn_tensor *t);
 
 void bcnn_tensor_free(bcnn_tensor *t);
 
-int bcnn_tensor_get_size(bcnn_tensor *tensor);
+int bcnn_tensor_size(bcnn_tensor *tensor);
 
 int bcnn_tensor_get_size3d(bcnn_tensor *t);
 

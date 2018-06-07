@@ -72,7 +72,7 @@ int bcnn_backward_softmax_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor, 
 {
     
     
-    int size = bcnn_tensor_get_size(src_tensor);
+    int size = bcnn_tensor_size(src_tensor);
 
     bcnn_cuda_axpy(size, 1, dst_tensor->grad_data_gpu, 1, src_tensor->grad_data_gpu, 1);
 

@@ -45,7 +45,7 @@ __global__ void _bcnn_forward_avgpool_layer_kernel(int sz, int c, int h, int w,
 
 int bcnn_forward_avgpool_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                    bcnn_tensor *dst_tensor) {
-    int sz = bcnn_tensor_get_size(dst_tensor);
+    int sz = bcnn_tensor_size(dst_tensor);
 
     _bcnn_forward_avgpool_layer_kernel<<<bcnn_cuda_gridsize(sz),
                                          BCNN_CUDA_THREADS>>>(
@@ -75,7 +75,7 @@ __global__ void _bcnn_backward_avgpool_layer_kernel(int sz, int c, int h, int w,
 
 int bcnn_backward_avgpool_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                     bcnn_tensor *dst_tensor) {
-    int sz = bcnn_tensor_get_size(dst_tensor);
+    int sz = bcnn_tensor_size(dst_tensor);
 
     _bcnn_backward_avgpool_layer_kernel<<<bcnn_cuda_gridsize(sz),
                                           BCNN_CUDA_THREADS>>>(

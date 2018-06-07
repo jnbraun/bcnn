@@ -76,7 +76,7 @@ int bcnn_forward_maxpool_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             &one, layer->src_tensor_desc, src_tensor->data_gpu, &zero,
             layer->dst_tensor_desc, dst_tensor->data_gpu));
     #else*/
-    int sz = bcnn_tensor_get_size(dst_tensor);
+    int sz = bcnn_tensor_size(dst_tensor);
 
     _bcnn_forward_maxpool_layer_kernel<<<bcnn_cuda_gridsize(sz),
                                          BCNN_CUDA_THREADS>>>(
@@ -141,7 +141,7 @@ int bcnn_backward_maxpool_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             layer->src_tensor_desc, src_tensor->data_gpu, &zero,
     layer->src_tensor_desc, src_tensor->grad_data_gpu));
     #else*/
-    int sz = bcnn_tensor_get_size(src_tensor);
+    int sz = bcnn_tensor_size(src_tensor);
 
     _bcnn_backward_maxpool_layer_kernel<<<bcnn_cuda_gridsize(sz),
                                           BCNN_CUDA_THREADS>>>(

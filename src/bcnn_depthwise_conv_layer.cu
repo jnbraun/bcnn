@@ -68,10 +68,37 @@ __global__ void _bcnn_forward_depthwise_sep_conv_weight_kernel(
     }
 }
 
+#ifdef GRAPH_TOPOLOGY
+int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
+                                              bcnn_tensor *src_tensor,
+                                              bcnn_tensor *dst_tensor,
+                                              bcnn_tensor *weights,
+                                              bcnn_tensor *biases) {
+    int sz = bcnn_tensor_size(dst_tensor);
+    /*bh_timer t = { 0 };
+    bh_timer_start(&t);*/
+
+    _bcnn_forward_depthwise_sep_conv_weight_kernel<<<bcnn_cuda_blocks(sz),
+                                                     BCNN_CUDA_THREADS>>>(
+        sz, src_tensor->data_gpu, weights->data_gpu, dst_tensor->c, dst_tensor->h, dst_tensor->w, src_tensor->h,
+        src_tensor->w, layer->size, layer->stride, layer->pad, dst_tensor->data_gpu);
+    bcnn_cuda_check(cudaPeekAtLastError());
+
+    bcnn_cuda_add_bias(dst_tensor->data_gpu, biases->data_gpu, dst_tensor->n, src_tensor->c,
+                       dst_tensor->h * dst_tensor->w);
+
+    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, layer->activation);
+    /*bh_timer_stop(&t);
+    fprintf(stderr, "sepconv-forward-time %lf sec\n", bh_timer_get_msec(&t) /
+    1000);*/
+
+    return BCNN_SUCCESS;
+}
+#else
 int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
                                               bcnn_tensor *src_tensor,
                                               bcnn_tensor *dst_tensor) {
-    int sz = bcnn_tensor_get_size(dst_tensor);
+    int sz = bcnn_tensor_size(dst_tensor);
     /*bh_timer t = { 0 };
     bh_timer_start(&t);*/
 
@@ -91,6 +118,7 @@ int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
 
     return BCNN_SUCCESS;
 }
+#endif
 
 __global__ void _bcnn_backward_depthwise_sep_conv_weight_kernel(
     int nthreads, float *dst_grad, float *src_data, int batch_size,
@@ -163,11 +191,55 @@ __global__ void _bcnn_backward_depthwise_sep_conv_data_kernel(
     }
 }
 
+#ifdef GRAPH_TOPOLOGY
+int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
+                                               bcnn_tensor *src_tensor,
+                                               bcnn_tensor *dst_tensor,
+                                               bcnn_tensor *weights,
+                                               bcnn_tensor *biases) {
+    int src_sz = bcnn_tensor_size(src_tensor);
+    int dst_sz = bcnn_tensor_size(dst_tensor);
+    /*bh_timer t = { 0 };
+    bh_timer_start(&t);*/
+
+    if (src_tensor->grad_data_gpu)
+        bcnn_cuda_fill_f32(src_sz, 0.0f, src_tensor->grad_data_gpu, 1);
+
+    bcnn_backward_activation_gpu(dst_tensor->data_gpu, dst_tensor->grad_data_gpu,
+                                 dst_tensor->w * dst_tensor->h * dst_tensor->c * dst_tensor->n,
+                                 layer->activation);
+
+    bcnn_cuda_grad_bias(biases->grad_data_gpu, dst_tensor->grad_data_gpu, src_tensor->n,
+                        src_tensor->c, dst_tensor->w * dst_tensor->h);
+
+    _bcnn_backward_depthwise_sep_conv_weight_kernel<<<bcnn_cuda_blocks(src_sz),
+                                                      BCNN_CUDA_THREADS>>>(
+        src_sz, dst_tensor->grad_data_gpu, src_tensor->data_gpu, src_tensor->n, src_tensor->c, dst_tensor->h, dst_tensor->w,
+        src_tensor->h, src_tensor->w, layer->size, layer->stride, layer->pad,
+        weights->grad_data_gpu);
+    bcnn_cuda_check(cudaPeekAtLastError());
+
+    if (src_tensor->grad_data_gpu) {
+        _bcnn_backward_depthwise_sep_conv_data_kernel<<<
+            bcnn_cuda_blocks(src_sz), BCNN_CUDA_THREADS>>>(
+            src_sz, dst_tensor->grad_data_gpu, weights->data_gpu, src_tensor->n, src_tensor->c,
+            dst_tensor->h, dst_tensor->w, src_tensor->h, src_tensor->w, layer->size, layer->stride, layer->pad,
+            src_tensor->grad_data_gpu);
+        bcnn_cuda_check(cudaPeekAtLastError());
+    }
+
+    /*bh_timer_stop(&t);
+    fprintf(stderr, "sepconv-backward-time %lf sec\n", bh_timer_get_msec(&t) /
+    1000);*/
+
+    return BCNN_SUCCESS;
+}
+#else
 int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
                                                bcnn_tensor *src_tensor,
                                                bcnn_tensor *dst_tensor) {
-    int src_sz = bcnn_tensor_get_size(src_tensor);
-    int dst_sz = bcnn_tensor_get_size(dst_tensor);
+    int src_sz = bcnn_tensor_size(src_tensor);
+    int dst_sz = bcnn_tensor_size(dst_tensor);
     /*bh_timer t = { 0 };
     bh_timer_start(&t);*/
 
@@ -203,5 +275,6 @@ int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
 
     return BCNN_SUCCESS;
 }
+#endif
 
 #endif

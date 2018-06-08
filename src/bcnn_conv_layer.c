@@ -94,8 +94,10 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     bcnn_tensor weights = {0};
     char weights_name[256];
     sprintf(weights_name, "%s_w", src_id);
-    bcnn_tensor_create(&weights, 1, 1, 1,
+    /*bcnn_tensor_create(&weights, 1, 1, 1,
                        net->tensors[node.src[0]].c * n * size * size, 1,
+                       weights_name);*/
+    bcnn_tensor_create(&weights, n, net->tensors[node.src[0]].c, size, size, 1,
                        weights_name);
     bcnn_tensor_filler w_filler = {
         .range = (size * size * net->tensors[node.src[0]].c), .type = init};

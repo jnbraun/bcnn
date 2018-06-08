@@ -6,6 +6,7 @@
 #include <bh/bh.h>
 #include <bh/bh_error.h>
 #include <bh/bh_string.h>
+#include <bip/bip.h>
 
 /* tflite generated flatbuffers */
 #include "schema_generated.h"
@@ -13,6 +14,11 @@
 using flatbuffers::FlatBufferBuilder;
 using flatbuffers::Offset;
 using flatbuffers::Vector;
+
+typedef struct {
+    bcnn_tensor* p_tensor;
+    bool need_to_write;
+} buffer_to_write;
 
 void load_test_model(bcnn_net* net, char* model_path) {
     bcnn_net_set_input_shape(net, 40, 40, 1, 1);
@@ -34,19 +40,77 @@ void load_test_model(bcnn_net* net, char* model_path) {
     return;
 }
 
+void run_bcnn_reference(bcnn_net* net, char* img_path) {
+    unsigned char* img = NULL;
+    int w, h, c;
+    bip_load_image(img_path, &img, &w, &h, &c);
+    // bh_check(c == 1, "Error: Need gray image as input");
+    // bh_check(w == 40 && h == 40, "Error: input size must be 40x40");
+
+    bcnn_convert_img_to_float2(img, w, h, c, 1 / 127.5f, 0, 127.5f, 127.5f,
+                               127.5f, net->tensors[0].data);
+    for (int i = 0; i < 5; ++i) {
+        fprintf(stderr, "%f ", net->tensors[0].data[i]);
+    }
+    fprintf(stderr, "\n");
+    bcnn_forward(net);
+
+    for (int i = 0; i < 5; ++i) {
+        fprintf(stderr, "%f ", net->tensors[2].data[i]);
+    }
+    fprintf(stderr, "\n");
+    bcnn_forward(net);
+    for (int i = 0; i < 5; ++i) {
+        fprintf(stderr, "%f ", net->tensors[3].data[i]);
+    }
+    fprintf(stderr, "\n");
+    bcnn_forward(net);
+    for (int i = 0; i < 5; ++i) {
+        fprintf(stderr, "%f ", net->tensors[4].data[i]);
+    }
+    fprintf(stderr, "\n");
+    bcnn_forward(net);
+    for (int i = 0; i < 5; ++i) {
+        fprintf(stderr, "%f ", net->tensors[5].data[i]);
+    }
+    fprintf(stderr, "\n");
+    bcnn_forward(net);
+
+    float* out = net->tensors[net->num_tensors - 1].data;
+    for (int i = 0; i < 5; ++i) {
+        fprintf(stderr, "%f ", out[i]);
+    }
+    fprintf(stderr, "\n");
+    bh_free(img);
+
+    return;
+}
+
 flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<tflite::Tensor>>>
-export_tensors(bcnn_net* net, FlatBufferBuilder* builder,
-               std::vector<const bcnn_tensor*>* buffers_to_write) {
+export_tensors(
+    bcnn_net* net, FlatBufferBuilder* builder,
+    std::vector</*bcnn_tensor**/ buffer_to_write>* buffers_to_write) {
     std::vector<flatbuffers::Offset<tflite::Tensor>> tensor_vector;
     tensor_vector.reserve(net->num_tensors);
     fprintf(stderr, "net->num_tensors %d\n", net->num_tensors);
     for (int i = 0; i < net->num_tensors; ++i) {
         int buffer_index = buffers_to_write->size();
-        buffers_to_write->push_back(&net->tensors[i]);
+        buffers_to_write->push_back(
+            {.p_tensor = &net->tensors[i], .need_to_write = false});
         // shape: [batch size, height, width, number of channels] (That's
         // Tensorflow's NHWC)
-        std::vector<int> shape = {net->tensors[i].n, net->tensors[i].c,
-                                  net->tensors[i].h, net->tensors[i].w};
+        std::vector<int> shape = {net->tensors[i].n, net->tensors[i].h,
+                                  net->tensors[i].w, net->tensors[i].c};
+        for (int n = 0; n < net->num_nodes; ++n) {
+            if (net->nodes[n].layer->type == FULL_CONNECTED) {
+                if (net->nodes[n].src[1] == i) {
+                    // Special case for weights of FullyConnected as TFlite only
+                    // accepts 2-D tensor
+                    shape.clear();
+                    shape = {net->tensors[i].n, net->tensors[i].c};
+                }
+            }
+        }
         tensor_vector.push_back(tflite::CreateTensorDirect(
             *builder, &shape, tflite::TensorType_FLOAT32, buffer_index,
             net->tensors[i].name,
@@ -68,7 +132,7 @@ flatbuffers::Offset<flatbuffers::Vector<int32_t>> export_output_tensors(
     bcnn_net* net, FlatBufferBuilder* builder) {
     std::vector<int32_t> outputs;
     // Super hacky
-    outputs.push_back(net->num_tensors - 1);
+    outputs.push_back(/*net->num_tensors - 1*/ 4);
     return builder->CreateVector<int32_t>(outputs);
 }
 
@@ -147,9 +211,11 @@ export_operator_codes(
 }
 
 flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<tflite::Operator>>>
-export_operators(bcnn_net* net, FlatBufferBuilder* builder) {
+export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
+                 FlatBufferBuilder* builder) {
     std::vector<flatbuffers::Offset<tflite::Operator>> op_vector;
     for (int i = 0; i < net->num_nodes; ++i) {
+        bcnn_layer* layer = net->nodes[i].layer;
         // We need to check manually for each type of layer, the inputs /
         // outputs
         std::vector<int32_t> inputs;
@@ -160,13 +226,20 @@ export_operators(bcnn_net* net, FlatBufferBuilder* builder) {
                     net->tensors[net->nodes[i].src[j]].h,
                     net->tensors[net->nodes[i].src[j]].c);
             inputs.push_back(net->nodes[i].src[j]);
+            if (layer->type == CONVOLUTIONAL ||
+                layer->type == DECONVOLUTIONAL ||
+                layer->type == DEPTHWISE_CONV ||
+                layer->type == FULL_CONNECTED) {
+                // Set the weights and bias buffer writable
+                buffers_to_write->at(net->nodes[i].src[1]).need_to_write = true;
+                buffers_to_write->at(net->nodes[i].src[2]).need_to_write = true;
+            }
         }
         std::vector<int32_t> outputs;
         for (int j = 0; j < net->nodes[i].num_dst; ++j) {
             fprintf(stderr, "outputs %d tensor %d\n", j, net->nodes[i].dst[j]);
             outputs.push_back(net->nodes[i].dst[j]);
         }
-        bcnn_layer* layer = net->nodes[i].layer;
         tflite::BuiltinOptions type;
         flatbuffers::Offset<void> offset;
         if (layer->type != ACTIVATION) {
@@ -196,7 +269,8 @@ export_operators(bcnn_net* net, FlatBufferBuilder* builder) {
                     flatbuffers::Offset<tflite::DepthwiseConv2DOptions>
                         dw_conv_options = tflite::CreateDepthwiseConv2DOptions(
                             *builder, tflite::Padding_SAME, layer->stride,
-                            layer->stride, /*depth_multiplier=*/1,
+                            layer->stride,
+                            /*depth_multiplier=*/1,
                             bcnn_tflite_fused_act_map.at(layer->activation));
                     type = tflite::BuiltinOptions_DepthwiseConv2DOptions;
                     offset = dw_conv_options.Union();
@@ -233,13 +307,15 @@ export_operators(bcnn_net* net, FlatBufferBuilder* builder) {
                 }
                 case SOFTMAX: {
                     flatbuffers::Offset<tflite::SoftmaxOptions> options =
-                        tflite::CreateSoftmaxOptions(*builder, /*beta=*/1.0f);
+                        tflite::CreateSoftmaxOptions(*builder,
+                                                     /*beta=*/1.0f);
                     type = tflite::BuiltinOptions_SoftmaxOptions;
                     offset = options.Union();
                     break;
                 }
                     /*case PRELU:
-                        // TODO: graph transformation as :PRelu(x) = Relu(x) +
+                        // TODO: graph transformation as :PRelu(x) = Relu(x)
+                       +
                         // (-alpha * Relu(-x))
                         fprintf(stderr, "PRelu not supported currently\n");
                         break;*/
@@ -258,17 +334,25 @@ export_operators(bcnn_net* net, FlatBufferBuilder* builder) {
 flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<tflite::Buffer>>>
 export_buffers(
     bcnn_net* net, /*const std::vector<const Array*>& buffers_to_write*/
-    std::vector<const bcnn_tensor*>& buffers_to_write,
+    std::vector</*bcnn_tensor**/ buffer_to_write>& buffers_to_write,
     FlatBufferBuilder* builder) {
     std::vector<flatbuffers::Offset<tflite::Buffer>> buffer_vector;
     size_t index = 0;
-    for (const bcnn_tensor* tensor_ptr : buffers_to_write) {
-        uint8_t* dst_data = (uint8_t*)tensor_ptr->data;
-        size_t size = tensor_ptr->w * tensor_ptr->h * tensor_ptr->c *
-                      tensor_ptr->n * sizeof(float);
-        flatbuffers::Offset<flatbuffers::Vector<uint8_t>> data_buffer =
-            builder->CreateVector(dst_data, size);
-        buffer_vector.push_back(tflite::CreateBuffer(*builder, data_buffer));
+    for (buffer_to_write buf_ptr : buffers_to_write) {
+        if (buf_ptr.need_to_write) {  // weights and bias
+            uint8_t* dst_data = (uint8_t*)buf_ptr.p_tensor->data;
+            size_t size = buf_ptr.p_tensor->w * buf_ptr.p_tensor->h *
+                          buf_ptr.p_tensor->c * buf_ptr.p_tensor->n *
+                          sizeof(float);
+            flatbuffers::Offset<flatbuffers::Vector<uint8_t>> data_buffer =
+                builder->CreateVector(dst_data, size);
+            buffer_vector.push_back(
+                tflite::CreateBuffer(*builder, data_buffer));
+        } else {
+            flatbuffers::Offset<flatbuffers::Vector<uint8_t>> data_buffer = 0;
+            buffer_vector.push_back(
+                tflite::CreateBuffer(*builder, data_buffer));
+        }
         index++;
     }
     return builder->CreateVector(buffer_vector);
@@ -286,7 +370,7 @@ void convert_bcnn_to_flatbuffers_tflite(bcnn_net* net,
     flatbuffers::FlatBufferBuilder builder(/*initial_size=*/10240);
 
     // Export tensors
-    std::vector<const bcnn_tensor*> buffers_to_write;
+    std::vector</*bcnn_tensor**/ buffer_to_write> buffers_to_write;
     // bcnn_tensor empty_array;
     // buffers_to_write.push_back(&empty_array);
 
@@ -295,7 +379,7 @@ void convert_bcnn_to_flatbuffers_tflite(bcnn_net* net,
     auto outputs = export_output_tensors(net, &builder);
     auto op_codes = export_operator_codes(net, /*bcnn_tflite_ops_map,
                                           bcnn_tflite_act_map,*/ &builder);
-    auto ops = export_operators(net, &builder);
+    auto ops = export_operators(net, &buffers_to_write, &builder);
     auto subgraph =
         tflite::CreateSubGraph(builder, tensors, inputs, outputs, ops);
     std::vector<flatbuffers::Offset<tflite::SubGraph>> subgraphs = {subgraph};
@@ -317,6 +401,21 @@ void convert_bcnn_to_flatbuffers_tflite(bcnn_net* net,
     fclose(f_tflite);
 }
 
+#define CHECK_REFERENCE
+#ifdef CHECK_REFERENCE
+int main(int argc, char** argv) {
+    if (argc < 3) {
+        fprintf(stderr, "Usage: %s <in.bcnnmodel> <img>\n", argv[0]);
+        return -1;
+    }
+    bcnn_net* net = NULL;
+    bcnn_init_net(&net);
+    load_test_model(net, argv[1]);
+    run_bcnn_reference(net, argv[2]);
+    bcnn_end_net(&net);
+    return 0;
+}
+#else
 int main(int argc, char** argv) {
     if (argc < 4) {
         fprintf(stderr, "Usage: %s <in.bcnnconf> <in.bcnnmodel> <out.tflite>\n",
@@ -330,3 +429,4 @@ int main(int argc, char** argv) {
     bcnn_end_net(&net);
     return 0;
 }
+#endif

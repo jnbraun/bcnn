@@ -51,14 +51,14 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *src_id,
         &dst_tensor,
         net->tensors[node.src[0]].n,  // batch size
         net->tensors[node.src[0]].c,  // depth
-        /*(int)(ceil((float)(net->tensors[node.src[0]].h - size) / stride)) +
-            1*/ (
-            net->tensors[node.src[0]].w + (size - 1) / 2) /
-            stride,  // height
-        /*(int)(ceil((float)(net->tensors[node.src[0]].w - size) / stride)) +
-            1*/ (
+        (int)(ceil((float)(net->tensors[node.src[0]].h - size) / stride)) +
+            1 /*(
             net->tensors[node.src[0]].h + (size - 1) / 2) /
-            stride,  // width
+            stride*/,  // height
+        (int)(ceil((float)(net->tensors[node.src[0]].w - size) / stride)) +
+            1 /*(
+            net->tensors[node.src[0]].w + (size - 1) / 2) /
+            stride*/,  // width
         1);
     bcnn_tensor_allocate(&dst_tensor);
     bh_strfill(&dst_tensor.name, dst_id);

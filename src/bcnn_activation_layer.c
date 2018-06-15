@@ -53,7 +53,7 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
     node.layer->activation = type;
     if (type == PRELU) {
         char weights_name[256];
-        sprintf(weights_name, "%s_w", src_id);
+        sprintf(weights_name, "%s_w_prelu", src_id);
 #ifndef GRAPH_TOPOLOGY
         bcnn_tensor_create(&node.layer->weights, 1, 1, 1,
                            net->tensors[node.src[0]].c, 1, weights_name);
@@ -312,7 +312,7 @@ int bcnn_forward_activation_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef GRAPH_TOPOLOGY
     bcnn_tensor *weights = NULL;
     if (node->layer->activation == PRELU) {
-        bcnn_tensor *weights = &net->tensors[node->src[1]];
+        weights = &net->tensors[node->src[1]];
     }
 #ifdef BCNN_USE_CUDA
     return bcnn_forward_activation_layer_gpu(node->layer, src, dst, weights);
@@ -334,7 +334,7 @@ int bcnn_backward_activation_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef GRAPH_TOPOLOGY
     bcnn_tensor *weights = NULL;
     if (node->layer->activation == PRELU) {
-        bcnn_tensor *weights = &net->tensors[node->src[1]];
+        weights = &net->tensors[node->src[1]];
     }
 #ifdef BCNN_USE_CUDA
     return bcnn_backward_activation_layer_gpu(node->layer, src, dst, weights);

@@ -79,8 +79,11 @@ int bcnn_add_fullc_layer(bcnn_net *net, int output_size, bcnn_filler_type init,
     bcnn_tensor weights = {0};
     /*bcnn_tensor_create(&weights, 1, 1, 1, input_size * output_size, 1,
                        weights_name);*/
-    bcnn_tensor_create(&weights, output_size, input_size, 1, 1, 1,
-                       weights_name);
+    /*bcnn_tensor_create(&weights, output_size, input_size, 1, 1, 1,
+                       weights_name);*/
+    bcnn_tensor_create(&weights, output_size, net->tensors[node.src[0]].c,
+                       net->tensors[node.src[0]].h, net->tensors[node.src[0]].w,
+                       1, weights_name);
     bcnn_tensor_filler w_filler = {.range = input_size, .type = init};
     bcnn_tensor_fill(&weights, w_filler);
     bcnn_net_add_tensor(net, weights);

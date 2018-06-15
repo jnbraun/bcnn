@@ -227,6 +227,7 @@ typedef enum {
     BATCHNORM,
     CONCAT,
     YOLO,
+    RESHAPE,
     COST
 } bcnn_layer_type;
 

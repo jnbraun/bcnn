@@ -470,10 +470,11 @@ void convert_bcnn_to_flatbuffers_tflite(bcnn_net* net,
     fclose(f_tflite);
 }
 
-int add_layer(bcnn_net* net, char* curr_layer, int stride, int pad, int n_filts,
-              int size, int outputs, bcnn_activation a, float rate,
-              bcnn_loss_metric cost, bcnn_filler_type init, bcnn_loss loss,
-              char* src_id, char* dst_id) {
+int add_layer(bcnn_net* net, char* curr_layer, int stride, int pad,
+              bcnn_padding padding_type, int n_filts, int size, int outputs,
+              bcnn_activation a, float rate, bcnn_loss_metric cost,
+              bcnn_filler_type init, bcnn_loss loss, char* src_id,
+              char* dst_id) {
     bh_check(src_id != NULL,
              "Invalid input node name. "
              "Hint: Are you sure that 'src' field is correctly "
@@ -533,7 +534,7 @@ int add_layer(bcnn_net* net, char* curr_layer, int stride, int pad, int n_filts,
                  "Invalid output node name. "
                  "Hint: Are you sure that 'dst' field is "
                  "correctly setup?");
-        bcnn_add_maxpool_layer(net, size, stride, src_id, dst_id);
+        bcnn_add_maxpool_layer(net, size, stride, padding_type, src_id, dst_id);
     } else if (strcmp(curr_layer, "{dropout}") == 0) {
         bcnn_add_dropout_layer(net, rate, src_id);
     } else if (strcmp(curr_layer, "{cost}") == 0) {
@@ -553,6 +554,7 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
     char *line = NULL, *curr_layer = NULL;
     char** tok = NULL;
     int nb_lines = 0, nb_layers = 0;
+    bcnn_padding padding_type;
     int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0;
     bcnn_activation a = NONE;
     bcnn_filler_type init = XAVIER;
@@ -585,9 +587,9 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
                             net, net->input_width, net->input_height,
                             net->input_channels, net->batch_size);
                     }
-                    add_layer(net, curr_layer, stride, pad, n_filts, size,
-                              outputs, a, rate, cost, init, loss, src_id,
-                              dst_id);
+                    add_layer(net, curr_layer, stride, pad, padding_type,
+                              n_filts, size, outputs, a, rate, cost, init, loss,
+                              src_id, dst_id);
                     bh_free(curr_layer);
                     bh_free(src_id);
                     bh_free(dst_id);
@@ -651,7 +653,14 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
                     stride = atoi(tok[1]);
                 else if (strcmp(tok[0], "pad") == 0)
                     pad = atoi(tok[1]);
-                else if (strcmp(tok[0], "src") == 0)
+                else if (strcmp(tok[0], "padding_type") == 0) {
+                    if (strcmp(tok[1], "same") == 0)
+                        padding_type = PADDING_SAME;
+                    else if (strcmp(tok[1], "valid") == 0)
+                        padding_type = PADDING_VALID;
+                    else if (strcmp(tok[1], "caffe") == 0)
+                        padding_type = PADDING_CAFFE;
+                } else if (strcmp(tok[0], "src") == 0)
                     bh_fill_option(&src_id, tok[1]);
                 else if (strcmp(tok[0], "dst") == 0)
                     bh_fill_option(&dst_id, tok[1]);
@@ -736,8 +745,8 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
         }
     }
     // Add last layer
-    add_layer(net, curr_layer, stride, pad, n_filts, size, outputs, a, rate,
-              cost, init, loss, src_id, dst_id);
+    add_layer(net, curr_layer, stride, pad, padding_type, n_filts, size,
+              outputs, a, rate, cost, init, loss, src_id, dst_id);
     bh_free(src_id);
     bh_free(dst_id);
     bh_free(curr_layer);

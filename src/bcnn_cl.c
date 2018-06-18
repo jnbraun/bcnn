@@ -38,6 +38,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     char *line = NULL, *curr_layer = NULL;
     char **tok = NULL;
     int nb_lines = 0, nb_layers = 0;
+    bcnn_padding padding_type = PADDING_SAME;
     int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0;
     bcnn_activation a = NONE;
     bcnn_filler_type init = XAVIER;
@@ -132,8 +133,8 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                                  "Invalid output node name. "
                                  "Hint: Are you sure that 'dst' field is "
                                  "correctly setup?");
-                        bcnn_add_maxpool_layer(net, size, stride, src_id,
-                                               dst_id);
+                        bcnn_add_maxpool_layer(net, size, stride, padding_type,
+                                               src_id, dst_id);
                     } else if (strcmp(curr_layer, "{dropout}") == 0) {
                         bcnn_add_dropout_layer(net, rate, src_id);
                     } else {
@@ -209,7 +210,14 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     bh_fill_option(&dst_id, tok[1]);
                 else if (strcmp(tok[0], "output") == 0)
                     outputs = atoi(tok[1]);
-                else if (strcmp(tok[0], "function") == 0) {
+                else if (strcmp(tok[0], "padding_type") == 0) {
+                    if (strcmp(tok[1], "same") == 0)
+                        padding_type = PADDING_SAME;
+                    else if (strcmp(tok[1], "valid") == 0)
+                        padding_type = PADDING_VALID;
+                    else if (strcmp(tok[1], "caffe") == 0)
+                        padding_type = PADDING_CAFFE;
+                } else if (strcmp(tok[0], "function") == 0) {
                     if (strcmp(tok[1], "relu") == 0)
                         a = RELU;
                     else if (strcmp(tok[1], "tanh") == 0)

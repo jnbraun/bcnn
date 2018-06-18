@@ -314,27 +314,33 @@ int setup_yolo_tiny_net(bcnn_net *net, int input_width, int input_height,
 
     bcnn_add_convolutional_layer(net, 16, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"input", (char *)"conv1");
-    bcnn_add_maxpool_layer(net, 2, 2, (char *)"conv1", (char *)"pool1");
+    bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv1",
+                           (char *)"pool1");
 
     bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool1", (char *)"conv2");
-    bcnn_add_maxpool_layer(net, 2, 2, (char *)"conv2", (char *)"pool2");
+    bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv2",
+                           (char *)"pool2");
 
     bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool2", (char *)"conv3");
-    bcnn_add_maxpool_layer(net, 2, 2, (char *)"conv3", (char *)"pool3");
+    bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv3",
+                           (char *)"pool3");
 
     bcnn_add_convolutional_layer(net, 128, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool3", (char *)"conv4");
-    bcnn_add_maxpool_layer(net, 2, 2, (char *)"conv4", (char *)"pool4");
+    bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv4",
+                           (char *)"pool4");
 
     bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool4", (char *)"conv5");
-    bcnn_add_maxpool_layer(net, 2, 2, (char *)"conv5", (char *)"pool5");
+    bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv5",
+                           (char *)"pool5");
 
     bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool5", (char *)"conv6");
-    bcnn_add_maxpool_layer(net, 2, 1, (char *)"conv6", (char *)"pool6");
+    bcnn_add_maxpool_layer(net, 2, 1, PADDING_SAME, (char *)"conv6",
+                           (char *)"pool6");
 
     bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool6", (char *)"conv7");

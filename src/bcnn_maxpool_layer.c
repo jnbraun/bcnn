@@ -26,8 +26,8 @@
 #include "bcnn_utils.h"
 #include "bh_log.h"
 
-int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *src_id,
-                           char *dst_id) {
+int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
+                           bcnn_padding padding, char *src_id, char *dst_id) {
     int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
@@ -46,20 +46,35 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *src_id,
     } else {
         bcnn_node_add_input(&node, 0);
     }
-
-    bcnn_tensor_set_shape(
-        &dst_tensor,
-        net->tensors[node.src[0]].n,  // batch size
-        net->tensors[node.src[0]].c,  // depth
-        (int)(ceil((float)(net->tensors[node.src[0]].h - size) / stride)) +
-            1 /*(
-            net->tensors[node.src[0]].h + (size - 1) / 2) /
-            stride*/,  // height
-        (int)(ceil((float)(net->tensors[node.src[0]].w - size) / stride)) +
-            1 /*(
-            net->tensors[node.src[0]].w + (size - 1) / 2) /
-            stride*/,  // width
-        1);
+    // Compute output size according to padding option
+    int out_h =
+        (padding == PADDING_SAME)
+            ? (net->tensors[node.src[0]].h + stride - 1) / stride
+            : (padding == PADDING_VALID)
+                  ? (net->tensors[node.src[0]].h - size + stride) / stride
+                  : (padding == PADDING_CAFFE)
+                        ? ((int)(ceil(
+                               (float)(net->tensors[node.src[0]].h - size) /
+                               stride)) +
+                           1)
+                        : 0;
+    int out_w =
+        (padding == PADDING_SAME)
+            ? (net->tensors[node.src[0]].w + stride - 1) / stride
+            : (padding == PADDING_VALID)
+                  ? (net->tensors[node.src[0]].w - size + stride) / stride
+                  : (padding == PADDING_CAFFE)
+                        ? ((int)(ceil(
+                               (float)(net->tensors[node.src[0]].w - size) /
+                               stride)) +
+                           1)
+                        : 0;
+    bcnn_tensor_set_shape(&dst_tensor,
+                          net->tensors[node.src[0]].n,  // batch size
+                          net->tensors[node.src[0]].c,  // depth
+                          out_h,                        // height
+                          out_w,                        // width
+                          1);
     bcnn_tensor_allocate(&dst_tensor);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net

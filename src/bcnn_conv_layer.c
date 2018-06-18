@@ -539,7 +539,7 @@ int bcnn_backward_conv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 #endif  // GRAPH_TOPOLOGY
 
 #ifdef BCNN_USE_CUDA
-
+#ifndef GRAPH_TOPOLOGY
 int bcnn_forward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                 bcnn_tensor *dst_tensor) {
     int batch_size = dst_tensor->n;
@@ -634,7 +634,7 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     }
 #else
     if (layer->batch_norm) {
-        bcnn_backward_batchnorm_layer_cpu(layer, dst_tensor, dst_tensor);
+        bcnn_backward_batchnorm_layer_gpu(layer, dst_tensor, dst_tensor);
     } else {
         bcnn_cuda_grad_bias(layer->biases.grad_data_gpu,
                             dst_tensor->grad_data_gpu, batch_size, layer->num,
@@ -682,7 +682,153 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 
     return BCNN_SUCCESS;
 }
+#else
+int bcnn_forward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+                                bcnn_tensor *dst_tensor, bcnn_tensor *weights,
+                                bcnn_tensor *biases, bcnn_tensor *bn_mean,
+                                bcnn_tensor *bn_var, bcnn_tensor *bn_scales) {
+    int batch_size = dst_tensor->n;
+    int sz;
 
+#ifdef BCNN_USE_CUDNN
+    float alpha = 1.0f, beta = 0.0f;
+    bcnn_cudnn_check(cudnnConvolutionForward(
+        bcnn_cudnn_handle(), &alpha, layer->src_tensor_desc,
+        src_tensor->data_gpu, layer->filter_desc, weights->data_gpu,
+        layer->conv_desc, layer->fwd_algo, layer->conv_workspace_gpu,
+        layer->workspace_size, &beta, layer->dst_tensor_desc,
+        dst_tensor->data_gpu));
+    if (!layer->batch_norm) {
+        bcnn_cudnn_check(cudnnAddTensor(
+            bcnn_cudnn_handle(), &alpha, layer->bias_desc, biases->data_gpu,
+            &alpha, layer->dst_tensor_desc, dst_tensor->data_gpu));
+    }
+#else
+    int i, w_sz, out_sz, out_spatial_dim;
+    out_sz = batch_size * dst_tensor->w * dst_tensor->h * dst_tensor->c;
+    w_sz = layer->size * layer->size * src_tensor->c;
+    out_spatial_dim = dst_tensor->w * dst_tensor->h;
+    sz = src_tensor->c * src_tensor->h * src_tensor->w;
+
+    bcnn_cuda_fill_f32(out_sz, 0, dst_tensor->data_gpu, 1);
+    for (i = 0; i < batch_size; ++i) {
+        if (layer->size == 1)
+            layer->conv_workspace_gpu = src_tensor->data_gpu + i * sz;
+        else {
+            bcnn_cuda_im2col(src_tensor->data_gpu + i * sz, src_tensor->c,
+                             src_tensor->h, src_tensor->w, layer->size,
+                             layer->stride, layer->pad,
+                             layer->conv_workspace_gpu);
+        }
+        bcnn_cuda_gemm(0, 0, layer->num, out_spatial_dim, w_sz, 1.0f,
+                       weights->data_gpu, w_sz, layer->conv_workspace_gpu,
+                       out_spatial_dim, 1.0f,
+                       dst_tensor->data_gpu + i * layer->num * out_spatial_dim,
+                       out_spatial_dim);
+    }
+    if (!layer->batch_norm) {
+        bcnn_cuda_add_bias(dst_tensor->data_gpu, biases->data_gpu, batch_size,
+                           layer->num, out_spatial_dim);
+    }
+#endif
+    if (layer->batch_norm) {
+        bcnn_forward_batchnorm_layer_gpu(layer, dst_tensor, dst_tensor, bn_mean,
+                                         bn_var, bn_scales, biases);
+    }
+    sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
+    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, layer->activation);
+
+    return BCNN_SUCCESS;
+}
+
+int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+                                 bcnn_tensor *dst_tensor, bcnn_tensor *weights,
+                                 bcnn_tensor *biases, bcnn_tensor *bn_mean,
+                                 bcnn_tensor *bn_var, bcnn_tensor *bn_scales) {
+    int batch_size = dst_tensor->n;
+#ifndef BCNN_USE_CUDNN
+    int i, sz = src_tensor->w * src_tensor->h * src_tensor->c;
+    int w_sz = layer->size * layer->size * src_tensor->c;
+    int out_spatial_dim = dst_tensor->w * dst_tensor->h;
+#else
+    float one = 1.0f, zero = 0.0f;
+#endif
+
+    bcnn_backward_activation_gpu(
+        dst_tensor->data_gpu, dst_tensor->grad_data_gpu,
+        dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size,
+        layer->activation);
+
+#ifdef BCNN_USE_CUDNN
+    bcnn_cudnn_check(cudnnConvolutionBackwardBias(
+        bcnn_cudnn_handle(), &one, layer->dst_tensor_desc,
+        dst_tensor->grad_data_gpu, &one, layer->bias_desc,
+        biases->grad_data_gpu));
+    bcnn_cudnn_check(cudnnConvolutionBackwardFilter(
+        bcnn_cudnn_handle(), &one, layer->src_tensor_desc, src_tensor->data_gpu,
+        layer->dst_tensor_desc, dst_tensor->grad_data_gpu, layer->conv_desc,
+        layer->bwd_filter_algo, layer->conv_workspace_gpu,
+        layer->workspace_size, &one, layer->filter_desc,
+        weights->grad_data_gpu));
+    if (src_tensor->grad_data_gpu) {
+        bcnn_cudnn_check(cudnnConvolutionBackwardData(
+            bcnn_cudnn_handle(), &one, layer->filter_desc, weights->data_gpu,
+            layer->dst_tensor_desc, dst_tensor->grad_data_gpu, layer->conv_desc,
+            layer->bwd_data_algo, layer->conv_workspace_gpu,
+            layer->workspace_size, &zero, layer->src_tensor_desc,
+            src_tensor->grad_data_gpu));
+    }
+#else
+    if (layer->batch_norm) {
+        bcnn_backward_batchnorm_layer_gpu(layer, dst_tensor, dst_tensor,
+                                          bn_mean, bn_var, bn_scales, biases);
+    } else {
+        bcnn_cuda_grad_bias(biases->grad_data_gpu, dst_tensor->grad_data_gpu,
+                            batch_size, layer->num, out_spatial_dim);
+    }
+    for (i = 0; i < batch_size; ++i) {
+        if (layer->size == 1)
+            layer->conv_workspace_gpu = src_tensor->data_gpu + i * sz;
+        else {
+            bcnn_cuda_im2col(src_tensor->data_gpu + i * sz, src_tensor->c,
+                             src_tensor->h, src_tensor->w, layer->size,
+                             layer->stride, layer->pad,
+                             layer->conv_workspace_gpu);
+        }
+        bcnn_cuda_gemm(
+            0, 1, layer->num, w_sz, out_spatial_dim, 1,
+            dst_tensor->grad_data_gpu + i * layer->num * out_spatial_dim,
+            out_spatial_dim, layer->conv_workspace_gpu, out_spatial_dim, 1,
+            weights->grad_data_gpu, w_sz);
+
+        if (src_tensor->grad_data_gpu) {
+            if (layer->size == 1) {
+                bcnn_cuda_gemm(1, 0, w_sz, out_spatial_dim, layer->num, 1,
+                               weights->data_gpu, w_sz,
+                               dst_tensor->grad_data_gpu +
+                                   i * out_spatial_dim * layer->num,
+                               out_spatial_dim, 0,
+                               src_tensor->grad_data_gpu + i * sz,
+                               out_spatial_dim);
+            } else {
+                bcnn_cuda_gemm(1, 0, w_sz, out_spatial_dim, layer->num, 1,
+                               weights->data_gpu, w_sz,
+                               dst_tensor->grad_data_gpu +
+                                   i * out_spatial_dim * layer->num,
+                               out_spatial_dim, 0, layer->conv_workspace_gpu,
+                               out_spatial_dim);
+                bcnn_cuda_col2im(layer->conv_workspace_gpu, src_tensor->c,
+                                 src_tensor->h, src_tensor->w, layer->size,
+                                 layer->stride, layer->pad,
+                                 src_tensor->grad_data_gpu + i * sz);
+            }
+        }
+    }
+#endif
+
+    return BCNN_SUCCESS;
+}
+#endif  // GRAPH_TOPOLOGY
 #endif
 
 int bcnn_forward_conv_layer(bcnn_net *net, bcnn_node *node) {

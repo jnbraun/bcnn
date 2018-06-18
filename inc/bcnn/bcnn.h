@@ -268,6 +268,15 @@ typedef enum {
 } bcnn_loss_metric;
 
 /**
+ * \brief Available padding types for pooling
+ */
+typedef enum {
+    PADDING_SAME,
+    PADDING_VALID,
+    PADDING_CAFFE /**< Caffe-like padding for compatibility purposes */
+} bcnn_padding;
+
+/**
  * \brief Structure defining a generic layer.
  */
 typedef struct bcnn_layer {
@@ -438,8 +447,8 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type, char *id);
 int bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id);
 
 /* Pooling layer */
-int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride, char *src_id,
-                           char *dst_id);
+int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
+                           bcnn_padding padding, char *src_id, char *dst_id);
 
 /* Concat layer */
 int bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,

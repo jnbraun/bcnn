@@ -53,7 +53,6 @@ void load_yolo_weights(bcnn_net *net, char *model) {
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_layer *layer = net->nodes[i].layer;
         if (layer->type == CONVOLUTIONAL) {
-#ifdef GRAPH_TOPOLOGY
             bcnn_tensor *weights = &net->tensors[net->nodes[i].src[1]];
             bcnn_tensor *biases = &net->tensors[net->nodes[i].src[2]];
             int weights_size = bcnn_tensor_size(weights);
@@ -102,62 +101,7 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             bcnn_cuda_memcpy_host2dev(biases->data_gpu, biases->data,
                                       biases_size);
 #endif
-#else
-            int weights_size = bcnn_tensor_size(&layer->weights);
-            int biases_size = bcnn_tensor_size(&layer->biases);
-            nr = fread(layer->biases.data, sizeof(float), biases_size, fp);
-            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d", i,
-                        (unsigned long)nr, biases_size);
-            if (layer->batch_norm) {
-                int scales_size = bcnn_tensor_size(&layer->scales);
-                nr = fread(layer->scales.data, sizeof(float), scales_size, fp);
-                bh_log_info(
-                    "layer= %d nbread_scales= %lu scales_size_expected= %d", i,
-                    (unsigned long)nr, scales_size);
-                int sz = net->tensors[net->nodes[i].dst[0]].c;
-                nr = fread(layer->running_mean.data, sizeof(float), sz, fp);
-                bh_log_info(
-                    "layer= %d nbread_mean= %lu mean_size_expected= "
-                    "%d",
-                    i, (unsigned long)nr, sz);
-                nr = fread(layer->running_variance.data, sizeof(float), sz, fp);
-                bh_log_info(
-                    "layer= %d nbread_variance= %lu "
-                    "variance_size_expected= %d",
-                    i, (unsigned long)nr, sz);
-#if 0
-                for (int j = 0; j < sz; ++j) {
-                    printf("%g, ", layer->running_mean.data[j]);
-                }
-                printf("\n");
-                for (int j = 0; j < sz; ++j) {
-                    printf("%g, ", layer->running_variance.data[j]);
-                }
-                printf("\n");
-#endif
-            }
-            nr = fread(layer->weights.data, sizeof(float), weights_size, fp);
-            bh_log_info("layer= %d nbread_weight= %lu weight_size_expected= %d",
-                        i, (unsigned long)nr, weights_size);
-#ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_host2dev(layer->weights.data_gpu,
-                                      layer->weights.data, weights_size);
-            bcnn_cuda_memcpy_host2dev(layer->biases.data_gpu,
-                                      layer->biases.data, biases_size);
-            if (layer->batch_norm) {
-                int scales_size = bcnn_tensor_size(&layer->scales);
-                bcnn_cuda_memcpy_host2dev(layer->scales.data_gpu,
-                                          layer->scales.data, scales_size);
-                int sz = net->tensors[net->nodes[i].dst[0]].c;
-                bcnn_cuda_memcpy_host2dev(layer->running_mean.data_gpu,
-                                          layer->running_mean.data, sz);
-                bcnn_cuda_memcpy_host2dev(layer->running_variance.data_gpu,
-                                          layer->running_variance.data, sz);
-            }
-#endif
-#endif  // GRAPH_TOPOLOGY
         } else if (layer->type == FULL_CONNECTED) {
-#ifdef GRAPH_TOPOLOGY
             bcnn_tensor *weights = &net->tensors[net->nodes[i].src[1]];
             bcnn_tensor *biases = &net->tensors[net->nodes[i].src[2]];
             int weights_size = bcnn_tensor_size(weights);
@@ -201,59 +145,7 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             bcnn_cuda_memcpy_host2dev(biases->data_gpu, biases->data,
                                       biases_size);
 #endif
-#else
-            int weights_size = bcnn_tensor_size(&layer->weights);
-            int biases_size = bcnn_tensor_size(&layer->biases);
-            nr = fread(layer->biases.data, sizeof(float), biases_size, fp);
-            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d", i,
-                        (unsigned long)nr, biases_size);
-            nr = fread(layer->weights.data, sizeof(float), weights_size, fp);
-            bh_log_info("layer= %d nbread_weight= %lu weight_size_expected= %d",
-                        i, (unsigned long)nr, weights_size);
-            if (transpose) {
-                transpose_matrix(
-                    layer->weights.data,
-                    bcnn_tensor_get_size3d(&net->tensors[net->nodes[i].src[0]]),
-                    bcnn_tensor_get_size3d(
-                        &net->tensors[net->nodes[i].dst[0]]));
-            }
-            if (layer->batch_norm) {
-                int scales_size = bcnn_tensor_size(&layer->scales);
-                nr = fread(layer->scales.data, sizeof(float), scales_size, fp);
-                bh_log_info(
-                    "layer= %d nbread_scales= %lu scales_size_expected= %d", i,
-                    (unsigned long)nr, scales_size);
-                int sz = net->tensors[net->nodes[i].dst[0]].c;
-                nr = fread(layer->running_mean.data, sizeof(float), sz, fp);
-                bh_log_info(
-                    "layer= %d nbread_mean= %lu mean_size_expected= "
-                    "%d",
-                    i, (unsigned long)nr, sz);
-                nr = fread(layer->running_variance.data, sizeof(float), sz, fp);
-                bh_log_info(
-                    "layer= %d nbread_variance= %lu "
-                    "variance_size_expected= %d",
-                    i, (unsigned long)nr, sz);
-            }
-#ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_host2dev(layer->weights.data_gpu,
-                                      layer->weights.data, weights_size);
-            bcnn_cuda_memcpy_host2dev(layer->biases.data_gpu,
-                                      layer->biases.data, biases_size);
-            if (layer->batch_norm) {
-                int scales_size = bcnn_tensor_size(&layer->scales);
-                bcnn_cuda_memcpy_host2dev(layer->scales.data_gpu,
-                                          layer->scales.data, scales_size);
-                int sz = net->tensors[net->nodes[i].dst[0]].c;
-                bcnn_cuda_memcpy_host2dev(layer->running_mean.data_gpu,
-                                          layer->running_mean.data, sz);
-                bcnn_cuda_memcpy_host2dev(layer->running_variance.data_gpu,
-                                          layer->running_variance.data, sz);
-            }
-#endif
-#endif  // GRAPH_TOPOLOGY
         } else if (layer->type == BATCHNORM) {
-#ifdef GRAPH_TOPOLOGY
             bcnn_tensor *bn_mean = &net->tensors[net->nodes[i].src[1]];
             bcnn_tensor *bn_var = &net->tensors[net->nodes[i].src[2]];
             bcnn_tensor *bn_scales = &net->tensors[net->nodes[i].src[3]];
@@ -276,31 +168,6 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             bcnn_cuda_memcpy_host2dev(bn_scales->data_gpu, bn_scales->data, sz);
 // bcnn_cuda_memcpy_host2dev(bn_biases->data_gpu, bn_biases->data, sz);
 #endif
-#else
-            int scales_size = bcnn_tensor_size(&layer->scales);
-            nr = fread(layer->scales.data, sizeof(float), scales_size, fp);
-            bh_log_info("layer= %d nbread_scales= %lu scales_size_expected= %d",
-                        i, (unsigned long)nr, scales_size);
-            int sz = net->tensors[net->nodes[i].dst[0]].c;
-            nr = fread(layer->running_mean.data, sizeof(float), sz, fp);
-            bh_log_info(
-                "layer= %d nbread_mean= %lu mean_size_expected= "
-                "%d",
-                i, (unsigned long)nr, sz);
-            nr = fread(layer->running_variance.data, sizeof(float), sz, fp);
-            bh_log_info(
-                "layer= %d nbread_variance= %lu "
-                "variance_size_expected= %d",
-                i, (unsigned long)nr, sz);
-#ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_host2dev(layer->scales.data_gpu,
-                                      layer->scales.data, sz);
-            bcnn_cuda_memcpy_host2dev(layer->running_mean.data_gpu,
-                                      layer->running_mean.data, sz);
-            bcnn_cuda_memcpy_host2dev(layer->running_variance.data_gpu,
-                                      layer->running_variance.data, sz);
-#endif
-#endif  // GRAPH_TOPOLOGY
         }
     }
 

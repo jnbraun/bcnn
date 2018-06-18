@@ -74,23 +74,6 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride,
     node.layer->stride = stride;
     node.layer->size = size;
     node.layer->pad = pad;
-
-#ifndef GRAPH_TOPOLOGY
-    // Setup layer weights
-    char weights_name[256];
-    sprintf(weights_name, "%s_w", src_id);
-    bcnn_tensor_create(&node.layer->weights, 1, 1, 1,
-                       net->tensors[node.src[0]].c * size * size, 1,
-                       weights_name);
-    bcnn_tensor_filler w_filler = {
-        .range = (size * size * net->tensors[node.src[0]].c), .type = init};
-    bcnn_tensor_fill(&node.layer->weights, w_filler);
-    // Setup layer biases
-    char biases_name[256];
-    sprintf(biases_name, "%s_b", src_id);
-    bcnn_tensor_create(&node.layer->biases, 1, 1, 1,
-                       net->tensors[node.src[0]].c, 1, biases_name);
-#else
     // Create weights tensor
     bcnn_tensor weights = {0};
     char weights_name[256];
@@ -111,14 +94,9 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride,
                        biases_name);
     bcnn_net_add_tensor(net, biases);
     bcnn_node_add_input(&node, net->num_tensors - 1);
-#endif
 
     if (net->learner.optimizer == ADAM) {
-#ifndef GRAPH_TOPOLOGY
-        int weights_size = bcnn_tensor_size(&node.layer->weights);
-#else
         int weights_size = bcnn_tensor_size(&weights);
-#endif
         node.layer->adam_m = (float *)calloc(weights_size, sizeof(float));
         node.layer->adam_v = (float *)calloc(weights_size, sizeof(float));
     }
@@ -145,11 +123,7 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride,
 
 #ifdef BCNN_USE_CUDA
     if (net->learner.optimizer == ADAM) {
-#ifndef GRAPH_TOPOLOGY
-        int weights_size = bcnn_tensor_size(&node.layer->weights);
-#else
         int weights_size = bcnn_tensor_size(&weights);
-#endif
         node.layer->adam_m_gpu =
             bcnn_cuda_memcpy_f32(node.layer->adam_m, weights_size);
         node.layer->adam_v_gpu =
@@ -175,7 +149,6 @@ int bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size, int stride,
     return 0;
 }
 
-#ifdef GRAPH_TOPOLOGY
 int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                                               bcnn_tensor *src_tensor,
                                               bcnn_tensor *dst_tensor,
@@ -305,137 +278,7 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
 
     return BCNN_SUCCESS;
 }
-#else
-int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
-                                              bcnn_tensor *src_tensor,
-                                              bcnn_tensor *dst_tensor) {
-    int n, sz, c, h, w, kh, kw, h_in, w_in, offset;
 
-    int batch_size = src_tensor->n;
-    float *dst_data = NULL;
-    const float *bias_data = NULL;
-    const float *weight_data = NULL;
-    float val = 0;
-    /*bh_timer t = { 0 };
-    bh_timer_start(&t);*/
-
-    sz = bcnn_tensor_size(dst_tensor);
-
-    dst_data = dst_tensor->data;
-    memset(dst_data, 0, sz * sizeof(float));
-
-    for (n = 0; n < batch_size; ++n) {
-        for (c = 0; c < dst_tensor->c; ++c) {
-            for (h = 0; h < dst_tensor->h; ++h) {
-                if (h * layer->stride - layer->pad >= 0 &&
-                    (h * layer->stride - layer->pad + layer->size) <
-                        src_tensor->h) {
-                    for (w = 0; w < dst_tensor->w; ++w) {
-                        weight_data =
-                            layer->weights.data + c * layer->size * layer->size;
-                        val = 0;
-                        if (w * layer->stride - layer->pad >= 0 &&
-                            (w * layer->stride - layer->pad + layer->size) <
-                                src_tensor->w) {
-                            for (kh = 0; kh < layer->size; ++kh) {
-                                for (kw = 0; kw < layer->size; ++kw) {
-                                    h_in = -layer->pad + h * layer->stride + kh;
-                                    w_in = -layer->pad + w * layer->stride + kw;
-                                    offset = ((n * dst_tensor->c + c) *
-                                                  src_tensor->h +
-                                              h_in) *
-                                                 src_tensor->w +
-                                             w_in;
-                                    val += (*weight_data) *
-                                           src_tensor->data[offset];
-                                    ++weight_data;
-                                }
-                            }
-                        } else {
-                            for (kh = 0; kh < layer->size; ++kh) {
-                                for (kw = 0; kw < layer->size; ++kw) {
-                                    h_in = -layer->pad + h * layer->stride + kh;
-                                    w_in = -layer->pad + w * layer->stride + kw;
-                                    if ((w_in >= 0) && (w_in < src_tensor->w)) {
-                                        offset = ((n * dst_tensor->c + c) *
-                                                      src_tensor->h +
-                                                  h_in) *
-                                                     src_tensor->w +
-                                                 w_in;
-                                        val += (*weight_data) *
-                                               src_tensor->data[offset];
-                                    }
-                                    ++weight_data;
-                                }
-                            }
-                        }
-                        *dst_data++ = val;
-                    }
-                } else {
-                    for (w = 0; w < dst_tensor->w; ++w) {
-                        weight_data =
-                            layer->weights.data + c * layer->size * layer->size;
-                        val = 0;
-                        if (w * layer->stride - layer->pad >= 0 &&
-                            (w * layer->stride - layer->pad + layer->size) <
-                                src_tensor->w) {
-                            for (kh = 0; kh < layer->size; ++kh) {
-                                for (kw = 0; kw < layer->size; ++kw) {
-                                    h_in = -layer->pad + h * layer->stride + kh;
-                                    w_in = -layer->pad + w * layer->stride + kw;
-                                    if ((h_in >= 0) && (h_in < src_tensor->h)) {
-                                        offset = ((n * dst_tensor->c + c) *
-                                                      src_tensor->h +
-                                                  h_in) *
-                                                     src_tensor->w +
-                                                 w_in;
-                                        val += (*weight_data) *
-                                               src_tensor->data[offset];
-                                    }
-                                    ++weight_data;
-                                }
-                            }
-                        } else {
-                            for (kh = 0; kh < layer->size; ++kh) {
-                                for (kw = 0; kw < layer->size; ++kw) {
-                                    h_in = -layer->pad + h * layer->stride + kh;
-                                    w_in = -layer->pad + w * layer->stride + kw;
-                                    if ((h_in >= 0) && (h_in < src_tensor->h) &&
-                                        (w_in >= 0) && (w_in < src_tensor->w)) {
-                                        offset = ((n * dst_tensor->c + c) *
-                                                      src_tensor->h +
-                                                  h_in) *
-                                                     src_tensor->w +
-                                                 w_in;
-                                        val += (*weight_data) *
-                                               src_tensor->data[offset];
-                                    }
-                                    ++weight_data;
-                                }
-                            }
-                        }
-                        *dst_data++ = val;
-                    }
-                }
-            }
-        }
-    }
-
-    bcnn_add_bias(dst_tensor->data, layer->biases.data, batch_size,
-                  dst_tensor->c, dst_tensor->w * dst_tensor->h);
-
-    sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
-    bcnn_forward_activation_cpu(dst_tensor->data, sz, layer->activation);
-
-    /*bh_timer_stop(&t);
-    fprintf(stderr, "sep-conv-forward-time %lf sec\n", bh_timer_get_msec(&t) /
-    1000);*/
-
-    return BCNN_SUCCESS;
-}
-#endif
-
-#ifdef GRAPH_TOPOLOGY
 int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                                                bcnn_tensor *src_tensor,
                                                bcnn_tensor *dst_tensor,
@@ -695,270 +538,10 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
 
     return BCNN_SUCCESS;
 }
-#else
-int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
-                                               bcnn_tensor *src_tensor,
-                                               bcnn_tensor *dst_tensor) {
-    int sz, n, c, h, w, kh, kw, w_in, h_in, offset;
-
-    int batch_size = src_tensor->n;
-    float *dst_grad_data = NULL;
-    float *weight_diff_base = NULL, *weight_diff = NULL;
-    float *weight_data_base = NULL, *weight_data = NULL;
-    float *bias_diff = NULL;
-    /*bh_timer t = { 0 };
-    bh_timer_start(&t);*/
-
-    sz = bcnn_tensor_size(dst_tensor);
-
-    bcnn_backward_activation_cpu(
-        dst_tensor->data, dst_tensor->grad_data,
-        dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size,
-        layer->activation);
-
-    bcnn_grad_bias(layer->biases.grad_data, dst_tensor->grad_data, batch_size,
-                   dst_tensor->c, dst_tensor->w * dst_tensor->h);
-
-    if (src_tensor->grad_data) {
-        dst_grad_data = dst_tensor->grad_data;
-        weight_diff_base = layer->weights.grad_data;
-        for (n = 0; n < batch_size; ++n) {
-            for (c = 0; c < dst_tensor->c; ++c) {
-                for (h = 0; h < dst_tensor->h; ++h) {
-                    if (h * layer->stride - layer->pad >= 0 &&
-                        (h * layer->stride - layer->pad + layer->size) <
-                            src_tensor->h) {
-                        for (w = 0; w < dst_tensor->w; ++w) {
-                            weight_diff = weight_diff_base +
-                                          c * layer->size * layer->size;
-                            if (w * layer->stride - layer->pad >= 0 &&
-                                (w * layer->stride - layer->pad + layer->size) <
-                                    src_tensor->w) {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
-                                               kh;
-                                        w_in = -layer->pad + w * layer->stride +
-                                               kw;
-                                        offset = ((n * dst_tensor->c + c) *
-                                                      src_tensor->h +
-                                                  h_in) *
-                                                     src_tensor->w +
-                                                 w_in;
-                                        *weight_diff +=
-                                            src_tensor->data[offset] *
-                                            (*dst_grad_data);
-                                        ++weight_diff;
-                                    }
-                                }
-                            } else {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
-                                               kh;
-                                        w_in = -layer->pad + w * layer->stride +
-                                               kw;
-                                        if ((w_in >= 0) &&
-                                            (w_in < src_tensor->w)) {
-                                            offset = ((n * dst_tensor->c + c) *
-                                                          src_tensor->h +
-                                                      h_in) *
-                                                         src_tensor->w +
-                                                     w_in;
-                                            *weight_diff +=
-                                                src_tensor->data[offset] *
-                                                (*dst_grad_data);
-                                        }
-                                        ++weight_diff;
-                                    }
-                                }
-                            }
-                            ++dst_grad_data;
-                        }
-                    } else {
-                        for (w = 0; w < dst_tensor->w; ++w) {
-                            weight_diff = weight_diff_base +
-                                          c * layer->size * layer->size;
-                            if (w * layer->stride - layer->pad >= 0 &&
-                                (w * layer->stride - layer->pad + layer->size) <
-                                    src_tensor->w) {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
-                                               kh;
-                                        w_in = -layer->pad + w * layer->stride +
-                                               kw;
-                                        if ((h_in >= 0) &&
-                                            (h_in < src_tensor->h)) {
-                                            offset = ((n * dst_tensor->c + c) *
-                                                          src_tensor->h +
-                                                      h_in) *
-                                                         src_tensor->w +
-                                                     w_in;
-                                            *weight_diff +=
-                                                src_tensor->data[offset] *
-                                                (*dst_grad_data);
-                                        }
-                                        ++weight_diff;
-                                    }
-                                }
-                            } else {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
-                                               kh;
-                                        w_in = -layer->pad + w * layer->stride +
-                                               kw;
-                                        if ((h_in >= 0) &&
-                                            (h_in < src_tensor->h) &&
-                                            (w_in >= 0) &&
-                                            (w_in < src_tensor->w)) {
-                                            offset = ((n * dst_tensor->c + c) *
-                                                          src_tensor->h +
-                                                      h_in) *
-                                                         src_tensor->w +
-                                                     w_in;
-                                            *weight_diff +=
-                                                src_tensor->data[offset] *
-                                                (*dst_grad_data);
-                                        }
-                                        ++weight_diff;
-                                    }
-                                }
-                            }
-                            ++dst_grad_data;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (src_tensor->grad_data) {
-        dst_grad_data = dst_tensor->grad_data;
-        weight_data_base = layer->weights.data;
-        for (n = 0; n < batch_size; ++n) {
-            for (c = 0; c < dst_tensor->c; ++c) {
-                for (h = 0; h < dst_tensor->h; ++h) {
-                    if (h * layer->stride - layer->pad >= 0 &&
-                        (h * layer->stride - layer->pad + layer->size) <
-                            src_tensor->h) {
-                        for (w = 0; w < dst_tensor->w; ++w) {
-                            weight_data = weight_data_base +
-                                          c * layer->size * layer->size;
-                            if (w * layer->stride - layer->pad >= 0 &&
-                                (w * layer->stride - layer->pad + layer->size) <
-                                    src_tensor->w) {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
-                                               kh;
-                                        w_in = -layer->pad + w * layer->stride +
-                                               kw;
-                                        offset = ((n * dst_tensor->c + c) *
-                                                      src_tensor->h +
-                                                  h_in) *
-                                                     src_tensor->w +
-                                                 w_in;
-                                        src_tensor->grad_data[offset] +=
-                                            (*weight_data) * (*dst_grad_data);
-                                        ++weight_data;
-                                    }
-                                }
-                            } else {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
-                                               kh;
-                                        w_in = -layer->pad + w * layer->stride +
-                                               kw;
-                                        if ((w_in >= 0) &&
-                                            (w_in < src_tensor->w)) {
-                                            offset = ((n * dst_tensor->c + c) *
-                                                          src_tensor->h +
-                                                      h_in) *
-                                                         src_tensor->w +
-                                                     w_in;
-                                            src_tensor->grad_data[offset] +=
-                                                (*weight_data) *
-                                                (*dst_grad_data);
-                                        }
-                                        ++weight_data;
-                                    }
-                                }
-                            }
-                            ++dst_grad_data;
-                        }
-                    } else {
-                        for (w = 0; w < dst_tensor->w; ++w) {
-                            weight_data = weight_data_base +
-                                          c * layer->size * layer->size;
-                            if (w * layer->stride - layer->pad >= 0 &&
-                                (w * layer->stride - layer->pad + layer->size) <
-                                    src_tensor->w) {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
-                                               kh;
-                                        w_in = -layer->pad + w * layer->stride +
-                                               kw;
-                                        if ((h_in >= 0) &&
-                                            (h_in < src_tensor->h)) {
-                                            offset = ((n * dst_tensor->c + c) *
-                                                          src_tensor->h +
-                                                      h_in) *
-                                                         src_tensor->w +
-                                                     w_in;
-                                            src_tensor->grad_data[offset] +=
-                                                (*weight_data) *
-                                                (*dst_grad_data);
-                                        }
-                                        ++weight_data;
-                                    }
-                                }
-                            } else {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
-                                               kh;
-                                        w_in = -layer->pad + w * layer->stride +
-                                               kw;
-                                        if ((h_in >= 0) &&
-                                            (h_in < src_tensor->h) &&
-                                            (w_in >= 0) &&
-                                            (w_in < src_tensor->w)) {
-                                            offset = ((n * dst_tensor->c + c) *
-                                                          src_tensor->h +
-                                                      h_in) *
-                                                         src_tensor->w +
-                                                     w_in;
-                                            src_tensor->grad_data[offset] +=
-                                                (*weight_data) *
-                                                (*dst_grad_data);
-                                        }
-                                        ++weight_data;
-                                    }
-                                }
-                            }
-                            ++dst_grad_data;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /*bh_timer_stop(&t);
-    fprintf(stderr, "sep-conv-backward-time %lf sec\n", bh_timer_get_msec(&t) /
-    1000);*/
-
-    return BCNN_SUCCESS;
-}
-#endif  // GRAPH_TOPOLOGY
 
 int bcnn_forward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
-#ifdef GRAPH_TOPOLOGY
     bcnn_tensor *weights = &net->tensors[node->src[1]];
     bcnn_tensor *biases = &net->tensors[node->src[2]];
 #ifdef BCNN_USE_CUDA
@@ -968,19 +551,11 @@ int bcnn_forward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
     return bcnn_forward_depthwise_sep_conv_layer_cpu(node->layer, src, dst,
                                                      weights, biases);
 #endif
-#else
-#ifdef BCNN_USE_CUDA
-    return bcnn_forward_depthwise_sep_conv_layer_gpu(node->layer, src, dst);
-#else
-    return bcnn_forward_depthwise_sep_conv_layer_cpu(node->layer, src, dst);
-#endif
-#endif  // GRAPH_TOPOLOGY
 }
 
 int bcnn_backward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
-#ifdef GRAPH_TOPOLOGY
     bcnn_tensor *weights = &net->tensors[node->src[1]];
     bcnn_tensor *biases = &net->tensors[node->src[2]];
 #ifdef BCNN_USE_CUDA
@@ -990,11 +565,4 @@ int bcnn_backward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
     return bcnn_backward_depthwise_sep_conv_layer_cpu(node->layer, src, dst,
                                                       weights, biases);
 #endif
-#else
-#ifdef BCNN_USE_CUDA
-    return bcnn_backward_depthwise_sep_conv_layer_gpu(node->layer, src, dst);
-#else
-    return bcnn_backward_depthwise_sep_conv_layer_cpu(node->layer, src, dst);
-#endif
-#endif  // GRAPH_TOPOLOGY
 }

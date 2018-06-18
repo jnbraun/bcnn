@@ -66,7 +66,6 @@ int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a) {
     return BCNN_SUCCESS;
 }
 
-#ifdef GRAPH_TOPOLOGY
 int bcnn_forward_activation_layer_gpu(bcnn_layer *layer,
                                       bcnn_tensor *src_tensor,
                                       bcnn_tensor *dst_tensor,
@@ -79,19 +78,6 @@ int bcnn_forward_activation_layer_gpu(bcnn_layer *layer,
 
     return BCNN_SUCCESS;
 }
-#else
-int bcnn_forward_activation_layer_gpu(bcnn_layer *layer,
-                                      bcnn_tensor *src_tensor,
-                                      bcnn_tensor *dst_tensor) {
-    int sz = bcnn_tensor_size(dst_tensor);
-
-    dst_tensor->data_gpu = src_tensor->data_gpu;
-    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, layer->activation);
-    bcnn_cuda_check(cudaPeekAtLastError());
-
-    return BCNN_SUCCESS;
-}
-#endif // GRAPH_TOPOLOGY
 
 __global__ void _bcnn_backward_activation_layer_kernel(float *x, float *dx,
                                                        int sz,
@@ -132,7 +118,6 @@ int bcnn_backward_activation_gpu(float *x, float *dx, int sz,
     return BCNN_SUCCESS;
 }
 
-#ifdef GRAPH_TOPOLOGY
 int bcnn_backward_activation_layer_gpu(bcnn_layer *layer,
                                        bcnn_tensor *src_tensor,
                                        bcnn_tensor *dst_tensor,
@@ -146,19 +131,5 @@ int bcnn_backward_activation_layer_gpu(bcnn_layer *layer,
 
     return BCNN_SUCCESS;
 }
-#else
-int bcnn_backward_activation_layer_gpu(bcnn_layer *layer,
-                                       bcnn_tensor *src_tensor,
-                                       bcnn_tensor *dst_tensor) {
-    int sz = bcnn_tensor_size(dst_tensor);
-
-    bcnn_backward_activation_gpu(
-        dst_tensor->data_gpu, dst_tensor->grad_data_gpu, sz, layer->activation);
-    bcnn_cuda_check(cudaPeekAtLastError());
-    src_tensor->grad_data_gpu = dst_tensor->grad_data_gpu;
-
-    return BCNN_SUCCESS;
-}
-#endif // GRAPH_TOPOLOGY
 
 #endif

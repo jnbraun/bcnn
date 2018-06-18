@@ -83,8 +83,6 @@ typedef signed __int64 int64_t;
 typedef unsigned __int64 uint64_t;
 #endif
 
-#define GRAPH_TOPOLOGY
-
 /**
  * \brief Enum of error codes.
  */

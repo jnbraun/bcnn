@@ -35,7 +35,6 @@ int bcnn_backward_activation_cpu(float *x, float *dx, int sz,
                                  bcnn_activation a);
 int bcnn_backward_activation_layer(bcnn_net *net, bcnn_node *node);
 
-#ifdef GRAPH_TOPOLOGY
 int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a);
 int bcnn_forward_activation_layer_gpu(bcnn_layer *layer,
                                       bcnn_tensor *src_tensor,
@@ -47,19 +46,6 @@ int bcnn_backward_activation_layer_gpu(bcnn_layer *layer,
                                        bcnn_tensor *src_tensor,
                                        bcnn_tensor *dst_tensor,
                                        bcnn_tensor *weights);
-#else
-#ifdef BCNN_USE_CUDA
-int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a);
-int bcnn_forward_activation_layer_gpu(bcnn_layer *layer,
-                                      bcnn_tensor *src_tensor,
-                                      bcnn_tensor *dst_tensor);
-int bcnn_backward_activation_gpu(float *x, float *dx, int sz,
-                                 bcnn_activation a);
-int bcnn_backward_activation_layer_gpu(bcnn_layer *layer,
-                                       bcnn_tensor *src_tensor,
-                                       bcnn_tensor *dst_tensor);
-#endif
-#endif  // GRAPH_TOPOLOGY
 
 #ifdef __cplusplus
 }

@@ -32,16 +32,6 @@ extern "C" {
 int bcnn_forward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node);
 int bcnn_backward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node);
 
-#ifndef GRAPH_TOPOLOGY
-#ifdef BCNN_USE_CUDA
-int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
-                                              bcnn_tensor *src_tensor,
-                                              bcnn_tensor *dst_tensor);
-int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
-                                               bcnn_tensor *src_tensor,
-                                               bcnn_tensor *dst_tensor);
-#endif
-#else
 int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
                                               bcnn_tensor *src_tensor,
                                               bcnn_tensor *dst_tensor,
@@ -52,7 +42,6 @@ int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
                                                bcnn_tensor *dst_tensor,
                                                bcnn_tensor *weights,
                                                bcnn_tensor *biases);
-#endif
 
 #ifdef __cplusplus
 }

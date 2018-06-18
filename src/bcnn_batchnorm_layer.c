@@ -75,16 +75,6 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id) {
                        saved_mean_name);
     bcnn_tensor_create(&node.layer->saved_variance, 1, 1, 1, channels, 1,
                        saved_var_name);
-#ifndef GRAPH_TOPOLOGY
-    bcnn_tensor_create(&node.layer->running_mean, 1, 1, 1, channels, 0,
-                       running_mean_name);  // no gradients
-    bcnn_tensor_create(&node.layer->running_variance, 1, 1, 1, channels, 0,
-                       running_var_name);  // no gradients
-    bcnn_tensor_create(&node.layer->scales, 1, 1, 1, channels, 1, scales_name);
-    bcnn_tensor_filler filler = {.value = 1.0f, .type = FIXED};
-    bcnn_tensor_fill(&node.layer->scales, filler);
-    bcnn_tensor_create(&node.layer->biases, 1, 1, 1, channels, 1, biases_name);
-#else
     bcnn_tensor running_mean = {0};
     bcnn_tensor_create(&running_mean, 1, 1, 1, channels, 0,
                        running_mean_name);  // no gradients
@@ -105,7 +95,6 @@ int bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id) {
     bcnn_tensor_create(&biases, 1, 1, 1, channels, 1, biases_name);
     bcnn_net_add_tensor(net, biases);
     bcnn_node_add_input(&node, net->num_tensors - 1);
-#endif
     // Internal data
     node.layer->x_norm = (float *)calloc(sz, sizeof(float));
     node.layer->bn_workspace = (float *)calloc(sz, sizeof(float));
@@ -176,48 +165,6 @@ static void _norm_forward(float *x, float *mean, float *variance, int b, int c,
     }
 }
 
-#ifndef GRAPH_TOPOLOGY
-int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                     bcnn_tensor *dst_tensor) {
-    int batch_size = src_tensor->n;
-    int sz = dst_tensor->w * dst_tensor->h * dst_tensor->c;
-
-    if (src_tensor != dst_tensor) {
-        bcnn_copy_f32(sz * batch_size, src_tensor->data, dst_tensor->data);
-    }
-    bcnn_copy_f32(sz * batch_size, dst_tensor->data, layer->bn_workspace);
-
-    if (layer->net_state) {
-        _mean_variance_forward(dst_tensor->data, batch_size, dst_tensor->c,
-                               dst_tensor->h * dst_tensor->w,
-                               layer->saved_mean.data,
-                               layer->saved_variance.data);
-
-        bcnn_scal(dst_tensor->c, 0.9f, layer->running_mean.data);
-        bcnn_axpy(dst_tensor->c, 0.1f, layer->saved_mean.data,
-                  layer->running_mean.data);
-        bcnn_scal(dst_tensor->c, 0.9f, layer->running_variance.data);
-        bcnn_axpy(dst_tensor->c, 0.1f, layer->saved_variance.data,
-                  layer->running_variance.data);
-
-        _norm_forward(dst_tensor->data, layer->saved_mean.data,
-                      layer->saved_variance.data, batch_size, dst_tensor->c,
-                      dst_tensor->h * dst_tensor->w);
-        bcnn_copy_f32(batch_size * sz, dst_tensor->data, layer->x_norm);
-    } else {
-        // Normalize with global mean / variance
-        _norm_forward(dst_tensor->data, layer->running_mean.data,
-                      layer->running_variance.data, batch_size, dst_tensor->c,
-                      dst_tensor->h * dst_tensor->w);
-    }
-    // dst <- scale * dst + bias
-    bcnn_scales(dst_tensor->data, layer->scales.data, batch_size, dst_tensor->c,
-                dst_tensor->h * dst_tensor->w);
-    bcnn_add_bias(dst_tensor->data, layer->biases.data, batch_size,
-                  dst_tensor->c, dst_tensor->h * dst_tensor->w);
-    return BCNN_SUCCESS;
-}
-#else
 int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                      bcnn_tensor *dst_tensor,
                                      bcnn_tensor *bn_mean, bcnn_tensor *bn_var,
@@ -259,7 +206,6 @@ int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                   dst_tensor->h * dst_tensor->w);
     return BCNN_SUCCESS;
 }
-#endif  // GRAPH_TOPOLOGY
 
 static void _mean_variance_backward(float *x, float *grad, float *mean,
                                     float *var, int b, int c, int wxh,
@@ -299,42 +245,6 @@ static void _normalize_backward(float *x, float *mean, float *var,
     }
 }
 
-#ifndef GRAPH_TOPOLOGY
-int bcnn_backward_batchnorm_layer_cpu(bcnn_layer *layer,
-                                      bcnn_tensor *src_tensor,
-                                      bcnn_tensor *dst_tensor) {
-    int batch_size = src_tensor->n;
-    int sz = dst_tensor->w * dst_tensor->h * dst_tensor->c;
-
-    if (!layer->net_state) {
-        layer->saved_mean.data = layer->running_mean.data;
-        layer->saved_variance.data = layer->running_variance.data;
-    }
-    bcnn_grad_bias(layer->biases.grad_data, dst_tensor->grad_data, batch_size,
-                   dst_tensor->c, dst_tensor->h * dst_tensor->w);
-    bcnn_grad_scales(layer->x_norm, dst_tensor->grad_data, batch_size,
-                     dst_tensor->c, dst_tensor->h * dst_tensor->w,
-                     layer->scales.grad_data);
-    bcnn_scales(dst_tensor->grad_data, layer->scales.data, batch_size,
-                dst_tensor->c, dst_tensor->h * dst_tensor->w);
-    _mean_variance_backward(
-        layer->bn_workspace, dst_tensor->grad_data, layer->saved_mean.data,
-        layer->saved_variance.data, batch_size, dst_tensor->c,
-        dst_tensor->w * dst_tensor->h, layer->saved_mean.grad_data,
-        layer->saved_variance.grad_data);
-    _normalize_backward(layer->bn_workspace, layer->saved_mean.data,
-                        layer->saved_variance.data, layer->saved_mean.grad_data,
-                        layer->saved_variance.grad_data, batch_size,
-                        dst_tensor->c, dst_tensor->w * dst_tensor->h,
-                        dst_tensor->grad_data);
-
-    if (src_tensor->grad_data && src_tensor != dst_tensor) {
-        bcnn_copy_f32(sz * batch_size, dst_tensor->grad_data,
-                      src_tensor->grad_data);
-    }
-    return BCNN_SUCCESS;
-}
-#else
 int bcnn_backward_batchnorm_layer_cpu(bcnn_layer *layer,
                                       bcnn_tensor *src_tensor,
                                       bcnn_tensor *dst_tensor,
@@ -372,12 +282,10 @@ int bcnn_backward_batchnorm_layer_cpu(bcnn_layer *layer,
     }
     return BCNN_SUCCESS;
 }
-#endif  // GRAPH_TOPOLOGY
 
 int bcnn_forward_batchnorm_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
-#ifdef GRAPH_TOPOLOGY
     bcnn_tensor *bn_mean = &net->tensors[node->src[1]];
     bcnn_tensor *bn_var = &net->tensors[node->src[2]];
     bcnn_tensor *bn_scales = &net->tensors[node->src[3]];
@@ -389,19 +297,11 @@ int bcnn_forward_batchnorm_layer(bcnn_net *net, bcnn_node *node) {
     return bcnn_forward_batchnorm_layer_cpu(node->layer, src, dst, bn_mean,
                                             bn_var, bn_scales, bn_bias);
 #endif
-#else
-#ifdef BCNN_USE_CUDA
-    return bcnn_forward_batchnorm_layer_gpu(node->layer, src, dst);
-#else
-    return bcnn_forward_batchnorm_layer_cpu(node->layer, src, dst);
-#endif
-#endif  // GRAPH_TOPOLOGY
 }
 
 int bcnn_backward_batchnorm_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
-#ifdef GRAPH_TOPOLOGY
     bcnn_tensor *bn_mean = &net->tensors[node->src[1]];
     bcnn_tensor *bn_var = &net->tensors[node->src[2]];
     bcnn_tensor *bn_scales = &net->tensors[node->src[3]];
@@ -413,11 +313,4 @@ int bcnn_backward_batchnorm_layer(bcnn_net *net, bcnn_node *node) {
     return bcnn_backward_batchnorm_layer_cpu(node->layer, src, dst, bn_mean,
                                              bn_var, bn_scales, bn_bias);
 #endif
-#else
-#ifdef BCNN_USE_CUDA
-    return bcnn_backward_batchnorm_layer_gpu(node->layer, src, dst);
-#else
-    return bcnn_backward_batchnorm_layer_cpu(node->layer, src, dst);
-#endif
-#endif  // GRAPH_TOPOLOGY
 }

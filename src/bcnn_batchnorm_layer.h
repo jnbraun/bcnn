@@ -32,22 +32,6 @@ extern "C" {
 int bcnn_forward_batchnorm_layer(bcnn_net *net, bcnn_node *node);
 int bcnn_backward_batchnorm_layer(bcnn_net *net, bcnn_node *node);
 
-#ifndef GRAPH_TOPOLOGY
-int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                     bcnn_tensor *dst_tensor);
-int bcnn_backward_batchnorm_layer_cpu(bcnn_layer *layer,
-                                      bcnn_tensor *src_tensor,
-                                      bcnn_tensor *dst_tensor);
-
-#ifdef BCNN_USE_CUDA
-int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                     bcnn_tensor *dst_tensor);
-int bcnn_backward_batchnorm_layer_gpu(bcnn_layer *layer,
-                                      bcnn_tensor *src_tensor,
-                                      bcnn_tensor *dst_tensor);
-#endif
-#else
-
 int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                      bcnn_tensor *dst_tensor,
                                      bcnn_tensor *bn_mean, bcnn_tensor *bn_var,
@@ -73,8 +57,6 @@ int bcnn_backward_batchnorm_layer_gpu(bcnn_layer *layer,
                                       bcnn_tensor *bn_scales,
                                       bcnn_tensor *bn_biases);
 #endif
-
-#endif  // GRAPH_TOPOLOGY
 
 #ifdef __cplusplus
 }

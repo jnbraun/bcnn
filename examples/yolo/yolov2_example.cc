@@ -41,7 +41,7 @@ void load_yolo_weights(bcnn_net *net, char *model) {
     nr = fread(&revision, sizeof(int), 1, fp);
     if ((major * 10 + minor) >= 2 && major < 1000 && minor < 1000) {
         size_t lseen = 0;
-        nr = fread(&lseen, sizeof(size_t), 1, fp);
+        nr = fread(&lseen, sizeof(uint64_t), 1, fp);
         net->seen = lseen;
     } else {
         int iseen = 0;

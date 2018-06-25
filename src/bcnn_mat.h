@@ -35,6 +35,14 @@
 #include <cudnn.h>
 #endif
 #endif
+/* ARM Neon */
+#ifdef BCNN_USE_NEON
+#if defined(__ARM_NEON__) || defined(__ARM_NEON)
+#include <arm_neon.h>
+#else
+#undef BCNN_USE_NEON
+#endif
+#endif
 
 #ifdef __cplusplus
 extern "C" {

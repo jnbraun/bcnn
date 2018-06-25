@@ -1,24 +1,24 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * Copyright (c) 2016 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 #include "bcnn_maxpool_layer.h"
 
 #include <bh/bh.h>
@@ -167,13 +167,98 @@ int bcnn_forward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     return BCNN_SUCCESS;
 }
 
+#ifdef BCNN_USE_NEON
+int bcnn_forward_maxpool_layer_cpu_neon(bcnn_layer *layer,
+                                        bcnn_tensor *src_tensor,
+                                        bcnn_tensor *dst_tensor) {
+    const int tailstep = src_tensor->w + (src_tensor->w - 2 * dst_tensor->w);
+    for (int b = 0; b < dst_tensor->n; ++b) {  // batch_size
+        int offset0 = dst_tensor->c * b;
+        for (int k = 0; k < dst_tensor->c; ++k) {  // depth
+            const float *p_src0 =
+                src_tensor->data +
+                src_tensor->h * src_tensor->w * (k + src_tensor->c * b);
+            const float *p_src1 =
+                src_tensor->data +
+                src_tensor->h * src_tensor->w * (k + offset0) + src_tensor->w;
+            float *outptr = dst_tensor->data +
+                            dst_tensor->h * dst_tensor->w * (k + offset0);
+            for (int i = 0; i < dst_tensor->h; i++) {
+#if BCNN_USE_NEON
+                int nn = dst_tensor->w >> 2;
+                int remain = dst_tensor->w - (nn << 2);
+#else
+                int remain = dst_tensor->w;
+#endif  // BCNN_USE_NEON
+
+#if BCNN_USE_NEON
+                if (nn > 0) {
+                    /*asm volatile(
+                        "0:                             \n"
+                        "pld        [%1, #256]          \n"
+                        "pld        [%2, #256]          \n"
+                        "vld1.f32   {d0-d3}, [%1]!      \n"
+                        "vld1.f32   {d4-d7}, [%2]!      \n"
+                        "vmax.f32   q0, q0, q2          \n"
+                        "vmax.f32   q1, q1, q3          \n"
+                        "vpmax.f32  d4, d0, d1          \n"
+                        "vpmax.f32  d5, d2, d3          \n"
+                        "subs       %0, #1              \n"
+                        "vst1.f32   {d4-d5}, [%3]!      \n"
+                        "bne        0b                  \n"
+                        : "=r"(nn),      // %0
+                          "=r"(p_src0),  // %1
+                          "=r"(p_src1),  // %2
+                          "=r"(outptr)   // %3
+                        : "0"(nn), "1"(p_src0), "2"(p_src1), "3"(outptr)
+                        : "cc", "memory", "q0", "q1", "q2", "q3");*/
+                    float32x2_t src0, src1;
+                    src0 = vld1_f32(p_src0);
+                    p_src0 += 2;
+                    src1 = vld1_f32(p_src1);
+                    p_src1 += 2;
+                    src0 = vmax_f32(src0, src1);
+                    src0 = vpmax_f32(src0, src0);
+                    vst1_lane_f32(outptr, src0, 0);
+                    outptr += 1;
+                }
+#endif  // BCNN_USE_NEON
+                for (; remain > 0; remain--) {
+                    float max0 = bh_max(p_src0[0], p_src0[1]);
+                    float max1 = bh_max(p_src1[0], p_src1[1]);
+
+                    *outptr = bh_max(max0, max1);
+
+                    p_src0 += 2;
+                    p_src1 += 2;
+                    outptr++;
+                }
+
+                p_src0 += tailstep;
+                p_src1 += tailstep;
+            }
+        }
+    }
+    return BCNN_SUCCESS;
+}
+#endif
+
 int bcnn_forward_maxpool_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
     return bcnn_forward_maxpool_layer_gpu(node->layer, src, dst);
 #else
+#ifdef BCNN_USE_NEON
+    if (node->layer->size == 2 && node->layer->stride == 2) {
+        fprintf(stderr, "mp neon\n");
+        return bcnn_forward_maxpool_layer_cpu_neon(node->layer, src, dst);
+    } else {
+        return bcnn_backward_maxpool_layer_cpu(node->layer, src, dst);
+    }
+#else
     return bcnn_forward_maxpool_layer_cpu(node->layer, src, dst);
+#endif  // BCNN_USE_NEON
 #endif
 }
 

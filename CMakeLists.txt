@@ -2,12 +2,13 @@ cmake_minimum_required (VERSION 2.9)
 project (bcnn)
 
 # User configuration settings
-option(USE_AVX "Build with AVX instructions" ON)
+option(USE_AVX "Build with AVX instructions" OFF)
 option(USE_CUDA "Build with CUDA libraries" OFF)
 option(USE_CUDNN "Build with CuDNN library" OFF)
-option(USE_BLAS "Build with BLAS library" ON)
+option(USE_BLAS "Build with BLAS library" OFF)
+option(USE_NEON "Build with Neon instructions" ON)
 # Building examples
-option(BUILD_EXAMPLES "Build examples" ON)
+option(BUILD_EXAMPLES "Build examples" OFF)
 # Building tools
 option(BUILD_TOOLS "Build tools" OFF)
 # Setting log level: available options are 'INFO' 'WARNING' 'ERROR' 'SILENT'
@@ -95,6 +96,11 @@ if (USE_AVX)
     message(STATUS "[bcnn] Build with AVX instructions")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx2")
     add_definitions(-DBCNN_USE_AVX)
+endif()
+if (USE_NEON)
+    message(STATUS "[bcnn] Build with Neon instructions")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpu=neon")
+    add_definitions(-DBCNN_USE_NEON)
 endif()
 
 message(STATUS "[bcnn] Setting log level: " ${LOG_LEVEL})
@@ -184,6 +190,7 @@ add_subdirectory(examples/yolo)
 endif()
 
 if (BUILD_TOOLS)
-    add_subdirectory(tools/caffe_converter)
+    #add_subdirectory(tools/caffe_converter)
+    add_subdirectory(tools/tflite_converter)
 endif()
 

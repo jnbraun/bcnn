@@ -26,6 +26,11 @@
 #include "bcnn_utils.h"
 #include "bh_log.h"
 
+#include <bh/bh_timer.h>
+#ifdef BCNN_USE_NEON
+#include <arm_neon.h>
+#endif
+
 int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
                            bcnn_padding padding, char *src_id, char *dst_id) {
     int sz, i;
@@ -171,7 +176,7 @@ int bcnn_forward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 int bcnn_forward_maxpool_layer_cpu_neon(bcnn_layer *layer,
                                         bcnn_tensor *src_tensor,
                                         bcnn_tensor *dst_tensor) {
-    const int tailstep = src_tensor->w + (src_tensor->w - 2 * dst_tensor->w);
+    const int tail = src_tensor->w + (src_tensor->w - 2 * dst_tensor->w);
     for (int b = 0; b < dst_tensor->n; ++b) {  // batch_size
         int offset0 = dst_tensor->c * b;
         for (int k = 0; k < dst_tensor->c; ++k) {  // depth
@@ -184,58 +189,29 @@ int bcnn_forward_maxpool_layer_cpu_neon(bcnn_layer *layer,
             float *outptr = dst_tensor->data +
                             dst_tensor->h * dst_tensor->w * (k + offset0);
             for (int i = 0; i < dst_tensor->h; i++) {
-#if BCNN_USE_NEON
-                int nn = dst_tensor->w >> 2;
-                int remain = dst_tensor->w - (nn << 2);
-#else
-                int remain = dst_tensor->w;
-#endif  // BCNN_USE_NEON
-
-#if BCNN_USE_NEON
-                if (nn > 0) {
-                    /*asm volatile(
-                        "0:                             \n"
-                        "pld        [%1, #256]          \n"
-                        "pld        [%2, #256]          \n"
-                        "vld1.f32   {d0-d3}, [%1]!      \n"
-                        "vld1.f32   {d4-d7}, [%2]!      \n"
-                        "vmax.f32   q0, q0, q2          \n"
-                        "vmax.f32   q1, q1, q3          \n"
-                        "vpmax.f32  d4, d0, d1          \n"
-                        "vpmax.f32  d5, d2, d3          \n"
-                        "subs       %0, #1              \n"
-                        "vst1.f32   {d4-d5}, [%3]!      \n"
-                        "bne        0b                  \n"
-                        : "=r"(nn),      // %0
-                          "=r"(p_src0),  // %1
-                          "=r"(p_src1),  // %2
-                          "=r"(outptr)   // %3
-                        : "0"(nn), "1"(p_src0), "2"(p_src1), "3"(outptr)
-                        : "cc", "memory", "q0", "q1", "q2", "q3");*/
-                    float32x2_t src0, src1;
-                    src0 = vld1_f32(p_src0);
+                int half = dst_tensor->w >> 2;
+                int last = dst_tensor->w - (half << 2);
+                for (int x = 0; x < (half << 2); ++x) {
+                    float32x2_t max0, max1;
+                    max0 = vld1_f32(p_src0);
                     p_src0 += 2;
-                    src1 = vld1_f32(p_src1);
+                    max1 = vld1_f32(p_src1);
                     p_src1 += 2;
-                    src0 = vmax_f32(src0, src1);
-                    src0 = vpmax_f32(src0, src0);
-                    vst1_lane_f32(outptr, src0, 0);
-                    outptr += 1;
+                    max0 = vmax_f32(max0, max1);
+                    max0 = vpmax_f32(max0, max0);
+                    vst1_lane_f32(outptr, max0, 0);
+                    outptr++;
                 }
-#endif  // BCNN_USE_NEON
-                for (; remain > 0; remain--) {
+                for (; last > 0; last--) {
                     float max0 = bh_max(p_src0[0], p_src0[1]);
                     float max1 = bh_max(p_src1[0], p_src1[1]);
-
                     *outptr = bh_max(max0, max1);
-
                     p_src0 += 2;
                     p_src1 += 2;
                     outptr++;
                 }
-
-                p_src0 += tailstep;
-                p_src1 += tailstep;
+                p_src0 += tail;
+                p_src1 += tail;
             }
         }
     }
@@ -251,14 +227,13 @@ int bcnn_forward_maxpool_layer(bcnn_net *net, bcnn_node *node) {
 #else
 #ifdef BCNN_USE_NEON
     if (node->layer->size == 2 && node->layer->stride == 2) {
-        fprintf(stderr, "mp neon\n");
         return bcnn_forward_maxpool_layer_cpu_neon(node->layer, src, dst);
     } else {
-        return bcnn_backward_maxpool_layer_cpu(node->layer, src, dst);
+        return bcnn_forward_maxpool_layer_cpu(node->layer, src, dst);
     }
 #else
     return bcnn_forward_maxpool_layer_cpu(node->layer, src, dst);
-#endif  // BCNN_USE_NEON
+#endif
 #endif
 }
 

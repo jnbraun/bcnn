@@ -2,17 +2,17 @@ cmake_minimum_required (VERSION 2.9)
 project (bcnn)
 
 # User configuration settings
-option(USE_AVX "Build with AVX instructions" OFF)
+option(USE_AVX "Build with AVX instructions" ON)
 option(USE_CUDA "Build with CUDA libraries" OFF)
 option(USE_CUDNN "Build with CuDNN library" OFF)
-option(USE_BLAS "Build with BLAS library" OFF)
-option(USE_NEON "Build with Neon instructions" ON)
+option(USE_BLAS "Build with BLAS library" ON)
+option(USE_NEON "Build with Neon instructions" OFF)
 # Building examples
-option(BUILD_EXAMPLES "Build examples" OFF)
+option(BUILD_EXAMPLES "Build examples" ON)
 # Building tools
 option(BUILD_TOOLS "Build tools" OFF)
-# Setting log level: available options are 'INFO' 'WARNING' 'ERROR' 'SILENT'
-set(LOG_LEVEL "INFO")
+# Set OFF to turn off logging
+set(ENABLE_LOG ON)
 
 # Convenience stuff
 include(CMakeToolsHelpers OPTIONAL)
@@ -103,17 +103,9 @@ if (USE_NEON)
     add_definitions(-DBCNN_USE_NEON)
 endif()
 
-message(STATUS "[bcnn] Setting log level: " ${LOG_LEVEL})
-if (${LOG_LEVEL} STREQUAL "INFO")
-    add_definitions(-DBCNN_LOG_LEVEL=0)
-elseif(${LOG_LEVEL} STREQUAL "WARNING")
-    add_definitions(-DBCNN_LOG_LEVEL=1)
-elseif(${LOG_LEVEL} STREQUAL "ERROR")
-    add_definitions(-DBCNN_LOG_LEVEL=2)
-elseif(${LOG_LEVEL} STREQUAL "SILENT")
-    add_definitions(-DBCNN_LOG_LEVEL=3)
-else()
-    message(WARNING "[bcnn] Invalid log level. Available options are 'INFO' 'WARNING' 'ERROR' 'SILENT'")
+if (ENABLE_LOG)
+    message(STATUS "[bcnn] Enabling logging")
+    add_definitions(-DBCNN_LOG_ENABLED)
 endif()
 
 

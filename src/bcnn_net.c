@@ -1,28 +1,28 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * Copyright (c) 2016 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 /* include bh helpers */
-#include <bh/bh.h>
-#include <bh/bh_error.h>
+#include <bh/bh_log.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 #include <bh/bh_timer.h>
@@ -30,6 +30,7 @@
 /* include bip image processing lib */
 #include <bip/bip.h>
 
+#include <bh/bh_log.h>
 #include "bcnn/bcnn.h"
 #include "bcnn_activation_layer.h"
 #include "bcnn_avgpool_layer.h"
@@ -46,9 +47,8 @@
 #include "bcnn_softmax_layer.h"
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
-#include "bh_log.h"
 
-int bcnn_init_net(bcnn_net **net) {
+bcnn_status bcnn_init_net(bcnn_net **net) {
     bcnn_net *p_net = NULL;
     if (*net == NULL) {
         *net = (bcnn_net *)calloc(1, sizeof(bcnn_net));
@@ -67,14 +67,14 @@ int bcnn_init_net(bcnn_net **net) {
     return BCNN_SUCCESS;
 }
 
-int bcnn_end_net(bcnn_net **net) {
+bcnn_status bcnn_end_net(bcnn_net **net) {
     bcnn_free_net(*net);
     bh_free(*net);
 
     return BCNN_SUCCESS;
 }
 
-int bcnn_free_tensor(bcnn_tensor *tensor) {
+bcnn_status bcnn_free_tensor(bcnn_tensor *tensor) {
     bh_free(tensor->data);
     bh_free(tensor->grad_data);
 #ifdef BCNN_USE_CUDA
@@ -84,7 +84,7 @@ int bcnn_free_tensor(bcnn_tensor *tensor) {
     return BCNN_SUCCESS;
 }
 
-int bcnn_free_net(bcnn_net *net) {
+bcnn_status bcnn_free_net(bcnn_net *net) {
     int i;
     bcnn_free_workload(net);
     for (i = 0; i < net->num_nodes; ++i) {
@@ -97,6 +97,12 @@ int bcnn_free_net(bcnn_net *net) {
     bh_free(net->finetune_id);
     bcnn_net_free_tensors(net);
     return BCNN_SUCCESS;
+}
+
+void bcnn_net_set_log_context(bcnn_net *net, bh_log_callback fct,
+                              bh_log_level level) {
+    net->log_ctx.fct = fct;
+    net->log_ctx.lvl = level;
 }
 
 int bcnn_set_param(bcnn_net *net, char *name, char *val) {
@@ -124,7 +130,8 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val) {
         } else if (strcmp(val, "dice") == 0) {
             net->loss_metric = COST_DICE;
         } else {
-            bh_log_warning("Unknown cost metric %s, going with sse", val);
+            BCNN_WARNING(net->log_ctx, "Unknown cost metric %s, going with sse",
+                         val);
             net->loss_metric = COST_SSE;
         }
     } else if (strcmp(name, "learning_policy") == 0) {
@@ -215,36 +222,40 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val) {
             net->finetune_id =
                 (char **)realloc(net->finetune_id, net->nb_finetune);
         }
-        bh_fill_option(&net->finetune_id[net->nb_finetune - 1], val);
+        bh_strfill(&net->finetune_id[net->nb_finetune - 1], val);
     }
     return BCNN_SUCCESS;
 }
 
-void bcnn_net_add_node(bcnn_net *net, bcnn_node node) {
+bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node) {
     bcnn_node *p_conn = NULL;
     net->num_nodes++;
     p_conn =
         (bcnn_node *)realloc(net->nodes, net->num_nodes * sizeof(bcnn_node));
-    bh_check((p_conn != NULL), "Internal allocation error");
+    BCNN_CHECK_AND_LOG(net->log_ctx, (p_conn != NULL), BCNN_FAILED_ALLOC,
+                       "Internal allocation error");
     net->nodes = p_conn;
     net->nodes[net->num_nodes - 1] = node;
+    return BCNN_SUCCESS;
 }
 
-int bcnn_free_node(bcnn_node *node) {
+bcnn_status bcnn_free_node(bcnn_node *node) {
     bcnn_free_layer(&node->layer);
     bh_free(node->src);
     bh_free(node->dst);
     return BCNN_SUCCESS;
 }
 
-void bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor) {
+bcnn_status bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor) {
     bcnn_tensor *p_tensors = NULL;
     net->num_tensors++;
     p_tensors = (bcnn_tensor *)realloc(net->tensors,
                                        net->num_tensors * sizeof(bcnn_tensor));
-    bh_check((p_tensors != NULL), "Internal allocation error");
+    BCNN_CHECK_AND_LOG(net->log_ctx, (p_tensors != NULL), BCNN_FAILED_ALLOC,
+                       "Internal allocation error");
     net->tensors = p_tensors;
     net->tensors[net->num_tensors - 1] = tensor;
+    return BCNN_SUCCESS;
 }
 
 void bcnn_net_free_tensors(bcnn_net *net) {
@@ -255,22 +266,26 @@ void bcnn_net_free_tensors(bcnn_net *net) {
     bh_free(net->tensors);
 }
 
-void bcnn_node_add_output(bcnn_node *node, int index) {
+bcnn_status bcnn_node_add_output(bcnn_net *net, bcnn_node *node, int index) {
     int *p_dst = NULL;
     node->num_dst++;
     p_dst = (int *)realloc(node->dst, node->num_dst * sizeof(int));
-    bh_check((p_dst != NULL), "Internal allocation error");
+    BCNN_CHECK_AND_LOG(net->log_ctx, (p_dst != NULL), BCNN_FAILED_ALLOC,
+                       "Internal allocation error");
     node->dst = p_dst;
     node->dst[node->num_dst - 1] = index;
+    return BCNN_SUCCESS;
 }
 
-void bcnn_node_add_input(bcnn_node *node, int index) {
+bcnn_status bcnn_node_add_input(bcnn_net *net, bcnn_node *node, int index) {
     int *p_src = NULL;
     node->num_src++;
     p_src = (int *)realloc(node->src, node->num_src * sizeof(int));
-    bh_check((p_src != NULL), "Internal allocation error");
+    BCNN_CHECK_AND_LOG(net->log_ctx, (p_src != NULL), BCNN_FAILED_ALLOC,
+                       "Internal allocation error");
     node->src = p_src;
     node->src[node->num_src - 1] = index;
+    return BCNN_SUCCESS;
 }
 
 void bcnn_net_set_input_shape(bcnn_net *net, int input_width, int input_height,
@@ -283,7 +298,7 @@ void bcnn_net_set_input_shape(bcnn_net *net, int input_width, int input_height,
                           input_height, input_width, 0);
 }
 
-int bcnn_init_workload(bcnn_net *net) {
+bcnn_status bcnn_init_workload(bcnn_net *net) {
     int i;
     int n = net->num_nodes;
     int k = (net->nodes[n - 1].layer->type == COST ? (n - 2) : (n - 1));
@@ -306,7 +321,7 @@ int bcnn_init_workload(bcnn_net *net) {
     return BCNN_SUCCESS;
 }
 
-int bcnn_free_workload(bcnn_net *net) {
+bcnn_status bcnn_free_workload(bcnn_net *net) {
     int i;
     int n = net->num_nodes;
 
@@ -315,10 +330,10 @@ int bcnn_free_workload(bcnn_net *net) {
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_free(net->workspace_gpu);
 #endif
-    return 0;
+    return BCNN_SUCCESS;
 }
 
-int bcnn_compile_net(bcnn_net *net, char *phase) {
+bcnn_status bcnn_compile_net(bcnn_net *net, char *phase) {
     int i;
 
     if (strcmp(phase, "train") == 0) {
@@ -326,7 +341,8 @@ int bcnn_compile_net(bcnn_net *net, char *phase) {
     } else if (strcmp(phase, "predict") == 0) {
         net->state = 0;
     } else {
-        bh_log_error(
+        BCNN_ERROR(
+            net->log_ctx, BCNN_INVALID_PARAMETER,
             "bcnn_compile_net: Available option are 'train' and 'predict'");
         return BCNN_INVALID_PARAMETER;
     }
@@ -598,10 +614,10 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
                         y += output_size;
                         break;
                     default:
-                        bh_error(
+                        BCNN_ERROR(
+                            net->log_ctx, BCNN_INVALID_PARAMETER,
                             "Target type not implemented for this data format. "
-                            "Please use list format instead.",
-                            BCNN_INVALID_PARAMETER);
+                            "Please use list format instead.");
                 }
             }
         }
@@ -678,9 +694,9 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
                         y += output_size;
                         break;
                     default:
-                        bh_error(
-                            "Target type not implemented for this data format.",
-                            BCNN_INVALID_PARAMETER);
+                        BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
+                                   "Target type not implemented for this data "
+                                   "format.");
                 }
             }
         }
@@ -734,14 +750,14 @@ int bcnn_predict_on_batch(bcnn_net *net, bcnn_iterator *iter, float **pred,
     return BCNN_SUCCESS;
 }
 
-int bcnn_write_model(bcnn_net *net, char *filename) {
+bcnn_status bcnn_write_model(bcnn_net *net, char *filename) {
     bcnn_layer *layer = NULL;
     int i;
 
-    FILE *fp = fopen(filename, "wb");
-    if (!fp) {
-        bh_log_error("Can not open file %s\n", filename);
-    }
+    FILE *fp = NULL;
+    fp = fopen(filename, "wb");
+    BCNN_CHECK_AND_LOG(net->log_ctx, fp, BCNN_INVALID_PARAMETER,
+                       "Could not open model file %s\n", filename);
 
     fwrite(&net->learner.learning_rate, sizeof(float), 1, fp);
     fwrite(&net->learner.momentum, sizeof(float), 1, fp);
@@ -818,25 +834,25 @@ int bcnn_write_model(bcnn_net *net, char *filename) {
     return BCNN_SUCCESS;
 }
 
-int bcnn_load_model(bcnn_net *net, char *filename) {
-    FILE *fp = fopen(filename, "rb");
+bcnn_status bcnn_load_model(bcnn_net *net, char *filename) {
+    FILE *fp = NULL;
     bcnn_layer *layer = NULL;
     int i, j, is_ft = 0;
     size_t nb_read = 0;
     float tmp = 0.0f;
 
-    if (!fp) {
-        bh_log_error("Can not open file %s\n", filename);
-    }
+    fp = fopen(filename, "rb");
+    BCNN_CHECK_AND_LOG(net->log_ctx, fp, BCNN_INVALID_PARAMETER,
+                       "Can not open file %s\n", filename);
 
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&net->seen, sizeof(int), 1, fp);
-    bh_log_info("lr= %f ", net->learner.learning_rate);
-    bh_log_info("m= %f ", net->learner.momentum);
-    bh_log_info("decay= %f ", net->learner.decay);
-    bh_log_info("seen= %d\n", net->seen);
+    BCNN_INFO(net->log_ctx, "lr= %f ", net->learner.learning_rate);
+    BCNN_INFO(net->log_ctx, "m= %f ", net->learner.momentum);
+    BCNN_INFO(net->log_ctx, "decay= %f ", net->learner.decay);
+    BCNN_INFO(net->log_ctx, "seen= %d\n", net->seen);
 
     for (i = 0; i < net->num_nodes; ++i) {
         layer = net->nodes[i].layer;
@@ -849,11 +865,13 @@ int bcnn_load_model(bcnn_net *net, char *filename) {
             int weights_size = bcnn_tensor_size(weights);
             int biases_size = bcnn_tensor_size(biases);
             nb_read = fread(biases->data, sizeof(float), biases_size, fp);
-            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d", i,
-                        (unsigned long)nb_read, biases_size);
+            BCNN_INFO(net->log_ctx,
+                      "layer= %d nbread_bias= %lu bias_size_expected= %d", i,
+                      (unsigned long)nb_read, biases_size);
             nb_read = fread(weights->data, sizeof(float), weights_size, fp);
-            bh_log_info("layer= %d nbread_weight= %lu weight_size_expected= %d",
-                        i, (unsigned long)nb_read, weights_size);
+            BCNN_INFO(net->log_ctx,
+                      "layer= %d nbread_weight= %lu weight_size_expected= %d",
+                      i, (unsigned long)nb_read, weights_size);
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(weights->data_gpu, weights->data,
                                       weights_size);
@@ -885,8 +903,8 @@ int bcnn_load_model(bcnn_net *net, char *filename) {
             bcnn_tensor *weights = &net->tensors[net->nodes[i].src[1]];
             int weights_size = bcnn_tensor_size(weights);
             nb_read = fread(weights->data, sizeof(float), weights_size, fp);
-            bh_log_info("PReLU layer= %d nbread= %lu expected= %d", i,
-                        (unsigned long)nb_read, weights_size);
+            BCNN_INFO(net->log_ctx, "PReLU layer= %d nbread= %lu expected= %d",
+                      i, (unsigned long)nb_read, weights_size);
         }
         if (layer->type == BATCHNORM) {
             bcnn_tensor *bn_mean = &net->tensors[net->nodes[i].src[1]];
@@ -895,14 +913,15 @@ int bcnn_load_model(bcnn_net *net, char *filename) {
             bcnn_tensor *bn_biases = &net->tensors[net->nodes[i].src[4]];
             int sz = net->tensors[net->nodes[i].dst[0]].c;
             nb_read = fread(bn_mean->data, sizeof(float), sz, fp);
-            bh_log_info(
+            BCNN_INFO(
+                net->log_ctx,
                 "batchnorm layer= %d nbread_mean= %lu mean_size_expected= %d",
                 i, (unsigned long)nb_read, sz);
             nb_read = fread(bn_var->data, sizeof(float), sz, fp);
-            bh_log_info(
-                "batchnorm layer= %d nbread_variance= %lu "
-                "variance_size_expected= %d",
-                i, (unsigned long)nb_read, sz);
+            BCNN_INFO(net->log_ctx,
+                      "batchnorm layer= %d nbread_variance= %lu "
+                      "variance_size_expected= %d",
+                      i, (unsigned long)nb_read, sz);
             nb_read = fread(bn_scales->data, sizeof(float), sz, fp);
             nb_read = fread(bn_biases->data, sizeof(float), sz, fp);
 #ifdef BCNN_USE_CUDA
@@ -915,7 +934,7 @@ int bcnn_load_model(bcnn_net *net, char *filename) {
     }
     if (fp != NULL) fclose(fp);
 
-    bh_log_info("Model %s loaded succesfully", filename);
+    BCNN_INFO(net->log_ctx, "Model %s loaded succesfully", filename);
     fflush(stdout);
 
     return BCNN_SUCCESS;

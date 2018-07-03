@@ -24,7 +24,7 @@
 
 #include "bcnn_activation_layer.h"
 
-#include <bh/bh.h>
+#include <bh/bh_macros.h>
 
 #include "bcnn_utils.h"
 

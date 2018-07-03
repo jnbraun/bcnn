@@ -1,33 +1,32 @@
 /*
-* Copyright (c) 2016-2018 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * Copyright (c) 2016-2018 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
-#include "bcnn_tensor.h"
-
-#include <bh/bh.h>
+#include <bh/bh_log.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
+#include <bh/bh_string.h>
 
 #include "bcnn/bcnn.h"
 #include "bcnn_utils.h"
-#include "bh_log.h"
 
 void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
                         int has_grad, char *name) {
@@ -37,7 +36,9 @@ void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
 }
 
 void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler) {
-    bh_check(t->data != NULL, "Invalid tensor data");
+    if (!t->data) {
+        return;
+    }
     switch (filler.type) {
         float std_init;
         case XAVIER:
@@ -62,6 +63,7 @@ void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler) {
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_f32_noalloc(t->data, t->data_gpu, bcnn_tensor_size(t));
 #endif
+    return;
 }
 
 void bcnn_tensor_destroy(bcnn_tensor *t) {

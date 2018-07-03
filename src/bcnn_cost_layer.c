@@ -22,16 +22,17 @@
 
 #include "bcnn_cost_layer.h"
 
-#include <bh/bh.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
+#include <bh/bh_string.h>
 
+#include <bh/bh_log.h>
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
-#include "bh_log.h"
 
-int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
-                        bcnn_loss_metric loss_metric, float scale, char *src_id,
-                        char *label_id, char *dst_id) {
+bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
+                                bcnn_loss_metric loss_metric, float scale,
+                                char *src_id, char *label_id, char *dst_id) {
     int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
@@ -39,18 +40,19 @@ int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = COST;
 
-    bh_check(net->num_nodes >= 1,
-             "Cost layer can't be the first layer of the network");
+    BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,
+                       BCNN_INVALID_PARAMETER,
+                       "Cost layer can't be the first layer of the network");
     int is_src_node_found = 0;
     for (i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id) == 0) {
-            bcnn_node_add_input(&node, i);
+            bcnn_node_add_input(net, &node, i);
             is_src_node_found = 1;
             break;
         }
     }
-    bh_check(is_src_node_found, "Cost layer: invalid input node name %s",
-             src_id);
+    BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
+                       "Cost layer: invalid input node name %s", src_id);
 
     node.layer->scale = scale;
     node.layer->loss_metric = loss_metric;
@@ -62,7 +64,7 @@ int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                           net->tensors[node.src[0]].w, 0);
     bcnn_tensor_allocate(&net->tensors[1]);
     // Add pointer to label node to connection
-    bcnn_node_add_input(&node, 1 /* LABEL_NODE_ID */);
+    bcnn_node_add_input(net, &node, 1 /* LABEL_NODE_ID */);
 
     // Create output node
     bcnn_tensor_set_shape(
@@ -73,7 +75,7 @@ int bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
-    bcnn_node_add_output(&node, net->num_tensors - 1);
+    bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
     bcnn_net_add_node(net, node);
     return 0;

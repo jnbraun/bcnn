@@ -1,24 +1,24 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * Copyright (c) 2016 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #include "bcnn_activation_layer.h"
 #include "bcnn_batchnorm_layer.h"
@@ -33,12 +33,14 @@
 #include <bh/bh_string.h>
 #include <bh/bh_timer.h>
 
-#include "bh_log.h"
+#include <bh/bh_log.h>
 
-int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
-                                 int pad, int batch_norm, bcnn_filler_type init,
-                                 bcnn_activation activation, int quantize,
-                                 char *src_id, char *dst_id) {
+bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
+                                         int stride, int pad, int batch_norm,
+                                         bcnn_filler_type init,
+                                         bcnn_activation activation,
+                                         int quantize, char *src_id,
+                                         char *dst_id) {
     int i, sz, k, l;
     bcnn_node node = {0};
     float std_init = 0.0f;
@@ -52,19 +54,22 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
         int is_src_node_found = 0;
         for (i = net->num_tensors - 1; i >= 0; --i) {
             if (strcmp(net->tensors[i].name, src_id) == 0) {
-                bcnn_node_add_input(&node, i);
+                bcnn_node_add_input(net, &node, i);
                 is_src_node_found = 1;
                 break;
             }
         }
-        bh_check(is_src_node_found,
-                 "Convolution layer: invalid input node name %s", src_id);
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
+            "Convolution layer: invalid input node name %s", src_id);
     } else {
-        bh_check(bcnn_tensor_size(&net->tensors[0]) > 0,
-                 "Invalid input size of the network. "
-                 "Hint: you can use 'bcnn_net_set_input_shape' to set the "
-                 "network input size");
-        bcnn_node_add_input(&node, 0);
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, bcnn_tensor_size(&net->tensors[0]) > 0,
+            BCNN_INVALID_PARAMETER,
+            "Invalid input size of the network. "
+            "Hint: you can use 'bcnn_net_set_input_shape' to set the "
+            "network input size");
+        bcnn_node_add_input(net, &node, 0);
     }
 
     // Setup layer
@@ -87,14 +92,14 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
         .range = (size * size * net->tensors[node.src[0]].c), .type = init};
     bcnn_tensor_fill(&weights, w_filler);
     bcnn_net_add_tensor(net, weights);
-    bcnn_node_add_input(&node, net->num_tensors - 1);
+    bcnn_node_add_input(net, &node, net->num_tensors - 1);
     // Create bias tensor
     bcnn_tensor biases = {0};
     char biases_name[256];
     sprintf(biases_name, "%s_b", src_id);
     bcnn_tensor_create(&biases, 1, 1, 1, n, 1, biases_name);
     bcnn_net_add_tensor(net, biases);
-    bcnn_node_add_input(&node, net->num_tensors - 1);
+    bcnn_node_add_input(net, &node, net->num_tensors - 1);
     if (net->learner.optimizer == ADAM) {
         int weights_size = bcnn_tensor_size(&weights);
         node.layer->adam_m = (float *)calloc(weights_size, sizeof(float));
@@ -114,7 +119,7 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
-    bcnn_node_add_output(&node, net->num_tensors - 1);
+    bcnn_node_add_output(net, &node, net->num_tensors - 1);
     sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
          net->tensors[node.src[0]].c * size * size;
     node.layer->conv_workspace = (float *)calloc(sz, sizeof(float));
@@ -140,18 +145,18 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
         bcnn_tensor_create(&running_mean, 1, 1, 1, channels, 0,
                            running_mean_name);  // no gradients
         bcnn_net_add_tensor(net, running_mean);
-        bcnn_node_add_input(&node, net->num_tensors - 1);
+        bcnn_node_add_input(net, &node, net->num_tensors - 1);
         bcnn_tensor running_variance = {0};
         bcnn_tensor_create(&running_variance, 1, 1, 1, channels, 0,
                            running_var_name);  // no gradients
         bcnn_net_add_tensor(net, running_variance);
-        bcnn_node_add_input(&node, net->num_tensors - 1);
+        bcnn_node_add_input(net, &node, net->num_tensors - 1);
         bcnn_tensor scales = {0};
         bcnn_tensor_create(&scales, 1, 1, 1, channels, 1, scales_name);
         bcnn_tensor_filler filler = {.value = 1.0f, .type = FIXED};
         bcnn_tensor_fill(&scales, filler);
         bcnn_net_add_tensor(net, scales);
-        bcnn_node_add_input(&node, net->num_tensors - 1);
+        bcnn_node_add_input(net, &node, net->num_tensors - 1);
         // Internal workspace for batch norm
         node.layer->x_norm = (float *)calloc(sz, sizeof(float));
         node.layer->bn_workspace = (float *)calloc(sz, sizeof(float));
@@ -247,7 +252,8 @@ int bcnn_add_convolutional_layer(bcnn_net *net, int n, int size, int stride,
 #endif
     node.layer->activation = activation;
     bcnn_net_add_node(net, node);
-    bh_log_info(
+    BCNN_INFO(
+        net->log_ctx,
         "[Convolutional] input_shape= %dx%dx%d nb_filters= %d kernel_size= %d "
         "stride= %d padding= %d output_shape= %dx%dx%d",
         net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,

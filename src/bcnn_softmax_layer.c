@@ -1,33 +1,33 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * Copyright (c) 2016 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 #include "bcnn_softmax_layer.h"
 
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
+#include <bh/bh_log.h>
 #include "bcnn_utils.h"
-#include "bh_log.h"
 
-int bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {
+bcnn_status bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {
     int num_nodes = net->num_nodes + 1;
     int sz, i;
     bcnn_node node = {0};
@@ -37,15 +37,16 @@ int bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {
         int is_src_node_found = 0;
         for (i = net->num_tensors - 1; i >= 0; --i) {
             if (strcmp(net->tensors[i].name, src_id) == 0) {
-                bcnn_node_add_input(&node, i);
+                bcnn_node_add_input(net, &node, i);
                 is_src_node_found = 1;
                 break;
             }
         }
-        bh_check(is_src_node_found,
-                 "Full-connected layer: invalid input node name %s", src_id);
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
+            "Full-connected layer: invalid input node name %s", src_id);
     } else {
-        bcnn_node_add_input(&node, 0);
+        bcnn_node_add_input(net, &node, 0);
     }
 
     // Setup output node
@@ -60,17 +61,18 @@ int bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
-    bcnn_node_add_output(&node, net->num_tensors - 1);
+    bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = SOFTMAX;
 
     bcnn_net_add_node(net, node);
 
-    bh_log_info("[Softmax] input_shape= %dx%dx%d output_shape= %dx%dx%d",
-                net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-                net->tensors[node.src[0]].c, net->tensors[node.dst[0]].w,
-                net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);
+    BCNN_INFO(net->log_ctx,
+              "[Softmax] input_shape= %dx%dx%d output_shape= %dx%dx%d",
+              net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
+              net->tensors[node.src[0]].c, net->tensors[node.dst[0]].w,
+              net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);
 
     return BCNN_SUCCESS;
 }

@@ -21,18 +21,19 @@
  */
 #include "bcnn_maxpool_layer.h"
 
-#include <bh/bh.h>
+#include <bh/bh_log.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 #include "bcnn_utils.h"
-#include "bh_log.h"
 
 #include <bh/bh_timer.h>
 #ifdef BCNN_USE_NEON
 #include <arm_neon.h>
 #endif
 
-int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
-                           bcnn_padding padding, char *src_id, char *dst_id) {
+bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
+                                   bcnn_padding padding, char *src_id,
+                                   char *dst_id) {
     int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
@@ -41,15 +42,16 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
         int is_src_node_found = 0;
         for (i = net->num_tensors - 1; i >= 0; --i) {
             if (strcmp(net->tensors[i].name, src_id) == 0) {
-                bcnn_node_add_input(&node, i);
+                bcnn_node_add_input(net, &node, i);
                 is_src_node_found = 1;
                 break;
             }
         }
-        bh_check(is_src_node_found, "Maxpool layer: invalid input node name %s",
-                 src_id);
+        BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found,
+                           BCNN_INVALID_PARAMETER,
+                           "Maxpool layer: invalid input node name %s", src_id);
     } else {
-        bcnn_node_add_input(&node, 0);
+        bcnn_node_add_input(net, &node, 0);
     }
     // Compute output size according to padding option
     int out_h =
@@ -85,7 +87,7 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
-    bcnn_node_add_output(&node, net->num_tensors - 1);
+    bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = MAXPOOL;
@@ -117,7 +119,8 @@ int bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
 
     bcnn_net_add_node(net, node);
 
-    bh_log_info(
+    BCNN_INFO(
+        net->log_ctx,
         "[Maxpool] input_shape= %dx%dx%d size= %d stride= %d ouput_shape= "
         "%dx%dx%d",
         net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,

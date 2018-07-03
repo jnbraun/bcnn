@@ -1,32 +1,47 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * Copyright (c) 2016 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
-#include "bcnn/bcnn.h"
 #include "bcnn_utils.h"
-#include "bh_log.h"
+#include "bcnn/bcnn.h"
 
-#include <bh/bh.h>
-#include <bh/bh_error.h>
+#include <bh/bh_log.h>
 #include <bh/bh_string.h>
+
+void bcnn_log(bcnn_log_context ctx, bh_log_level level, const char *fmt, ...) {
+#if (BCNN_LOG_ENABLED)
+    if (ctx.lvl <= level) {
+        char msg[2048];
+        va_list args;
+        va_start(args, fmt);
+        vsnprintf(msg, sizeof(msg), fmt, args);
+        va_end(args);
+        if (ctx.fct) {
+            ctx.fct(level, msg);
+        } else {  // Use default logging to stderr
+            bh_log(level, msg);
+        }
+    }
+#endif
+}
 
 float bcnn_rng_gaussian(bcnn_gauss_gen *g) {
     float v1, v2, s, m;
@@ -118,7 +133,6 @@ float *bcnn_cuda_memcpy_f32(float *x, int n) {
     }
 
     if (!x_gpu) {
-        // bh_error("Cuda malloc failed", BCNN_CUDA_FAILED_ALLOC);
         fprintf(stderr, "[ERROR] Cuda malloc failed\n");
     }
 
@@ -127,9 +141,10 @@ float *bcnn_cuda_memcpy_f32(float *x, int n) {
 
 void bcnn_cuda_memcpy_f32_noalloc(float *x, float *x_gpu, int n) {
     size_t size = sizeof(float) * n;
-
-    bh_check(x_gpu != NULL, "Invalid pointer to gpu memory");
-
+    if (!x_gpu) {
+        // Invalid pointer to gpu memory
+        return;
+    }
     if (x) {
         cudaError_t status = cudaMemcpy(x_gpu, x, size, cudaMemcpyHostToDevice);
         bcnn_cuda_check(status);

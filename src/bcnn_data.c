@@ -1,119 +1,33 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
-#include <bh/bh.h>
-#include <bh/bh_error.h>
+ * Copyright (c) 2016 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+#include <bh/bh_log.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 
 /* include bip image processing lib */
 #include <bip/bip.h>
 
+#include <bh/bh_log.h>
 #include "bcnn/bcnn.h"
-#include "bh_log.h"
-
-int bcnn_pack_data(char *list, int label_width, bcnn_label_type type,
-                   char *out_pack) {
-    FILE *f_lst = NULL, *f_out = NULL, *f_outlst = NULL;
-    char *line = NULL;
-    int n = 0, n_tok = 0;
-    char **tok = NULL;
-    int i, w, h, c, buf_sz, part = 0;
-    float lf;
-    unsigned char *img = NULL;
-    unsigned char *buf = NULL;
-    char name[256];
-    size_t cnt = 0, max_part_sz = 256000000;
-
-    f_lst = fopen(list, "rt");
-    if (f_lst == NULL) {
-        fprintf(stderr, "[ERROR] Can not open %s\n", list);
-        return -1;
-    }
-    f_outlst = fopen(out_pack, "wt");
-    if (f_outlst == NULL) {
-        fprintf(stderr, "[ERROR] Can not open %s\n", out_pack);
-        return -1;
-    }
-
-    while ((line = bh_fgetline(f_lst)) != NULL) {
-        n++;
-        bh_free(line);
-    }
-    rewind(f_lst);
-
-    sprintf(name, "%s_%d.bin", out_pack, part);
-    f_out = fopen(name, "wb");
-    cnt += fwrite(&n, 1, sizeof(int), f_out);
-    cnt += fwrite(&label_width, 1, sizeof(int), f_out);
-    cnt += fwrite(&type, 1, sizeof(int), f_out);
-
-    while ((line = bh_fgetline(f_lst)) != NULL) {
-        if (cnt > max_part_sz) {
-            if (f_out != NULL) fclose(f_out);
-            cnt = 0;
-            part++;
-            fprintf(f_outlst, "%s\n", name);
-            sprintf(name, "%s_%d.bin", out_pack, part);
-            f_out = fopen(name, "wb");
-            cnt += fwrite(&n, 1, sizeof(int), f_out);
-            cnt += fwrite(&label_width, 1, sizeof(int), f_out);
-            cnt += fwrite(&type, 1, sizeof(int), f_out);
-        }
-        n_tok = bh_strsplit(line, ' ', &tok);
-        bh_assert((n_tok - 1 == label_width),
-                  "Data and label_width are not consistent", BCNN_INVALID_DATA);
-        bip_load_image(tok[0], &img, &w, &h, &c);
-        bip_write_image_to_memory(&buf, &buf_sz, img, w, h, c, w * c);
-        // Write img
-        cnt += fwrite(&buf_sz, 1, sizeof(int), f_out);
-        cnt += fwrite(buf, 1, buf_sz, f_out);
-        bh_free(buf);
-        bh_free(img);
-        // Write label(s)
-        switch (type) {
-            case LABEL_INT:
-                for (i = 1; i < n_tok; ++i) {
-                    lf = (float)atoi(tok[i]);
-                    cnt += fwrite(&lf, 1, sizeof(float), f_out);
-                }
-                break;
-            case LABEL_FLOAT:
-                for (i = 1; i < n_tok; ++i) {
-                    lf = (float)atof(tok[i]);
-                    cnt += fwrite(&lf, 1, sizeof(float), f_out);
-                }
-                break;
-        }
-
-        bh_free(line);
-        for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
-        bh_free(tok);
-    }
-    fprintf(f_outlst, "%s\n", name);
-    if (f_out != NULL) fclose(f_out);
-    if (f_lst != NULL) fclose(f_lst);
-    if (f_outlst != NULL) fclose(f_outlst);
-
-    return BCNN_SUCCESS;
-}
 
 int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c,
                               int no_input_norm, int swap_to_bgr, float mean_r,
@@ -164,10 +78,13 @@ void bcnn_convert_img_to_float2(unsigned char *src, int w, int h, int c,
                                 float mean_g, float mean_b, float *dst) {
     float m[3] = {mean_r, mean_g, mean_b};
     if (swap_to_bgr) {
-        bh_check(c == 3,
-                 "bcnn_convert_img_to_float2: number of channels %d is "
-                 "inconsistent. Expected 3",
-                 c);
+        if (c != 3) {
+            bh_log(BH_LOG_ERROR,
+                   "bcnn_convert_img_to_float2: number of channels %d is "
+                   "inconsistent. Expected 3",
+                   c);
+            return;
+        }
         for (int k = 0; k < c; ++k) {
             for (int y = 0; y < h; ++y) {
                 for (int x = 0; x < w; ++x) {
@@ -189,7 +106,7 @@ void bcnn_convert_img_to_float2(unsigned char *src, int w, int h, int c,
 }
 
 /* IO */
-int bcnn_load_image_from_csv(char *str, int w, int h, int c,
+int bcnn_load_image_from_csv(bcnn_net *net, char *str, int w, int h, int c,
                              unsigned char **img) {
     int i, n_tok, sz = w * h * c;
     char **tok = NULL;
@@ -197,7 +114,8 @@ int bcnn_load_image_from_csv(char *str, int w, int h, int c,
 
     n_tok = bh_strsplit(str, ',', &tok);
 
-    bh_assert(n_tok == sz, "Incorrect data size in csv", BCNN_INVALID_DATA);
+    BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == sz), BCNN_INVALID_DATA,
+                       "Incorrect data size in csv");
 
     ptr_img = (unsigned char *)calloc(sz, sizeof(unsigned char));
     for (i = 0; i < n_tok; ++i) {
@@ -213,17 +131,18 @@ int bcnn_load_image_from_csv(char *str, int w, int h, int c,
 
 /* Load image from disk, performs crop to fit the required size if needed and
  * copy in pre-allocated memory */
-int bcnn_load_image_from_path(char *path, int w, int h, int c,
+int bcnn_load_image_from_path(bcnn_net *net, char *path, int w, int h, int c,
                               unsigned char *img, int state, int *x_shift,
                               int *y_shift) {
     int w_img, h_img, c_img, x_ul = 0, y_ul = 0;
     unsigned char *buf = NULL, *pimg = NULL;
 
     bip_load_image(path, &buf, &w_img, &h_img, &c_img);
-    bh_assert(w_img > 0 && h_img > 0 && buf, "Invalid image",
-              BCNN_INVALID_DATA);
+    BCNN_CHECK_AND_LOG(net->log_ctx, (w_img > 0 && h_img > 0 && buf),
+                       BCNN_INVALID_DATA, "Invalid image %s", path);
     if (c != c_img) {
-        fprintf(stderr, "Unexpected number of channels of image %s\n", path);
+        bcnn_log(net->log_ctx, BH_LOG_ERROR,
+                 "Unexpected number of channels of image %s\n", path);
         bh_free(buf);
         return BCNN_INVALID_DATA;
     }
@@ -251,18 +170,20 @@ int bcnn_load_image_from_path(char *path, int w, int h, int c,
     return BCNN_SUCCESS;
 }
 
-int bcnn_load_image_from_memory(unsigned char *buffer, int buffer_size, int w,
-                                int h, int c, unsigned char **img, int state,
-                                int *x_shift, int *y_shift) {
+int bcnn_load_image_from_memory(bcnn_net *net, unsigned char *buffer,
+                                int buffer_size, int w, int h, int c,
+                                unsigned char **img, int state, int *x_shift,
+                                int *y_shift) {
     int w_img, h_img, c_img, x_ul = 0, y_ul = 0;
     unsigned char *tmp = NULL, *pimg = NULL;
 
-    bip_load_image_from_memory(buffer, buffer_size, &tmp, &w_img, &h_img,
-                               &c_img);
-    bh_assert(w_img > 0 && h_img > 0 && tmp, "Invalid image",
-              BCNN_INVALID_DATA);
+    BIP_CHECK_STATUS(bip_load_image_from_memory(buffer, buffer_size, &tmp,
+                                                &w_img, &h_img, &c_img));
+    BCNN_CHECK_AND_LOG(net->log_ctx, (w_img > 0 && h_img > 0 && buffer),
+                       BCNN_INVALID_DATA, "Invalid image");
     if (c != c_img) {
-        // fprintf(stderr, "Unexpected number of channels\n");
+        bcnn_log(net->log_ctx, BH_LOG_ERROR,
+                 "Unexpected number of channels of image\n");
         bh_free(tmp);
         return BCNN_INVALID_DATA;
     }
@@ -327,13 +248,15 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter) {
         iter->input_width = _read_int(tmp + 12);
         n = fread(tmp, 1, 8, iter->f_label);
         n_labels = _read_int(tmp + 4);
-        bh_assert(n_img == n_labels,
-                  "MNIST data: number of images and labels must be the same",
-                  BCNN_INVALID_DATA);
-        bh_assert(net->input_height == iter->input_height &&
-                      net->input_width == iter->input_width,
-                  "MNIST data: incoherent image width and height",
-                  BCNN_INVALID_DATA);
+        BCNN_CHECK_AND_LOG(net->log_ctx, (n_img == n_labels), BCNN_INVALID_DATA,
+                           "MNIST data: number of images and labels must be "
+                           "the same. Found %d images and %d labels",
+                           n_img, n_labels);
+        BCNN_CHECK_AND_LOG(net->log_ctx,
+                           (net->input_height == iter->input_height &&
+                            net->input_width == iter->input_width),
+                           BCNN_INVALID_DATA,
+                           "MNIST data: incoherent image width and height");
         iter->n_samples = n_img;
     }
 
@@ -357,22 +280,17 @@ static int bcnn_init_bin_iterator(bcnn_net *net, bcnn_iterator *iter,
     iter->type = ITER_BIN;
 
     f_lst = fopen(path_input, "rt");
-    if (f_lst == NULL) {
-        fprintf(stderr, "[ERROR] Can not open file %s\n", path_input);
-        return BCNN_INVALID_PARAMETER;
-    }
+    BCNN_CHECK_AND_LOG(net->log_ctx, (f_lst != NULL), BCNN_INVALID_PARAMETER,
+                       "Can not open file %s", path_input);
     // Open first binary file
     line = bh_fgetline(f_lst);
-    if (line == NULL) {
-        bh_error("Empty data list", BCNN_INVALID_DATA);
-    }
+    BCNN_CHECK_AND_LOG(net->log_ctx, (line != NULL), BCNN_INVALID_DATA,
+                       "Empty data list");
 
     // bh_strstrip(line);
     f_bin = fopen(line, "rb");
-    if (f_bin == NULL) {
-        fprintf(stderr, "[ERROR] Can not open file %s\n", line);
-        return BCNN_INVALID_PARAMETER;
-    }
+    BCNN_CHECK_AND_LOG(net->log_ctx, (f_bin != NULL), BCNN_INVALID_PARAMETER,
+                       "Can not open file %s", line);
 
     nr = fread(&iter->n_samples, 1, sizeof(int), f_bin);
     nr = fread(&iter->label_width, 1, sizeof(int), f_bin);
@@ -429,7 +347,7 @@ static int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter) {
     nr = fread(&buf_sz, 1, sizeof(int), iter->f_input);
     buf = (unsigned char *)calloc(buf_sz, sizeof(unsigned char));
     nr = fread(buf, 1, buf_sz, iter->f_input);
-    bcnn_load_image_from_memory(buf, buf_sz, net->input_width,
+    bcnn_load_image_from_memory(net, buf, buf_sz, net->input_width,
                                 net->input_height, net->input_channels,
                                 &iter->input_uchar, net->state,
                                 &net->data_aug.shift_x, &net->data_aug.shift_y);
@@ -586,33 +504,35 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter) {
     }
     n_tok = bh_strsplit(line, ' ', &tok);
     if (net->task != PREDICT && net->prediction_type == CLASSIFICATION) {
-        bh_assert(n_tok == 2, "Wrong data format for classification",
-                  BCNN_INVALID_DATA);
+        BCNN_CHECK_AND_LOG(net->log_ctx, n_tok == 2, BCNN_INVALID_DATA,
+                           "Wrong data format for classification");
     }
     if (iter->type == ITER_LIST) {
-        bcnn_load_image_from_path(tok[0], net->input_width, net->input_height,
-                                  net->input_channels, iter->input_uchar,
-                                  net->state, &net->data_aug.shift_x,
-                                  &net->data_aug.shift_y);
+        bcnn_load_image_from_path(
+            net, tok[0], net->input_width, net->input_height,
+            net->input_channels, iter->input_uchar, net->state,
+            &net->data_aug.shift_x, &net->data_aug.shift_y);
     } else {
-        bcnn_load_image_from_csv(tok[0], net->input_width, net->input_height,
-                                 net->input_channels, &iter->input_uchar);
+        bcnn_load_image_from_csv(net, tok[0], net->input_width,
+                                 net->input_height, net->input_channels,
+                                 &iter->input_uchar);
     }
 
     // Label
     if (net->prediction_type != SEGMENTATION) {
-        bh_assert(n_tok == iter->label_width + 1, "Unexpected label format",
-                  BCNN_INVALID_DATA);
+        BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == iter->label_width + 1),
+                           BCNN_INVALID_DATA, "Unexpected label format");
         for (i = 0; i < iter->label_width; ++i) {
             iter->label_float[i] = (float)atof(tok[i + 1]);
         }
     } else {
         for (i = 0; i < iter->label_width; ++i) {
             if (iter->type == ITER_LIST) {
-                bcnn_load_image_from_path(tok[i], out_w, out_h, out_c, img,
+                bcnn_load_image_from_path(net, tok[i], out_w, out_h, out_c, img,
                                           net->state, &tmp_x, &tmp_y);
             } else {
-                bcnn_load_image_from_csv(tok[i], out_w, out_h, out_c, &img);
+                bcnn_load_image_from_csv(net, tok[i], out_w, out_h, out_c,
+                                         &img);
             }
             bcnn_convert_img_to_float(img, out_w, out_h, out_c, 0, 0, 0, 0, 0,
                                       iter->label_float);
@@ -742,23 +662,19 @@ int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
     return BCNN_SUCCESS;
 }
 
-static int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img,
-                                    char *path_label) {
+static int bcnn_init_mnist_iterator(bcnn_net *net, bcnn_iterator *iter,
+                                    char *path_img, char *path_label) {
     FILE *f_img = NULL, *f_label = NULL;
     char tmp[16] = {0};
     int n_img = 0, n_lab = 0, nr = 0;
 
     iter->type = ITER_MNIST;
     f_img = fopen(path_img, "rb");
-    if (f_img == NULL) {
-        fprintf(stderr, "[ERROR] Cound not open file %s\n", path_img);
-        return -1;
-    }
+    BCNN_CHECK_AND_LOG(net->log_ctx, f_img, BCNN_INVALID_PARAMETER,
+                       "Cound not open file %s", path_img);
     f_label = fopen(path_label, "rb");
-    if (f_label == NULL) {
-        fprintf(stderr, "[ERROR] Cound not open file %s\n", path_label);
-        return -1;
-    }
+    BCNN_CHECK_AND_LOG(net->log_ctx, f_label, BCNN_INVALID_PARAMETER,
+                       "Cound not open file %s", path_label);
 
     iter->f_input = f_img;
     iter->f_label = f_label;
@@ -771,10 +687,9 @@ static int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img,
     iter->input_depth = 1;
     nr = fread(tmp, 1, 8, iter->f_label);
     n_lab = _read_int(tmp + 4);
-    bh_assert(
-        n_img == n_lab,
-        "Inconsistent MNIST data: number of images and labels must be the same",
-        BCNN_INVALID_DATA);
+    BCNN_CHECK_AND_LOG(net->log_ctx, n_img == n_lab, BCNN_INVALID_DATA,
+                       "Inconsistent MNIST data: number of images and labels "
+                       "must be the same");
 
     iter->input_uchar = (unsigned char *)calloc(
         iter->input_width * iter->input_height, sizeof(unsigned char));
@@ -782,13 +697,13 @@ static int bcnn_init_mnist_iterator(bcnn_iterator *iter, char *path_img,
     rewind(iter->f_input);
     rewind(iter->f_label);
 
-    return 0;
+    return BCNN_SUCCESS;
 }
 
 int bcnn_iterator_initialize(bcnn_net *net, bcnn_iterator *iter,
                              char *path_input, char *path_label, char *type) {
     if (strcmp(type, "mnist") == 0) {
-        return bcnn_init_mnist_iterator(iter, path_input, path_label);
+        return bcnn_init_mnist_iterator(net, iter, path_input, path_label);
     } else if (strcmp(type, "bin") == 0) {
         return bcnn_init_bin_iterator(net, iter, path_input);
     } else if (strcmp(type, "list") == 0) {
@@ -796,11 +711,10 @@ int bcnn_iterator_initialize(bcnn_net *net, bcnn_iterator *iter,
     } else if (strcmp(type, "cifar10") == 0) {
         return bcnn_init_cifar10_iterator(net, iter, path_input);
     } else {
-        bh_error(
-            "Unknown data_format. Available are 'mnist' 'bin' 'list' 'cifar10'",
-            BCNN_INVALID_PARAMETER);
+        BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
+                   "Unknown data_format. Available are 'mnist' 'bin' 'list' "
+                   "'cifar10'");
     }
-
     return BCNN_SUCCESS;
 }
 

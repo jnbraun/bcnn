@@ -1,54 +1,55 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * Copyright (c) 2016 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #include "bcnn_activation_layer.h"
 
-#include <bh/bh_error.h>
+#include <bh/bh_log.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
-#include "bh_log.h"
 
-int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
-                              char *src_id) {
+bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
+                                      char *src_id) {
     bcnn_node node = {0};
     char type_name[256];
     int i;
 
-    bh_check(net->num_nodes >= 1,
-             "Activation layer can't be the first layer of the network");
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx, net->num_nodes >= 1, BCNN_INVALID_PARAMETER,
+        "Activation layer can't be the first layer of the network");
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = ACTIVATION;
 
     int is_src_node_found = 0;
     for (i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id) == 0) {
-            bcnn_node_add_input(&node, i);
-            bcnn_node_add_output(&node, i);
+            bcnn_node_add_input(net, &node, i);
+            bcnn_node_add_output(net, &node, i);
             is_src_node_found = 1;
             break;
         }
     }
-    bh_check(is_src_node_found, "Activation layer: invalid input node name %s",
-             src_id);
+    BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
+                       "Activation layer: invalid input node name %s", src_id);
 
     node.layer->activation = type;
     if (type == PRELU) {
@@ -58,7 +59,7 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
         bcnn_tensor_create(&weights, 1, 1, 1, net->tensors[node.src[0]].c, 1,
                            weights_name);
         bcnn_net_add_tensor(net, weights);
-        bcnn_node_add_input(&node, net->num_tensors - 1);
+        bcnn_node_add_input(net, &node, net->num_tensors - 1);
     }
 
     bcnn_net_add_node(net, node);
@@ -93,12 +94,13 @@ int bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
             break;
     }
 
-    bh_log_info(
-        "[Activation] input_shape= %dx%dx%d function= %s output_shape= "
-        "%dx%dx%d",
-        net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-        net->tensors[node.src[0]].c, type_name, net->tensors[node.dst[0]].w,
-        net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);
+    BCNN_INFO(net->log_ctx,
+              "[Activation] input_shape= %dx%dx%d function= %s output_shape= "
+              "%dx%dx%d",
+              net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
+              net->tensors[node.src[0]].c, type_name,
+              net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
+              net->tensors[node.dst[0]].c);
 
     return BCNN_SUCCESS;
 }

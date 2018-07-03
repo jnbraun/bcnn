@@ -1,28 +1,31 @@
 #include "bcnn_yolo.h"
 
+#include <bh/bh_log.h>
+#include <bh/bh_string.h>
+
 #include "bcnn_activation_layer.h"
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
-#include "bh_log.h"
-/** From yolo darknet */
 
-int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
-                        float *anchors, char *src_id, char *dst_id) {
+/** From yolo darknet */
+bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
+                                float *anchors, char *src_id, char *dst_id) {
     // layer l = {0};
     bcnn_node node = {0};
 
-    bh_check(net->num_nodes >= 1,
-             "Yolo layer can't be the first layer of the network");
+    BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,
+                       BCNN_INVALID_PARAMETER,
+                       "Yolo layer can't be the first layer of the network");
     int is_src_node_found = 0;
     for (int i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id) == 0) {
-            bcnn_node_add_input(&node, i);
+            bcnn_node_add_input(net, &node, i);
             is_src_node_found = 1;
             break;
         }
     }
-    bh_check(is_src_node_found, "Yolo layer: invalid input node name %s",
-             src_id);
+    BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
+                       "Yolo layer: invalid input node name %s", src_id);
 
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = YOLO;
@@ -40,7 +43,7 @@ int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
     // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
-    bcnn_node_add_output(&node, net->num_tensors - 1);
+    bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
     node.layer->classes = classes;
     node.layer->coords = coords;
@@ -61,13 +64,13 @@ int bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
 
     // Add connection to net
     bcnn_net_add_node(net, node);
-    bh_log_info(
-        "[Yolo] input_shape= %dx%dx%d num_classes= %d num_coords= %d "
-        "output_shape= %dx%dx%d",
-        net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-        net->tensors[node.src[0]].c, classes, coords,
-        net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
-        net->tensors[node.dst[0]].c);
+    BCNN_INFO(net->log_ctx,
+              "[Yolo] input_shape= %dx%dx%d num_classes= %d num_coords= %d "
+              "output_shape= %dx%dx%d",
+              net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
+              net->tensors[node.src[0]].c, classes, coords,
+              net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
+              net->tensors[node.dst[0]].c);
 
     return 0;
 }
@@ -401,8 +404,8 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
         }
     }
     *(layer->cost) =
-        powf(sqrtf(bcnn_dot(bcnn_tensor_size(dst_tensor),
-                            dst_tensor->grad_data, dst_tensor->grad_data)),
+        powf(sqrtf(bcnn_dot(bcnn_tensor_size(dst_tensor), dst_tensor->grad_data,
+                            dst_tensor->grad_data)),
              2);
     fprintf(
         stderr,

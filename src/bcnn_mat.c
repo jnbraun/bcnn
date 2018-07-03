@@ -22,8 +22,8 @@
 
 #include "bcnn_mat.h"
 
-#include <bh/bh.h>
-#include <bh/bh_error.h>
+#include <bh/bh_log.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 
 #include "bcnn/bcnn.h"
@@ -782,7 +782,7 @@ void bcnn_grad_bias(float *grad_bias, float *grad_data, int batch_size,
     }
 }
 
-static bh_inline int is_a_positive_and_inferior_to_b(int a, int b) {
+static inline int is_a_positive_and_inferior_to_b(int a, int b) {
     return (unsigned int)a < (unsigned int)b;
 }
 

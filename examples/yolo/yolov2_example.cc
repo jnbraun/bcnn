@@ -3,17 +3,17 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #endif
-#include <bh/bh.h>
-#include <bh/bh_error.h>
+#include <bh/bh_log.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 #include <bh/bh_timer.h>
 #include <bip/bip.h>
 
+#include <bh/bh_log.h>
 #include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
-#include "bh_log.h"
 
 static void transpose_matrix(float *a, int rows, int cols) {
     float *transpose = (float *)calloc(rows * cols, sizeof(float));
@@ -58,8 +58,9 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             int weights_size = bcnn_tensor_size(weights);
             int biases_size = bcnn_tensor_size(biases);
             int nb_read = fread(biases->data, sizeof(float), biases_size, fp);
-            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d", i,
-                        (unsigned long)nb_read, biases_size);
+            BCNN_INFO(net->log_ctx,
+                      "layer= %d nbread_bias= %lu bias_size_expected= %d", i,
+                      (unsigned long)nb_read, biases_size);
             if (layer->batch_norm == 1) {
                 bcnn_tensor *bn_mean = &net->tensors[net->nodes[i].src[3]];
                 bcnn_tensor *bn_var = &net->tensors[net->nodes[i].src[4]];
@@ -70,19 +71,20 @@ void load_yolo_weights(bcnn_net *net, char *model) {
                 int bn_scales_size = bcnn_tensor_size(bn_scales);
                 nb_read =
                     fread(bn_scales->data, sizeof(float), bn_scales_size, fp);
-                bh_log_info(
+                BCNN_INFO(
+                    net->log_ctx,
                     "layer= %d nbread_scales= %lu scales_size_expected= %d", i,
                     (unsigned long)nb_read, bn_scales_size);
                 nb_read = fread(bn_mean->data, sizeof(float), sz, fp);
-                bh_log_info(
-                    "layer= %d nbread_mean= %lu mean_size_expected= "
-                    "%d",
-                    i, (unsigned long)nb_read, sz);
+                BCNN_INFO(net->log_ctx,
+                          "layer= %d nbread_mean= %lu mean_size_expected= "
+                          "%d",
+                          i, (unsigned long)nb_read, sz);
                 nb_read = fread(bn_var->data, sizeof(float), sz, fp);
-                bh_log_info(
-                    "layer= %d nbread_variance= %lu "
-                    "variance_size_expected= %d",
-                    i, (unsigned long)nb_read, sz);
+                BCNN_INFO(net->log_ctx,
+                          "layer= %d nbread_variance= %lu "
+                          "variance_size_expected= %d",
+                          i, (unsigned long)nb_read, sz);
 #ifdef BCNN_USE_CUDA
                 bcnn_cuda_memcpy_host2dev(bn_mean->data_gpu, bn_mean->data,
                                           bn_mean_size);
@@ -93,8 +95,9 @@ void load_yolo_weights(bcnn_net *net, char *model) {
 #endif
             }
             nb_read = fread(weights->data, sizeof(float), weights_size, fp);
-            bh_log_info("layer= %d nbread_weight= %lu weight_size_expected= %d",
-                        i, (unsigned long)nb_read, weights_size);
+            BCNN_INFO(net->log_ctx,
+                      "layer= %d nbread_weight= %lu weight_size_expected= %d",
+                      i, (unsigned long)nb_read, weights_size);
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(weights->data_gpu, weights->data,
                                       weights_size);
@@ -107,11 +110,13 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             int weights_size = bcnn_tensor_size(weights);
             int biases_size = bcnn_tensor_size(biases);
             int nb_read = fread(biases->data, sizeof(float), biases_size, fp);
-            bh_log_info("layer= %d nbread_bias= %lu bias_size_expected= %d", i,
-                        (unsigned long)nb_read, biases_size);
+            BCNN_INFO(net->log_ctx,
+                      "layer= %d nbread_bias= %lu bias_size_expected= %d", i,
+                      (unsigned long)nb_read, biases_size);
             nb_read = fread(weights->data, sizeof(float), weights_size, fp);
-            bh_log_info("layer= %d nbread_weight= %lu weight_size_expected= %d",
-                        i, (unsigned long)nb_read, weights_size);
+            BCNN_INFO(net->log_ctx,
+                      "layer= %d nbread_weight= %lu weight_size_expected= %d",
+                      i, (unsigned long)nb_read, weights_size);
             if (transpose) {
                 transpose_matrix(
                     weights->data,
@@ -153,14 +158,15 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             int sz = net->tensors[net->nodes[i].dst[0]].c;
             int nb_read = fread(bn_scales->data, sizeof(float), sz, fp);
             nb_read = fread(bn_mean->data, sizeof(float), sz, fp);
-            bh_log_info(
+            BCNN_INFO(
+                net->log_ctx,
                 "batchnorm layer= %d nbread_mean= %lu mean_size_expected= %d",
                 i, (unsigned long)nb_read, sz);
             nb_read = fread(bn_var->data, sizeof(float), sz, fp);
-            bh_log_info(
-                "batchnorm layer= %d nbread_variance= %lu "
-                "variance_size_expected= %d",
-                i, (unsigned long)nb_read, sz);
+            BCNN_INFO(net->log_ctx,
+                      "batchnorm layer= %d nbread_variance= %lu "
+                      "variance_size_expected= %d",
+                      i, (unsigned long)nb_read, sz);
 // nb_read = fread(bn_biases->data, sizeof(float), sz, fp);
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(bn_mean->data_gpu, bn_mean->data, sz);
@@ -398,7 +404,9 @@ void predict_detections_video(int w_frame, int h_frame, bcnn_net *net,
         memcpy(pred + (avg_window - 1) * out_sz,
                net->tensors[net->num_tensors - 1].data, out_sz * sizeof(float));
     } else {
-        bh_log_error("Incorrect last layer. Should be a yolo layer");
+        bcnn_log(net->log_ctx, BH_LOG_ERROR,
+                 "Incorrect last layer. Should be a yolo layer");
+        return;
     }
 
     // Average predictions on the sliding time window
@@ -432,7 +440,9 @@ void predict_detections_img(int w_frame, int h_frame, bcnn_net *net,
         memcpy(pred, net->tensors[net->num_tensors - 1].data,
                out_sz * sizeof(float));
     } else {
-        bh_log_error("Incorrect last layer. Should be a yolo layer");
+        bcnn_log(net->log_ctx, BH_LOG_ERROR,
+                 "Incorrect last layer. Should be a yolo layer");
+        return;
     }
 
     // Get yolo_detection boxes

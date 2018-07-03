@@ -120,9 +120,8 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             if (transpose) {
                 transpose_matrix(
                     weights->data,
-                    bcnn_tensor_get_size3d(&net->tensors[net->nodes[i].src[0]]),
-                    bcnn_tensor_get_size3d(
-                        &net->tensors[net->nodes[i].dst[0]]));
+                    bcnn_tensor_size3d(&net->tensors[net->nodes[i].src[0]]),
+                    bcnn_tensor_size3d(&net->tensors[net->nodes[i].dst[0]]));
             }
             if (layer->batch_norm == 1) {
                 bcnn_tensor *bn_mean = &net->tensors[net->nodes[i].src[3]];
@@ -300,7 +299,7 @@ void prepare_detection_results(bcnn_net *net, yolo_detection **dets,
         bcnn_layer *yolo_layer = net->nodes[net->num_nodes - 1].layer;
         // Number detections: num boxes (5) * spatial output size (number of
         // cells)
-        int n = bcnn_tensor_get_size2d(&net->tensors[net->num_tensors - 1]) *
+        int n = bcnn_tensor_size2d(&net->tensors[net->num_tensors - 1]) *
                 yolo_layer->num;
         (*num_dets) = n;
         yolo_detection *p_dets =

@@ -1,6 +1,6 @@
 
-#include "bcnn/bcnn.h"
 #include <bh/bh_mem.h>
+#include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
 
@@ -83,7 +83,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
         (int *)bh_align_calloc(N_ * N_ * sizeof(int), align_offset);
 
     // each label is a One-Hot array
-    int length = bcnn_tensor_get_size3d(label);
+    int length = bcnn_tensor_size3d(label);
     for (int i = 0; i < batch_size; ++i) {
         // find out which element in the One Hot label array
         // is 1 and the index is the label

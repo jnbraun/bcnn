@@ -92,7 +92,7 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
     bcnn_iterator data_iter = {0};
     int nb = net->num_nodes;
     int output_size =
-        bcnn_tensor_get_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
+        bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
 
     if (bcnn_iterator_initialize(net, &data_iter, test_img, NULL, "cifar10") !=
         0) {

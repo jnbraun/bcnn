@@ -58,7 +58,7 @@ int bcnn_forward_softmax_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor, b
 {
     
     
-    int src_size = bcnn_tensor_get_size3d(src_tensor);
+    int src_size = bcnn_tensor_size3d(src_tensor);
     int batch_size = dst_tensor->n;
 
     _bcnn_forward_softmax_layer_kernel<<<bcnn_cuda_gridsize(batch_size), BCNN_CUDA_THREADS>>>(src_size,

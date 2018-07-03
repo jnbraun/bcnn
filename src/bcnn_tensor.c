@@ -20,7 +20,6 @@
  * SOFTWARE.
  */
 
-#include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
@@ -95,9 +94,9 @@ void bcnn_tensor_set_shape_from_tensor(bcnn_tensor *dst, bcnn_tensor *src) {
 
 int bcnn_tensor_size(bcnn_tensor *t) { return t->w * t->h * t->c * t->n; }
 
-int bcnn_tensor_get_size3d(bcnn_tensor *t) { return t->w * t->h * t->c; }
+int bcnn_tensor_size3d(bcnn_tensor *t) { return t->w * t->h * t->c; }
 
-int bcnn_tensor_get_size2d(bcnn_tensor *t) { return t->w * t->h; }
+int bcnn_tensor_size2d(bcnn_tensor *t) { return t->w * t->h; }
 
 void bcnn_tensor_allocate(bcnn_tensor *t) {
     int size = t->n * t->c * t->h * t->w;

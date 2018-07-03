@@ -167,7 +167,7 @@ int entry_index(bcnn_layer *layer, bcnn_tensor *dst_tensor, int batch,
                 int location, int entry) {
     int n = location / (dst_tensor->w * dst_tensor->h);
     int loc = location % (dst_tensor->w * dst_tensor->h);
-    return batch * bcnn_tensor_get_size3d(dst_tensor) +
+    return batch * bcnn_tensor_size3d(dst_tensor) +
            n * (dst_tensor->w * dst_tensor->h) *
                (layer->coords + layer->classes + 1) +
            entry * (dst_tensor->w * dst_tensor->h) + loc;

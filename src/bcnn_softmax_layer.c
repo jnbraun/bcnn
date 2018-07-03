@@ -80,7 +80,7 @@ bcnn_status bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {
 int bcnn_forward_softmax_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                    bcnn_tensor *dst_tensor) {
     int b, i, batch_size = src_tensor->n;
-    int src_size = bcnn_tensor_get_size3d(src_tensor);
+    int src_size = bcnn_tensor_size3d(src_tensor);
     float vmax = -FLT_MAX;
     float sum = 0.0f;
 

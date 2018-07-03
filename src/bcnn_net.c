@@ -499,8 +499,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
     bcnn_data_augment *param = &(net->data_aug);
     int input_size = bcnn_tensor_size(&net->tensors[0]);
     int en = (net->nodes[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
-    int output_size =
-        bcnn_tensor_get_size3d(&net->tensors[net->nodes[en].dst[0]]);
+    int output_size = bcnn_tensor_size3d(&net->tensors[net->nodes[en].dst[0]]);
 
     memset(x, 0, sz * net->batch_size * sizeof(float));
     if (net->task != PREDICT) {

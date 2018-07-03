@@ -81,7 +81,7 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
     bcnn_iterator data_mnist = {0};
     int nb = net->num_nodes;
     int output_size =
-        bcnn_tensor_get_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
+        bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
 
     bcnn_iterator_initialize(net, &data_mnist, test_img, test_label, "mnist");
 

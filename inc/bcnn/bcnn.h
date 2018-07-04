@@ -518,6 +518,8 @@ int bcnn_iterator_terminate(bcnn_iterator *iter);
 /* Load / Write model */
 bcnn_status bcnn_load_model(bcnn_net *net, char *filename);
 bcnn_status bcnn_write_model(bcnn_net *net, char *filename);
+/* For compatibility with older versions */
+bcnn_status bcnn_load_model_legacy(bcnn_net *net, char *filename);
 
 bcnn_status bcnn_init_workload(bcnn_net *net);
 bcnn_status bcnn_free_workload(bcnn_net *net);
@@ -586,9 +588,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 char *src_id, char *label_id, char *dst_id);
 
 /* YOLO */
-typedef struct {
-    float x, y, w, h;
-} yolo_box;
+typedef struct { float x, y, w, h; } yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

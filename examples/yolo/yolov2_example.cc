@@ -180,8 +180,8 @@ void load_yolo_weights(bcnn_net *net, char *model) {
     return;
 }
 
-int setup_yolo_tiny_net(bcnn_net *net, int input_width, int input_height,
-                        char *model) {
+void setup_yolo_tiny_net(bcnn_net *net, int input_width, int input_height,
+                         char *model) {
     bcnn_net_set_input_shape(net, input_width, input_height, 3, 1);
 
     bcnn_add_convolutional_layer(net, 16, 3, 1, 1, 1, XAVIER, LRELU, 0,

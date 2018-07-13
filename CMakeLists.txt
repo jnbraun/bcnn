@@ -99,7 +99,8 @@ if (USE_AVX)
 endif()
 if (USE_NEON)
     message(STATUS "[bcnn] Build with Neon instructions")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpu=neon")
+    # Note: Uncomment below line in case of older arm architecture
+    #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpu=neon")
     add_definitions(-DBCNN_USE_NEON)
 endif()
 

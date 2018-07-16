@@ -882,13 +882,13 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
 #define MC 384
 #define KC 384
 #define NC 4096
-#ifdef PACK_4x4
-#define MR 4
-#define NR 4
-#else
+#if (defined(__aarch64__))
 #define MR 8
 #define NR 8
-#endif
+#else
+#define MR 4
+#define NR 4
+#endif  // __aarch64__
 #else
 #define MC 128
 #define KC 384
@@ -954,11 +954,11 @@ static void sgemm_nn_pack_A(int mc, int kc, const float *A, int inc_row_A,
 
     for (i = 0; i < mp; ++i) {
 #ifdef BCNN_USE_NEON
-#ifdef PACK_4x4
-        sgemm_nn_pack_MRxk4(kc, A, inc_row_A, inc_col_A, buffer);
-#else
+#if (defined(__aarch64__))
         sgemm_nn_pack_MRxk8(kc, A, inc_row_A, inc_col_A, buffer);
-#endif
+#else
+        sgemm_nn_pack_MRxk4(kc, A, inc_row_A, inc_col_A, buffer);
+#endif  // __aarch64__
 #else
         sgemm_nn_pack_MRxk8(kc, A, inc_row_A, inc_col_A, buffer);
 #endif
@@ -1094,11 +1094,71 @@ static void sgemm_ukernel(int kc, float alpha, const float *A, const float *B,
     _mm256_store_ps(AB_ + 48, abv6);
     _mm256_store_ps(AB_ + 56, abv7);
 #elif (defined(BCNN_USE_NEON))
-#if PACK_4x4
-    float32x4_t cv0 = vdupq_n_f32(0.0);
-    float32x4_t cv1 = vdupq_n_f32(0.0);
-    float32x4_t cv2 = vdupq_n_f32(0.0);
-    float32x4_t cv3 = vdupq_n_f32(0.0);
+#if (defined(__aarch64__))
+    float32x4_t av0, av1, bv0, bv1;
+    float32x4_t abv0, abv1, abv2, abv3, abv4, abv5, abv6, abv7, abv8, abv9,
+        abv10, abv11, abv12, abv13, abv14, abv15;
+    abv0 = vdupq_n_f32(0.0f);
+    abv1 = vdupq_n_f32(0.0f);
+    abv2 = vdupq_n_f32(0.0f);
+    abv3 = vdupq_n_f32(0.0f);
+    abv4 = vdupq_n_f32(0.0f);
+    abv5 = vdupq_n_f32(0.0f);
+    abv6 = vdupq_n_f32(0.0f);
+    abv7 = vdupq_n_f32(0.0f);
+    abv8 = vdupq_n_f32(0.0f);
+    abv9 = vdupq_n_f32(0.0f);
+    abv10 = vdupq_n_f32(0.0f);
+    abv11 = vdupq_n_f32(0.0f);
+    abv12 = vdupq_n_f32(0.0f);
+    abv13 = vdupq_n_f32(0.0f);
+    abv14 = vdupq_n_f32(0.0f);
+    abv15 = vdupq_n_f32(0.0f);
+    for (int p = 0; p < kc; ++p) {
+        av0 = vld1q_f32(A);
+        av1 = vld1q_f32(A + 4);
+        bv0 = vld1q_f32(B);
+        bv1 = vld1q_f32(B + 4);
+        abv0 = vfmaq_laneq_f32(abv0, av0, bv0, 0);
+        abv1 = vfmaq_laneq_f32(abv1, av1, bv0, 0);
+        abv2 = vfmaq_laneq_f32(abv2, av0, bv0, 1);
+        abv3 = vfmaq_laneq_f32(abv3, av1, bv0, 1);
+        abv4 = vfmaq_laneq_f32(abv4, av0, bv0, 2);
+        abv5 = vfmaq_laneq_f32(abv5, av1, bv0, 2);
+        abv6 = vfmaq_laneq_f32(abv6, av0, bv0, 3);
+        abv7 = vfmaq_laneq_f32(abv7, av1, bv0, 3);
+        abv8 = vfmaq_laneq_f32(abv8, av0, bv1, 0);
+        abv9 = vfmaq_laneq_f32(abv9, av1, bv1, 0);
+        abv10 = vfmaq_laneq_f32(abv10, av0, bv1, 1);
+        abv11 = vfmaq_laneq_f32(abv11, av1, bv1, 1);
+        abv12 = vfmaq_laneq_f32(abv12, av0, bv1, 2);
+        abv13 = vfmaq_laneq_f32(abv13, av1, bv1, 2);
+        abv14 = vfmaq_laneq_f32(abv14, av0, bv1, 3);
+        abv15 = vfmaq_laneq_f32(abv15, av1, bv1, 3);
+        B += NR;
+        A += MR;
+    }
+    vst1q_f32(AB_, abv0);
+    vst1q_f32(AB_ + 4, abv1);
+    vst1q_f32(AB_ + 8, abv2);
+    vst1q_f32(AB_ + 12, abv3);
+    vst1q_f32(AB_ + 16, abv4);
+    vst1q_f32(AB_ + 20, abv5);
+    vst1q_f32(AB_ + 24, abv6);
+    vst1q_f32(AB_ + 28, abv7);
+    vst1q_f32(AB_ + 32, abv8);
+    vst1q_f32(AB_ + 36, abv9);
+    vst1q_f32(AB_ + 40, abv10);
+    vst1q_f32(AB_ + 44, abv11);
+    vst1q_f32(AB_ + 48, abv12);
+    vst1q_f32(AB_ + 52, abv13);
+    vst1q_f32(AB_ + 56, abv14);
+    vst1q_f32(AB_ + 60, abv15);
+#else
+    float32x4_t abv0 = vdupq_n_f32(0.0f);
+    float32x4_t abv1 = vdupq_n_f32(0.0f);
+    float32x4_t abv2 = vdupq_n_f32(0.0f);
+    float32x4_t abv3 = vdupq_n_f32(0.0f);
     float32x4_t av;
     float32x4_t bv;
     float32x2_t bv01;
@@ -1107,79 +1167,19 @@ static void sgemm_ukernel(int kc, float alpha, const float *A, const float *B,
         av = vld1q_f32(A);
         bv = vld1q_f32(B);
         bv01 = vget_low_f32(bv);
-        cv0 = vmlaq_lane_f32(cv0, av, bv01, 0);
-        cv1 = vmlaq_lane_f32(cv1, av, bv01, 1);
+        abv0 = vmlaq_lane_f32(abv0, av, bv01, 0);
+        abv1 = vmlaq_lane_f32(abv1, av, bv01, 1);
         bv23 = vget_high_f32(bv);
-        cv2 = vmlaq_lane_f32(cv2, av, bv23, 0);
-        cv3 = vmlaq_lane_f32(cv3, av, bv23, 1);
+        abv2 = vmlaq_lane_f32(abv2, av, bv23, 0);
+        abv3 = vmlaq_lane_f32(abv3, av, bv23, 1);
         A += MR;
         B += NR;
     }
-    vst1q_f32(AB_ + 0, cv0);
-    vst1q_f32(AB_ + 4, cv1);
-    vst1q_f32(AB_ + 8, cv2);
-    vst1q_f32(AB_ + 12, cv3);
-#else
-    float32x4_t va0, va1, vb0, vb1;
-    float32x4_t vc0, vc1, vc2, vc3, vc4, vc5, vc6, vc7, vc8, vc9, vc10, vc11,
-        vc12, vc13, vc14, vc15;
-    vc0 = vdupq_n_f32(0.0);
-    vc1 = vdupq_n_f32(0.0);
-    vc2 = vdupq_n_f32(0.0);
-    vc3 = vdupq_n_f32(0.0);
-    vc4 = vdupq_n_f32(0.0);
-    vc5 = vdupq_n_f32(0.0);
-    vc6 = vdupq_n_f32(0.0);
-    vc7 = vdupq_n_f32(0.0);
-    vc8 = vdupq_n_f32(0.0);
-    vc9 = vdupq_n_f32(0.0);
-    vc10 = vdupq_n_f32(0.0);
-    vc11 = vdupq_n_f32(0.0);
-    vc12 = vdupq_n_f32(0.0);
-    vc13 = vdupq_n_f32(0.0);
-    vc14 = vdupq_n_f32(0.0);
-    vc15 = vdupq_n_f32(0.0);
-    for (int p = 0; p < kc; ++p) {
-        va0 = vld1q_f32(A);
-        va1 = vld1q_f32(A + 4);
-        vb0 = vld1q_f32(B);
-        vb1 = vld1q_f32(B + 4);
-        vc0 = vfmaq_laneq_f32(vc0, va0, vb0, 0);
-        vc1 = vfmaq_laneq_f32(vc1, va1, vb0, 0);
-        vc2 = vfmaq_laneq_f32(vc2, va0, vb0, 1);
-        vc3 = vfmaq_laneq_f32(vc3, va1, vb0, 1);
-        vc4 = vfmaq_laneq_f32(vc4, va0, vb0, 2);
-        vc5 = vfmaq_laneq_f32(vc5, va1, vb0, 2);
-        vc6 = vfmaq_laneq_f32(vc6, va0, vb0, 3);
-        vc7 = vfmaq_laneq_f32(vc7, va1, vb0, 3);
-        vc8 = vfmaq_laneq_f32(vc8, va0, vb1, 0);
-        vc9 = vfmaq_laneq_f32(vc9, va1, vb1, 0);
-        vc10 = vfmaq_laneq_f32(vc10, va0, vb1, 1);
-        vc11 = vfmaq_laneq_f32(vc11, va1, vb1, 1);
-        vc12 = vfmaq_laneq_f32(vc12, va0, vb1, 2);
-        vc13 = vfmaq_laneq_f32(vc13, va1, vb1, 2);
-        vc14 = vfmaq_laneq_f32(vc14, va0, vb1, 3);
-        vc15 = vfmaq_laneq_f32(vc15, va1, vb1, 3);
-        B += NR;
-        A += MR;
-    }
-    vst1q_f32(AB_, vc0);
-    vst1q_f32(AB_ + 4, vc1);
-    vst1q_f32(AB_ + 8, vc2);
-    vst1q_f32(AB_ + 12, vc3);
-    vst1q_f32(AB_ + 16, vc4);
-    vst1q_f32(AB_ + 20, vc5);
-    vst1q_f32(AB_ + 24, vc6);
-    vst1q_f32(AB_ + 28, vc7);
-    vst1q_f32(AB_ + 32, vc8);
-    vst1q_f32(AB_ + 36, vc9);
-    vst1q_f32(AB_ + 40, vc10);
-    vst1q_f32(AB_ + 44, vc11);
-    vst1q_f32(AB_ + 48, vc12);
-    vst1q_f32(AB_ + 52, vc13);
-    vst1q_f32(AB_ + 56, vc14);
-    vst1q_f32(AB_ + 60, vc15);
-#endif  // PACK_4x4
+    vst1q_f32(AB_ + 0, abv0);
+    vst1q_f32(AB_ + 4, abv1);
+    vst1q_f32(AB_ + 8, abv2);
+    vst1q_f32(AB_ + 12, abv3);
+#endif  // __aarch64__
 #else
     for (int i = 0; i < MR * NR; ++i) {
         AB_[i] = 0.0f;

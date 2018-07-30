@@ -43,7 +43,6 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
 
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = CONCAT;
-
     for (i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id1) == 0) {
             bcnn_node_add_input(net, &node, i);
@@ -78,7 +77,6 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
         "node %s (w = %d)",
         src_id1, net->tensors[node.src[0]].h, src_id2,
         net->tensors[node.src[1]].h);
-
     // Setup output tensor
     bcnn_tensor_set_shape(
         &dst_tensor, net->tensors[node.src[0]].n,
@@ -92,7 +90,6 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
     // Add node to net
     bcnn_net_add_node(net, node);
-
     BCNN_INFO(
         net->log_ctx,
         "[Concat] input1_shape= %dx%dx%d input2_shape= %dx%dx%d output_shape= "
@@ -102,7 +99,6 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
         net->tensors[node.src[1]].h, net->tensors[node.src[1]].c,
         net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
         net->tensors[node.dst[0]].c);
-
     return BCNN_SUCCESS;
 }
 
@@ -134,13 +130,18 @@ int bcnn_backward_concat_layer_cpu(bcnn_tensor *src0_tensor,
     int src1_sz = bcnn_tensor_size3d(src1_tensor);
     int dst_sz = bcnn_tensor_size3d(dst_tensor);
 
-    for (j = 0; j < src0_tensor->n; ++j) {
-        bcnn_axpy(src0_sz, 1.0f, dst_tensor->grad_data + j * dst_sz,
-                  src0_tensor->grad_data + j * src0_sz);
+    if (src0_tensor->grad_data) {
+        for (j = 0; j < src0_tensor->n; ++j) {
+            bcnn_axpy(src0_sz, 1.0f, dst_tensor->grad_data + j * dst_sz,
+                      src0_tensor->grad_data + j * src0_sz);
+        }
     }
-    for (j = 0; j < src1_tensor->n; ++j) {
-        bcnn_axpy(src1_sz, 1.0f, dst_tensor->grad_data + src0_sz + j * dst_sz,
-                  src1_tensor->grad_data + j * src1_sz);
+    if (src1_tensor->grad_data) {
+        for (j = 0; j < src1_tensor->n; ++j) {
+            bcnn_axpy(src1_sz, 1.0f,
+                      dst_tensor->grad_data + src0_sz + j * dst_sz,
+                      src1_tensor->grad_data + j * src1_sz);
+        }
     }
 
     return BCNN_SUCCESS;
@@ -176,14 +177,19 @@ int bcnn_backward_concat_layer_gpu(bcnn_tensor *src0_tensor,
     int src1_sz = bcnn_tensor_size3d(src1_tensor);
     int dst_sz = bcnn_tensor_size3d(dst_tensor);
 
-    for (j = 0; j < src0_tensor->n; ++j) {
-        bcnn_cuda_axpy(src0_sz, 1.0f, dst_tensor->grad_data_gpu + j * dst_sz, 1,
-                       src0_tensor->grad_data_gpu + j * src0_sz, 1);
+    if (src0_tensor->grad_data) {
+        for (j = 0; j < src0_tensor->n; ++j) {
+            bcnn_cuda_axpy(src0_sz, 1.0f,
+                           dst_tensor->grad_data_gpu + j * dst_sz, 1,
+                           src0_tensor->grad_data_gpu + j * src0_sz, 1);
+        }
     }
-    for (j = 0; j < src0_tensor->n; ++j) {
-        bcnn_cuda_axpy(src1_sz, 1.0f,
-                       dst_tensor->grad_data_gpu + src0_sz + j * dst_sz, 1,
-                       src1_tensor->grad_data_gpu + j * src1_sz, 1);
+    if (src1_tensor->grad_data) {
+        for (j = 0; j < src0_tensor->n; ++j) {
+            bcnn_cuda_axpy(src1_sz, 1.0f,
+                           dst_tensor->grad_data_gpu + src0_sz + j * dst_sz, 1,
+                           src1_tensor->grad_data_gpu + j * src1_sz, 1);
+        }
     }
 
     return BCNN_SUCCESS;

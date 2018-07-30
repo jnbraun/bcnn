@@ -490,8 +490,16 @@ void bcnn_log(bcnn_log_context ctx, bh_log_level level, const char *fmt, ...);
 void bcnn_net_set_log_context(bcnn_net *net, bh_log_callback fct,
                               bh_log_level level);
 
+/**
+ * Set the shape of the primary input tensor
+ */
 void bcnn_net_set_input_shape(bcnn_net *net, int input_width, int input_height,
                               int input_channels, int batch_size);
+
+/**
+ * Add extra input tensors to the network
+ */
+bcnn_status bcnn_net_add_input(bcnn_net *net, int w, int h, int c, char *name);
 
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node);
 bcnn_status bcnn_free_node(bcnn_node *node);
@@ -588,7 +596,9 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 char *src_id, char *label_id, char *dst_id);
 
 /* YOLO */
-typedef struct { float x, y, w, h; } yolo_box;
+typedef struct {
+    float x, y, w, h;
+} yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

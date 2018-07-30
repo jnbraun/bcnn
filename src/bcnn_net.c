@@ -288,6 +288,16 @@ bcnn_status bcnn_node_add_input(bcnn_net *net, bcnn_node *node, int index) {
     return BCNN_SUCCESS;
 }
 
+bcnn_status bcnn_net_add_input(bcnn_net *net, int w, int h, int c, char *name) {
+    // Create input node
+    bcnn_tensor input = {0};
+    bcnn_tensor_set_shape(&input, net->batch_size, c, h, w, 0);  // no gradient
+    bcnn_tensor_allocate(&input);
+    bh_strfill(&input.name, name);
+    // Add tensor to net
+    return bcnn_net_add_tensor(net, input);
+}
+
 void bcnn_net_set_input_shape(bcnn_net *net, int input_width, int input_height,
                               int input_channels, int batch_size) {
     net->input_width = input_width;
@@ -1061,9 +1071,8 @@ int bcnn_visualize_network(bcnn_net *net) {
                      ++k) {
                     sprintf(name, "sample%d_layer%d_fmap%d.png", i, j, k);
                     bip_write_float_image_norm(
-                        name,
-                        net->tensors[net->nodes[j].dst[0]].data + i * sz +
-                            k * w * h,
+                        name, net->tensors[net->nodes[j].dst[0]].data + i * sz +
+                                  k * w * h,
                         w, h, 1, w * sizeof(float));
                 }
             }

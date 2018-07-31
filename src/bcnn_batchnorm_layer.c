@@ -28,8 +28,6 @@
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
-#include <bh/bh_log.h>
-
 bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id,
                                      char *dst_id) {
     int i, sz, channels;
@@ -99,12 +97,12 @@ bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id,
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
     // Internal data
     node.layer->x_norm = (float *)calloc(sz, sizeof(float));
-    node.layer->bn_workspace = (float *)calloc(sz, sizeof(float));
+    node.layer->workspace = (float *)calloc(sz, sizeof(float));
 #ifdef BCNN_USE_CUDA
     node.layer->x_norm_gpu =
         bcnn_cuda_memcpy_f32(net->tensors[node.dst[0]].data, sz);
     node.layer->bn_workspace_gpu =
-        bcnn_cuda_memcpy_f32(node.layer->bn_workspace, sz);
+        bcnn_cuda_memcpy_f32(node.layer->workspace, sz);
 #ifdef BCNN_USE_CUDNN
     bcnn_cudnn_check(cudnnCreateTensorDescriptor(
         &node.layer->dst_tensor_desc));  // same desc for x, dx, dy
@@ -179,7 +177,7 @@ int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     if (src_tensor != dst_tensor) {
         bcnn_copy_f32(sz * batch_size, src_tensor->data, dst_tensor->data);
     }
-    bcnn_copy_f32(sz * batch_size, dst_tensor->data, layer->bn_workspace);
+    bcnn_copy_f32(sz * batch_size, dst_tensor->data, layer->workspace);
 
     if (layer->net_state) {
         _mean_variance_forward(dst_tensor->data, batch_size, dst_tensor->c,
@@ -269,11 +267,11 @@ int bcnn_backward_batchnorm_layer_cpu(bcnn_layer *layer,
     bcnn_scales(dst_tensor->grad_data, bn_scales->data, batch_size,
                 dst_tensor->c, dst_tensor->h * dst_tensor->w);
     _mean_variance_backward(
-        layer->bn_workspace, dst_tensor->grad_data, layer->saved_mean.data,
+        layer->workspace, dst_tensor->grad_data, layer->saved_mean.data,
         layer->saved_variance.data, batch_size, dst_tensor->c,
         dst_tensor->w * dst_tensor->h, layer->saved_mean.grad_data,
         layer->saved_variance.grad_data);
-    _normalize_backward(layer->bn_workspace, layer->saved_mean.data,
+    _normalize_backward(layer->workspace, layer->saved_mean.data,
                         layer->saved_variance.data, layer->saved_mean.grad_data,
                         layer->saved_variance.grad_data, batch_size,
                         dst_tensor->c, dst_tensor->w * dst_tensor->h,

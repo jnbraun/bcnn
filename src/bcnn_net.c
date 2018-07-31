@@ -42,6 +42,7 @@
 #include "bcnn_depthwise_conv_layer.h"
 #include "bcnn_dropout_layer.h"
 #include "bcnn_fc_layer.h"
+#include "bcnn_lrn_layer.h"
 #include "bcnn_mat.h"
 #include "bcnn_maxpool_layer.h"
 #include "bcnn_softmax_layer.h"
@@ -403,6 +404,9 @@ int bcnn_forward(bcnn_net *net) {
             case BATCHNORM:
                 bcnn_forward_batchnorm_layer(net, &node);
                 break;
+            case LRN:
+                bcnn_forward_lrn_layer(net, &node);
+                break;
             case FULL_CONNECTED:
                 bcnn_forward_fullc_layer(net, &node);
                 break;
@@ -454,6 +458,9 @@ int bcnn_backward(bcnn_net *net) {
                 break;
             case BATCHNORM:
                 bcnn_backward_batchnorm_layer(net, &node);
+                break;
+            case LRN:
+                bcnn_backward_lrn_layer(net, &node);
                 break;
             case FULL_CONNECTED:
                 bcnn_backward_fullc_layer(net, &node);
@@ -1147,7 +1154,7 @@ int bcnn_free_layer(bcnn_layer **layer) {
     bcnn_tensor_destroy(&p_layer->running_variance);
     bh_free(p_layer->conv_workspace);
     bh_free(p_layer->x_norm);
-    bh_free(p_layer->bn_workspace);
+    bh_free(p_layer->workspace);
     bh_free(p_layer->rand);
     bh_free(p_layer->adam_m);
     bh_free(p_layer->adam_v);

@@ -42,13 +42,13 @@ int create_network(bcnn_net *net) {
 
     bcnn_net_set_input_shape(net, 28, 28, 1, 16);
 
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "input",
-                                 "conv1");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 0, XAVIER, RELU, 0,
+                                 "input", "conv1");
     bcnn_add_batchnorm_layer(net, "conv1", "bn1");
     bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, "bn1", "pool1");
 
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "pool1",
-                                 "conv2");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 0, XAVIER, RELU, 0,
+                                 "pool1", "conv2");
     bcnn_add_batchnorm_layer(net, "conv2", "bn2");
     bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, "bn2", "pool2");
 

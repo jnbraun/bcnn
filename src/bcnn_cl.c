@@ -39,7 +39,8 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     char **tok = NULL;
     int nb_lines = 0, nb_layers = 0;
     bcnn_padding padding_type = PADDING_SAME;
-    int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0;
+    int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0, num_groups = 1;
+    float alpha, beta, k;
     bcnn_activation a = NONE;
     bcnn_filler_type init = XAVIER;
     bcnn_loss_metric cost = COST_SSE;
@@ -88,8 +89,8 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
                         bcnn_add_convolutional_layer(net, n_filts, size, stride,
-                                                     pad, 0, init, a, 0, src_id,
-                                                     dst_id);
+                                                     pad, num_groups, 0, init,
+                                                     a, 0, src_id, dst_id);
                     } else if (strcmp(curr_layer, "{deconv}") == 0 ||
                                strcmp(curr_layer, "{deconvolutional}") == 0) {
                         BCNN_CHECK_AND_LOG(
@@ -120,6 +121,14 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
                         bcnn_add_batchnorm_layer(net, src_id, dst_id);
+                    } else if (strcmp(curr_layer, "{lrn}") == 0) {
+                        BCNN_CHECK_AND_LOG(
+                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            "Invalid output node name. "
+                            "Hint: Are you sure that 'dst' field is "
+                            "correctly setup?");
+                        bcnn_add_lrn_layer(net, size, alpha, beta, k, src_id,
+                                           dst_id);
                     } else if (strcmp(curr_layer, "{connected}") == 0 ||
                                strcmp(curr_layer, "{fullconnected}") == 0 ||
                                strcmp(curr_layer, "{fc}") == 0 ||
@@ -217,6 +226,14 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     stride = atoi(tok[1]);
                 else if (strcmp(tok[0], "pad") == 0)
                     pad = atoi(tok[1]);
+                else if (strcmp(tok[0], "num_groups") == 0)
+                    num_groups = atoi(tok[1]);
+                else if (strcmp(tok[0], "alpha") == 0)
+                    alpha = atoi(tok[1]);
+                else if (strcmp(tok[0], "beta") == 0)
+                    beta = atoi(tok[1]);
+                else if (strcmp(tok[0], "k") == 0)
+                    k = atoi(tok[1]);
                 else if (strcmp(tok[0], "src") == 0)
                     bh_strfill(&src_id, tok[1]);
                 else if (strcmp(tok[0], "dst") == 0)

@@ -261,6 +261,7 @@ typedef enum {
     SOFTMAX,
     DROPOUT,
     BATCHNORM,
+    LRN,
     CONCAT,
     YOLO,
     RESHAPE,
@@ -407,7 +408,8 @@ typedef struct bcnn_layer {
     float *rand_gpu;
 #endif
     int batch_norm;
-    float *bn_workspace;
+    int num_groups;
+    float *workspace;
     bcnn_tensor saved_mean;
     bcnn_tensor saved_variance;
     bcnn_tensor running_mean;
@@ -440,6 +442,9 @@ typedef struct bcnn_layer {
     cudnnConvolutionBwdFilterAlgo_t bwd_filter_algo;
 #endif
 #endif
+    float alpha;  // LRN
+    float beta;   // LRN
+    float k;      // LRN
     float num_constraints;
     int classes;  // Yolo: # classes
     int coords;   // Yolo: # coords
@@ -534,8 +539,8 @@ bcnn_status bcnn_free_workload(bcnn_net *net);
 
 /* Conv layer */
 bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
-                                         int stride, int pad, int batch_norm,
-                                         bcnn_filler_type init,
+                                         int stride, int pad, int num_groups,
+                                         int batch_norm, bcnn_filler_type init,
                                          bcnn_activation activation,
                                          int quantize, char *src_id,
                                          char *dst_id);
@@ -557,6 +562,10 @@ bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
 
 /* Batchnorm layer */
 bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id);
+
+/* Local Response normalization layer */
+bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
+                               float beta, float k, char *src_id, char *dst_id);
 
 /* Full-connected layer */
 bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,

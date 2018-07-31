@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
             if (concat_param.axis()) {
                 fprintf(stderr,
                         "[WARNING] Only concatenation along channels is "
-                        "supported in current bcnn");
+                        "supported in current bcnn\n");
             }
             fprintf(f_conf, "\n{concat}\n");
         } else if (layer.type() == "Convolution") {
@@ -176,6 +176,7 @@ int main(int argc, char** argv) {
             fprintf(f_conf, "pad=%d\n", convolution_param.pad_size() != 0
                                             ? convolution_param.pad(0)
                                             : 0);
+            fprintf(f_conf, "num_groups=%d\n", convolution_param.group());
             // Write bias
             if (convolution_param.bias_term()) {
                 const caffe::BlobProto& bias_blob = binlayer.blobs(1);

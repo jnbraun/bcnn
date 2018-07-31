@@ -42,19 +42,19 @@ int create_network(bcnn_net *net) {
 
     bcnn_net_set_input_shape(net, 28, 28, 3, 128);
 
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0, "input",
-                                 "conv1_1");
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0,
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 0, XAVIER, RELU, 0,
+                                 "input", "conv1_1");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 0, XAVIER, RELU, 0,
                                  "conv1_1", "conv1_2");
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 0, XAVIER, RELU, 0,
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 0, XAVIER, RELU, 0,
                                  "conv1_2", "conv1_3");
     bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, "conv1_3", "pool1");
 
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0, "pool1",
-                                 "conv2_1");
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0,
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, 0, XAVIER, RELU, 0,
+                                 "pool1", "conv2_1");
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, 0, XAVIER, RELU, 0,
                                  "conv2_1", "conv2_2");
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 0, XAVIER, RELU, 0,
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, 0, XAVIER, RELU, 0,
                                  "conv2_2", "conv2_3");
     bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, "conv2_3", "pool2");
 

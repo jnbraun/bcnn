@@ -184,43 +184,43 @@ void setup_yolo_tiny_net(bcnn_net *net, int input_width, int input_height,
                          char *model) {
     bcnn_net_set_input_shape(net, input_width, input_height, 3, 1);
 
-    bcnn_add_convolutional_layer(net, 16, 3, 1, 1, 1, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 16, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"input", (char *)"conv1");
     bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv1",
                            (char *)"pool1");
 
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool1", (char *)"conv2");
     bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv2",
                            (char *)"pool2");
 
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool2", (char *)"conv3");
     bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv3",
                            (char *)"pool3");
 
-    bcnn_add_convolutional_layer(net, 128, 3, 1, 1, 1, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 128, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool3", (char *)"conv4");
     bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv4",
                            (char *)"pool4");
 
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool4", (char *)"conv5");
     bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv5",
                            (char *)"pool5");
 
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool5", (char *)"conv6");
     bcnn_add_maxpool_layer(net, 2, 1, PADDING_SAME, (char *)"conv6",
                            (char *)"pool6");
 
-    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool6", (char *)"conv7");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"conv7", (char *)"conv8");
 
     // 80 classes
-    bcnn_add_convolutional_layer(net, 425, 1, 1, 0, 0, XAVIER, NONE, 0,
+    bcnn_add_convolutional_layer(net, 425, 1, 1, 0, 1, 0, XAVIER, NONE, 0,
                                  (char *)"conv8", (char *)"conv9");
     float anchors[10] = {0.57273, 0.677385, 1.87446, 2.06253, 3.33843,
                          5.47434, 7.88282,  3.52778, 9.77052, 9.16828};

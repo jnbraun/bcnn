@@ -28,7 +28,6 @@
 
 #include <bip/bip.h>
 
-#include <bh/bh_log.h>
 #include "bcnn/bcnn.h"
 #include "bcnn/bcnn_cl.h"
 

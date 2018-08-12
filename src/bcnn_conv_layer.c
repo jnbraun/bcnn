@@ -29,11 +29,7 @@
 #include "cblas.h"
 #endif
 
-#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
-#include <bh/bh_timer.h>
-
-#include <bh/bh_log.h>
 
 bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
                                          int stride, int pad, int num_groups,
@@ -328,7 +324,6 @@ int bcnn_forward_conv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 
     sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
     bcnn_forward_activation_cpu(dst_tensor->data, sz, layer->activation);
-
     return BCNN_SUCCESS;
 }
 
@@ -407,7 +402,6 @@ int bcnn_backward_conv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             }
         }
     }
-
     return BCNN_SUCCESS;
 }
 
@@ -452,13 +446,13 @@ int bcnn_forward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                     src_tensor->w, layer->size, layer->stride, layer->pad,
                     layer->conv_workspace_gpu);
             }
-            bcnn_cuda_gemm(0, 0, layer->num / layer->num_groups, dst_sz2d, w_sz,
-                           1.0f, weights->data_gpu, w_sz,
-                           layer->conv_workspace_gpu, dst_sz2d, 1.0f,
-                           dst_tensor->data_gpu +
-                               (i * layer->num + j) * layer->num /
-                                   layer->num_groups * dst_sz2d,
-                           dst_sz2d);
+            bcnn_cuda_gemm(
+                0, 0, layer->num / layer->num_groups, dst_sz2d, w_sz, 1.0f,
+                weights->data_gpu, w_sz, layer->conv_workspace_gpu, dst_sz2d,
+                1.0f,
+                dst_tensor->data_gpu + (i * layer->num + j) * layer->num /
+                                           layer->num_groups * dst_sz2d,
+                dst_sz2d);
         }
     }
     if (!layer->batch_norm) {
@@ -536,9 +530,9 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             }
             bcnn_cuda_gemm(
                 0, 1, layer->num / layer->num_groups, n, dst_sz2d, 1,
-                dst_tensor->grad_data_gpu +
-                    (i * layer->num_groups + j) * layer->num /
-                        layer->num_groups * dst_sz2d,
+                dst_tensor->grad_data_gpu + (i * layer->num_groups + j) *
+                                                layer->num / layer->num_groups *
+                                                dst_sz2d,
                 dst_sz2d, layer->conv_workspace_gpu, dst_sz2d, 1,
                 weights->grad_data_gpu + j * w_sz / layer->num_groups, n);
 
@@ -550,8 +544,9 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                         dst_tensor->grad_data_gpu +
                             +(i * layer->num_groups + j) * layer->num /
                                 layer->num_groups * dst_sz2d,
-                        dst_sz2d, 0, src_tensor->grad_data_gpu +
-                                         (i * layer->num_groups + j) * sz,
+                        dst_sz2d, 0,
+                        src_tensor->grad_data_gpu +
+                            (i * layer->num_groups + j) * sz,
                         dst_sz2d);
                 } else {
                     bcnn_cuda_gemm(

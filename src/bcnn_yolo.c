@@ -1,6 +1,5 @@
 #include "bcnn_yolo.h"
 
-#include <bh/bh_log.h>
 #include <bh/bh_string.h>
 
 #include "bcnn_activation_layer.h"
@@ -110,10 +109,6 @@ static yolo_box get_region_box(float *x, float *biases, int n, int index, int i,
     b.y = (j + x[index + 1 * stride]) / h;
     b.w = expf(x[index + 2 * stride]) * biases[2 * n] / w;
     b.h = expf(x[index + 3 * stride]) * biases[2 * n + 1] / h;
-    /*fprintf(stderr, "w %f expw %f lw %d bw %f\n", x[index + 2 * stride],
-            biases[2 * n], w, b.w);
-    fprintf(stderr, "h %f exph %f lh %d bh %f\n", x[index + 3 * stride],
-            biases[2 * n + 1], h, b.h);*/
     return b;
 }
 
@@ -217,11 +212,6 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     int i, j, b, t, n;
     memcpy(dst_tensor->data, src_tensor->data,
            bcnn_tensor_size(dst_tensor) * sizeof(float));
-    FILE *flog = fopen("yolo_in.txt", "wt");
-    for (i = 0; i < dst_tensor->w * dst_tensor->h * dst_tensor->c; ++i) {
-        fprintf(flog, "%d %f\n", i, dst_tensor->data[i]);
-    }
-    fclose(flog);
     //#ifndef BCNN_USE_CUDA
     for (b = 0; b < dst_tensor->n; ++b) {
         for (n = 0; n < layer->num; ++n) {
@@ -407,14 +397,6 @@ void bcnn_forward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
         powf(sqrtf(bcnn_dot(bcnn_tensor_size(dst_tensor), dst_tensor->grad_data,
                             dst_tensor->grad_data)),
              2);
-    fprintf(
-        stderr,
-        "Region Avg IOU: %f, Class: %f, Obj: %f, No Obj: %f, Avg Recall: %f,  "
-        "count: %d\n",
-        avg_iou / count, avg_cat / class_count, avg_obj / count,
-        avg_anyobj /
-            (src_tensor->w * src_tensor->h * layer->num * dst_tensor->n),
-        recall / count, count);
 }
 
 #ifdef BCNN_USE_CUDA
@@ -470,8 +452,6 @@ static void correct_region_boxes(yolo_detection *dets, int n, int w, int h,
         new_h = neth;
         new_w = (w * neth) / h;
     }
-    fprintf(stderr, "netw %d neth %d new_w %d new_h %d\n", netw, neth, new_w,
-            new_h);
     for (i = 0; i < n; ++i) {
         yolo_box b = dets[i].bbox;
         b.x = (b.x - (netw - new_w) / 2. / netw) / ((float)new_w / netw);
@@ -485,8 +465,6 @@ static void correct_region_boxes(yolo_detection *dets, int n, int w, int h,
             b.h *= h;
         }
         dets[i].bbox = b;
-        // fprintf(stderr, "idet %d x %f y %f w %f h %f\n", i, b.x, b.y, b.w,
-        // b.h);
     }
 }
 
@@ -498,11 +476,6 @@ void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
     bcnn_layer *layer = node->layer;
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
     float *predictions = dst->data;
-    FILE *flog = fopen("lolo.txt", "wt");
-    for (i = 0; i < dst->w * dst->h * dst->c; ++i) {
-        fprintf(flog, "%d %f\n", i, dst->data[i]);
-    }
-    fclose(flog);
     float max_objectness = 0.0f;
     for (i = 0; i < dst->w * dst->h; ++i) {
         int row = i / dst->w;
@@ -514,7 +487,6 @@ void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
             }
             int obj_index = entry_index(layer, dst, 0, n * dst->w * dst->h + i,
                                         layer->coords);
-            // fprintf(stderr, "obj_index %d\n", obj_index);
             int box_index =
                 entry_index(layer, dst, 0, n * dst->w * dst->h + i, 0);
             int mask_index =
@@ -547,7 +519,6 @@ void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
             }
         }
     }
-    fprintf(stderr, "max_objectness %f\n", max_objectness);
     correct_region_boxes(dets, dst->w * dst->h * layer->num, w, h, netw, neth,
                          relative);
 }

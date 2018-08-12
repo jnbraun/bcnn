@@ -24,8 +24,7 @@
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
 
-#include <bh/bh_log.h>
-#include <bh/bh_mem.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 
 bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
@@ -103,14 +102,15 @@ int bcnn_forward_lrn_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
         bcnn_vmul(sz3d, p_src, p_src, p_square);
         bcnn_fill_f32(sz2d, layer->k, p_norm);
         for (int c = 0; c < layer->size / 2; ++c) {
-            bcnn_axpy(sz2d, layer->alpha, p_square + sz2d * c, p_norm);
+            bcnn_axpy(sz2d, layer->alpha / layer->size, p_square + sz2d * c,
+                      p_norm);
         }
         for (int c = 1; c < bh_min(1 + (layer->size - 1) / 2,
                                    src_tensor->c - layer->size / 2);
              ++c) {
             bcnn_copy_f32(sz2d, p_norm + sz2d * (c - 1), p_norm + sz2d * c);
             int tail = c + layer->size / 2;
-            bcnn_axpy(sz2d, layer->alpha, p_square + sz2d * tail,
+            bcnn_axpy(sz2d, layer->alpha / layer->size, p_square + sz2d * tail,
                       p_norm + sz2d * c);
         }
         for (int c = bh_min(1 + (layer->size - 1) / 2,
@@ -118,17 +118,17 @@ int bcnn_forward_lrn_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
              c < src_tensor->c - layer->size / 2; ++c) {
             bcnn_copy_f32(sz2d, p_norm + sz2d * (c - 1), p_norm + sz2d * c);
             int head = c - (layer->size - 1) / 2 - 1;
-            bcnn_axpy(sz2d, -layer->alpha, p_square + sz2d * head,
+            bcnn_axpy(sz2d, -layer->alpha / layer->size, p_square + sz2d * head,
                       p_norm + sz2d * c);
             int tail = c + layer->size / 2;
-            bcnn_axpy(sz2d, layer->alpha, p_square + sz2d * tail,
+            bcnn_axpy(sz2d, layer->alpha / layer->size, p_square + sz2d * tail,
                       p_norm + sz2d * c);
         }
         for (int c = bh_max(1, src_tensor->c - layer->size / 2);
              c < src_tensor->c; ++c) {
             bcnn_copy_f32(sz2d, p_norm + sz2d * (c - 1), p_norm + sz2d * c);
             int head = c - (layer->size - 1) / 2 - 1;
-            bcnn_axpy(sz2d, -layer->alpha, p_square + sz2d * head,
+            bcnn_axpy(sz2d, -layer->alpha / layer->size, p_square + sz2d * head,
                       p_norm + sz2d * c);
         }
     }
@@ -139,7 +139,45 @@ int bcnn_forward_lrn_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 
 int bcnn_backward_lrn_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                 bcnn_tensor *dst_tensor) {
-    // TODO
+    int sz = bcnn_tensor_size(src_tensor);
+    int sz3d = bcnn_tensor_size3d(src_tensor);
+    int sz2d = bcnn_tensor_size2d(src_tensor);
+    bcnn_pow(sz, layer->x_norm, -layer->beta, src_tensor->grad_data);
+    bcnn_vmul(sz, dst_tensor->grad_data, src_tensor->grad_data,
+              src_tensor->grad_data);
+    float *tmp_ratio = (float *)calloc(sz2d, sizeof(float));
+    float *tmp_ratio_grad = (float *)calloc(sz2d, sizeof(float));
+    float ratio_val = -2.0f * layer->alpha * layer->beta / layer->size;
+    for (int b = 0; b < src_tensor->n; ++b) {
+        float *p_src = src_tensor->data + b * sz3d;
+        float *p_dst = dst_tensor->data + b * sz3d;
+        float *p_src_grad = src_tensor->grad_data + b * sz3d;
+        float *p_dst_grad = dst_tensor->grad_data + b * sz3d;
+        float *p_wrk = layer->workspace + b * sz3d;
+        float *p_norm = layer->x_norm + b * sz3d;
+        bcnn_vmul(sz3d, p_dst_grad, p_dst, p_wrk);
+        bcnn_vdiv(sz3d, p_wrk, p_norm, p_wrk);
+        memset(tmp_ratio, 0, sizeof(float) * sz2d);
+        for (int c = 0; c < layer->size / 2 - 1; ++c) {
+            bcnn_axpy(sz2d, 1.0f, p_wrk + c * sz2d, tmp_ratio);
+        }
+        for (int c = 0; c < src_tensor->c - layer->size / 2; ++c) {
+            bcnn_axpy(sz2d, 1.0f, p_wrk + sz2d * (c + layer->size / 2),
+                      tmp_ratio);
+            // compute src grad
+            bcnn_vmul(sz2d, p_src + c * sz2d, tmp_ratio, tmp_ratio_grad);
+            bcnn_axpy(sz2d, ratio_val, tmp_ratio_grad, p_src_grad + c * sz2d);
+            bcnn_axpy(sz2d, -1.0f, p_wrk + c * sz2d, tmp_ratio);
+        }
+        for (int c = src_tensor->c - layer->size / 2; c < src_tensor->c; ++c) {
+            // compute src grad
+            bcnn_vmul(sz2d, p_src + c * sz2d, tmp_ratio, tmp_ratio_grad);
+            bcnn_axpy(sz2d, ratio_val, tmp_ratio_grad, p_src_grad + c * sz2d);
+            bcnn_axpy(sz2d, -1.0f, p_wrk + c * sz2d, tmp_ratio);
+        }
+    }
+    free(tmp_ratio);
+    free(tmp_ratio_grad);
     return 0;
 }
 
@@ -166,8 +204,7 @@ int bcnn_backward_lrn_layer(bcnn_net *net, bcnn_node *node) {
 // Not implemented
 // return bcnn_backward_lrn_layer_gpu(node->layer, src, dst);
 #else
-// Not implemented
-// return bcnn_backward_lrn_layer_cpu(node->layer, src, dst);
+    return bcnn_backward_lrn_layer_cpu(node->layer, src, dst);
 #endif
     return 0;
 }

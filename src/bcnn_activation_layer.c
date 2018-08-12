@@ -22,10 +22,7 @@
 
 #include "bcnn_activation_layer.h"
 
-#include <bh/bh_log.h>
 #include <bh/bh_macros.h>
-#include <bh/bh_mem.h>
-#include <bh/bh_string.h>
 
 bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
                                       char *src_id) {

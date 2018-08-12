@@ -30,17 +30,14 @@ extern "C" {
 #include <stdarg.h> /* va_list, va_start, va_arg, va_end */
 #include <stdio.h>  /* printf */
 
-// Error log handle
+#define BH_MAX_LENGTH_MSG 2048
+
 typedef enum {
     BH_LOG_INFO = 0,
     BH_LOG_WARNING = 1,
     BH_LOG_ERROR = 2,
     BH_LOG_SILENT = 3
 } bh_log_level;
-
-#define BH_MAX_LENGTH_MSG 2048
-
-typedef void (*bh_log_callback)(int level, const char *fmt, ...);
 
 static inline void bh_log(bh_log_level level, const char *fmt, ...) {
     char msg[2048];

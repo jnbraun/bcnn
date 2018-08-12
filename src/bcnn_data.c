@@ -19,15 +19,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include "bcnn/bcnn.h"
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 
 /* include bip image processing lib */
 #include <bip/bip.h>
-
-#include <bh/bh_log.h>
-#include "bcnn/bcnn.h"
 
 int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c,
                               int no_input_norm, int swap_to_bgr, float mean_r,
@@ -79,7 +77,7 @@ void bcnn_convert_img_to_float2(unsigned char *src, int w, int h, int c,
     float m[3] = {mean_r, mean_g, mean_b};
     if (swap_to_bgr) {
         if (c != 3) {
-            bh_log(BH_LOG_ERROR,
+            bh_log(BCNN_LOG_ERROR,
                    "bcnn_convert_img_to_float2: number of channels %d is "
                    "inconsistent. Expected 3",
                    c);
@@ -141,7 +139,7 @@ int bcnn_load_image_from_path(bcnn_net *net, char *path, int w, int h, int c,
     BCNN_CHECK_AND_LOG(net->log_ctx, (w_img > 0 && h_img > 0 && buf),
                        BCNN_INVALID_DATA, "Invalid image %s", path);
     if (c != c_img) {
-        bcnn_log(net->log_ctx, BH_LOG_ERROR,
+        bcnn_log(net->log_ctx, BCNN_LOG_ERROR,
                  "Unexpected number of channels of image %s\n", path);
         bh_free(buf);
         return BCNN_INVALID_DATA;
@@ -182,7 +180,7 @@ int bcnn_load_image_from_memory(bcnn_net *net, unsigned char *buffer,
     BCNN_CHECK_AND_LOG(net->log_ctx, (w_img > 0 && h_img > 0 && buffer),
                        BCNN_INVALID_DATA, "Invalid image");
     if (c != c_img) {
-        bcnn_log(net->log_ctx, BH_LOG_ERROR,
+        bcnn_log(net->log_ctx, BCNN_LOG_ERROR,
                  "Unexpected number of channels of image\n");
         bh_free(tmp);
         return BCNN_INVALID_DATA;
@@ -252,11 +250,10 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            n_img, n_labels);
-        BCNN_CHECK_AND_LOG(net->log_ctx,
-                           (net->input_height == iter->input_height &&
-                            net->input_width == iter->input_width),
-                           BCNN_INVALID_DATA,
-                           "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, (net->input_height == iter->input_height &&
+                           net->input_width == iter->input_width),
+            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
         iter->n_samples = n_img;
     }
 

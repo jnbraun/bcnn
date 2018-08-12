@@ -21,10 +21,10 @@
  */
 #include "bcnn_softmax_layer.h"
 
+#include <bh/bh_log.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
-
-#include <bh/bh_log.h>
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {
@@ -152,7 +152,6 @@ int bcnn_backward_softmax_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 
     for (i = 0; i < sz; ++i)
         src_tensor->grad_data[i] += dst_tensor->grad_data[i];
-
     return BCNN_SUCCESS;
 }
 

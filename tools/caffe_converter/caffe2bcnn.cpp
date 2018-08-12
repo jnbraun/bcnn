@@ -170,12 +170,13 @@ int main(int argc, char** argv) {
             fprintf(f_conf, "\n{conv}\n");
             fprintf(f_conf, "filters=%d\n", convolution_param.num_output());
             fprintf(f_conf, "size=%d\n", convolution_param.kernel_size(0));
-            fprintf(f_conf, "stride=%d\n", convolution_param.stride_size() != 0
-                                               ? convolution_param.stride(0)
-                                               : 1);
-            fprintf(f_conf, "pad=%d\n", convolution_param.pad_size() != 0
-                                            ? convolution_param.pad(0)
-                                            : 0);
+            fprintf(f_conf, "stride=%d\n",
+                    convolution_param.stride_size() != 0
+                        ? convolution_param.stride(0)
+                        : 1);
+            fprintf(f_conf, "pad=%d\n",
+                    convolution_param.pad_size() != 0 ? convolution_param.pad(0)
+                                                      : 0);
             fprintf(f_conf, "num_groups=%d\n", convolution_param.group());
             // Write bias
             if (convolution_param.bias_term()) {

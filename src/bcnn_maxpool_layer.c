@@ -21,8 +21,6 @@
  */
 #include "bcnn_maxpool_layer.h"
 
-#include <bh/bh_log.h>
-#include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 #include "bcnn_utils.h"
 

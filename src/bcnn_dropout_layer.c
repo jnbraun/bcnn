@@ -21,11 +21,8 @@
  */
 #include "bcnn_dropout_layer.h"
 
-#include <bh/bh_log.h>
-#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
-#include <bh/bh_log.h>
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {

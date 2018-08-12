@@ -4,8 +4,6 @@
 #include <bcnn/bcnn.h>
 #include <bcnn/bcnn_cl.h>
 #include <bcnn_utils.h>
-#include <bh/bh_log.h>
-#include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 #include <bip/bip.h>
@@ -136,8 +134,9 @@ export_tensors(bcnn_net* net, FlatBufferBuilder* builder,
                     // Special case for Prelu as TFlite only
                     // supports 3-D tensor as Prelu slope(=alpha) shape
                     shape.clear();
-                    shape = {1, 1, net->tensors[i].c * net->tensors[i].h *
-                                       net->tensors[i].w};
+                    shape = {1, 1,
+                             net->tensors[i].c * net->tensors[i].h *
+                                 net->tensors[i].w};
                 }
             }
         }
@@ -471,8 +470,8 @@ void convert_bcnn_to_flatbuffers_tflite(bcnn_net* net,
 }
 
 int add_layer(bcnn_net* net, char* curr_layer, int stride, int pad,
-              bcnn_padding padding_type, int n_filts, int size, int outputs,
-              bcnn_activation a, float rate, bcnn_loss_metric cost,
+              int num_groups, bcnn_padding padding_type, int n_filts, int size,
+              int outputs, bcnn_activation a, float rate, bcnn_loss_metric cost,
               bcnn_filler_type init, bcnn_loss loss, char* src_id,
               char* dst_id) {
     BCNN_CHECK_AND_LOG(net->log_ctx, src_id, BCNN_INVALID_PARAMETER,
@@ -485,8 +484,8 @@ int add_layer(bcnn_net* net, char* curr_layer, int stride, int pad,
                            "Invalid output node name. "
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?");
-        bcnn_add_convolutional_layer(net, n_filts, size, stride, pad, 0, init,
-                                     a, 0, src_id, dst_id);
+        bcnn_add_convolutional_layer(net, n_filts, size, stride, pad,
+                                     num_groups, 0, init, a, 0, src_id, dst_id);
     } else if (strcmp(curr_layer, "{deconv}") == 0 ||
                strcmp(curr_layer, "{deconvolutional}") == 0) {
         BCNN_CHECK_AND_LOG(net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
@@ -557,6 +556,7 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
     char** tok = NULL;
     int nb_lines = 0, nb_layers = 0;
     bcnn_padding padding_type;
+    int num_groups = 1;
     int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0;
     bcnn_activation a = NONE;
     bcnn_filler_type init = XAVIER;
@@ -593,9 +593,9 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
                             net, net->input_width, net->input_height,
                             net->input_channels, net->batch_size);
                     }
-                    add_layer(net, curr_layer, stride, pad, padding_type,
-                              n_filts, size, outputs, a, rate, cost, init, loss,
-                              src_id, dst_id);
+                    add_layer(net, curr_layer, stride, pad, num_groups,
+                              padding_type, n_filts, size, outputs, a, rate,
+                              cost, init, loss, src_id, dst_id);
                     bh_free(curr_layer);
                     bh_free(src_id);
                     bh_free(dst_id);
@@ -658,7 +658,9 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
                     size = atoi(tok[1]);
                 else if (strcmp(tok[0], "stride") == 0)
                     stride = atoi(tok[1]);
-                else if (strcmp(tok[0], "pad") == 0)
+                else if (strcmp(tok[0], "num_groups") == 0) {
+                    num_groups = atoi(tok[1]);
+                } else if (strcmp(tok[0], "pad") == 0)
                     pad = atoi(tok[1]);
                 else if (strcmp(tok[0], "padding_type") == 0) {
                     if (strcmp(tok[1], "same") == 0)
@@ -756,8 +758,8 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
         }
     }
     // Add last layer
-    add_layer(net, curr_layer, stride, pad, padding_type, n_filts, size,
-              outputs, a, rate, cost, init, loss, src_id, dst_id);
+    add_layer(net, curr_layer, stride, pad, num_groups, padding_type, n_filts,
+              size, outputs, a, rate, cost, init, loss, src_id, dst_id);
     bh_free(src_id);
     bh_free(dst_id);
     bh_free(curr_layer);

@@ -56,10 +56,6 @@ extern "C" {
 #endif
 #endif
 
-#include <bh/bh_assert.h>
-#include <bh/bh_log.h>
-#include <bh/bh_macros.h>
-
 #if defined(__GNUC__) || (defined(_MSC_VER) && (_MSC_VER >= 1600))
 #include <stdint.h>
 #else
@@ -90,12 +86,12 @@ typedef unsigned __int64 uint64_t;
         }                    \
     } while (0)
 
-#define BCNN_CHECK_AND_LOG(ctx, exp, err, fmt, ...)              \
-    do {                                                         \
-        if (!(exp)) {                                            \
-            bcnn_log((ctx), BH_LOG_ERROR, (fmt), ##__VA_ARGS__); \
-            return (err);                                        \
-        }                                                        \
+#define BCNN_CHECK_AND_LOG(ctx, exp, err, fmt, ...)                \
+    do {                                                           \
+        if (!(exp)) {                                              \
+            bcnn_log((ctx), BCNN_LOG_ERROR, (fmt), ##__VA_ARGS__); \
+            return (err);                                          \
+        }                                                          \
     } while (0)
 
 #define BCNN_CHECK_STATUS(s)       \
@@ -105,20 +101,20 @@ typedef unsigned __int64 uint64_t;
         }                          \
     } while (0)
 
-#define BCNN_ERROR(ctx, err, fmt, ...)                       \
-    do {                                                     \
-        bcnn_log((ctx), BH_LOG_ERROR, (fmt), ##__VA_ARGS__); \
-        return (err);                                        \
-    } while (0)
-
-#define BCNN_INFO(ctx, fmt, ...)                            \
-    do {                                                    \
-        bcnn_log((ctx), BH_LOG_INFO, (fmt), ##__VA_ARGS__); \
-    } while (0)
-
-#define BCNN_WARNING(ctx, fmt, ...)                            \
+#define BCNN_ERROR(ctx, err, fmt, ...)                         \
     do {                                                       \
-        bcnn_log((ctx), BH_LOG_WARNING, (fmt), ##__VA_ARGS__); \
+        bcnn_log((ctx), BCNN_LOG_ERROR, (fmt), ##__VA_ARGS__); \
+        return (err);                                          \
+    } while (0)
+
+#define BCNN_INFO(ctx, fmt, ...)                              \
+    do {                                                      \
+        bcnn_log((ctx), BCNN_LOG_INFO, (fmt), ##__VA_ARGS__); \
+    } while (0)
+
+#define BCNN_WARNING(ctx, fmt, ...)                              \
+    do {                                                         \
+        bcnn_log((ctx), BCNN_LOG_WARNING, (fmt), ##__VA_ARGS__); \
     } while (0)
 
 /**
@@ -313,10 +309,23 @@ typedef enum {
     PADDING_CAFFE /**< Caffe-like padding for compatibility purposes */
 } bcnn_padding;
 
+typedef void (*bcnn_log_callback)(int level, const char *fmt, ...);
+
 /* Logging */
+
+/**
+ * Available log levels
+ */
+typedef enum {
+    BCNN_LOG_INFO = 0,
+    BCNN_LOG_WARNING = 1,
+    BCNN_LOG_ERROR = 2,
+    BCNN_LOG_SILENT = 3
+} bcnn_log_level;
+
 typedef struct bcnn_log_context {
-    bh_log_callback fct;
-    bh_log_level lvl;
+    bcnn_log_callback fct;
+    bcnn_log_level lvl;
 } bcnn_log_context;
 
 static const int align_offset_ = 32;
@@ -491,9 +500,9 @@ typedef struct {
 } bcnn_net;
 
 /* Logging */
-void bcnn_log(bcnn_log_context ctx, bh_log_level level, const char *fmt, ...);
-void bcnn_net_set_log_context(bcnn_net *net, bh_log_callback fct,
-                              bh_log_level level);
+void bcnn_log(bcnn_log_context ctx, bcnn_log_level level, const char *fmt, ...);
+void bcnn_net_set_log_context(bcnn_net *net, bcnn_log_callback fct,
+                              bcnn_log_level level);
 
 /**
  * Set the shape of the primary input tensor
@@ -605,9 +614,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 char *src_id, char *label_id, char *dst_id);
 
 /* YOLO */
-typedef struct {
-    float x, y, w, h;
-} yolo_box;
+typedef struct { float x, y, w, h; } yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

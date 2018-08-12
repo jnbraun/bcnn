@@ -26,7 +26,8 @@
 #include <bh/bh_log.h>
 #include <bh/bh_string.h>
 
-void bcnn_log(bcnn_log_context ctx, bh_log_level level, const char *fmt, ...) {
+void bcnn_log(bcnn_log_context ctx, bcnn_log_level level, const char *fmt,
+              ...) {
 #if (BCNN_LOG_ENABLED)
     if (ctx.lvl <= level) {
         char msg[2048];
@@ -37,7 +38,7 @@ void bcnn_log(bcnn_log_context ctx, bh_log_level level, const char *fmt, ...) {
         if (ctx.fct) {
             ctx.fct(level, msg);
         } else {  // Use default logging to stderr
-            bh_log(level, msg);
+            bh_log((bh_log_level)level, msg);
         }
     }
 #endif

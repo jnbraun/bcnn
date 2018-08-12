@@ -24,8 +24,6 @@
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
 
-#include <bh/bh_log.h>
-#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
 bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id,

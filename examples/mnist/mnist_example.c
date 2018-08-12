@@ -20,10 +20,6 @@
  * SOFTWARE.
  */
 
-#include <bh/bh_log.h>
-#include <bh/bh_macros.h>
-#include <bh/bh_mem.h>
-#include <bh/bh_string.h>
 #include <bh/bh_timer.h>
 
 #include "bcnn/bcnn.h"

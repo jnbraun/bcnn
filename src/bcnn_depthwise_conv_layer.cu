@@ -1,24 +1,24 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * Copyright (c) 2016 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #ifdef BCNN_USE_CUDA
 #include <bh/bh_timer.h>
@@ -74,8 +74,6 @@ int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
                                               bcnn_tensor *weights,
                                               bcnn_tensor *biases) {
     int sz = bcnn_tensor_size(dst_tensor);
-    /*bh_timer t = { 0 };
-    bh_timer_start(&t);*/
 
     _bcnn_forward_depthwise_sep_conv_weight_kernel<<<bcnn_cuda_blocks(sz),
                                                      BCNN_CUDA_THREADS>>>(
@@ -88,9 +86,6 @@ int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
                        src_tensor->c, dst_tensor->h * dst_tensor->w);
 
     bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, layer->activation);
-    /*bh_timer_stop(&t);
-    fprintf(stderr, "sepconv-forward-time %lf sec\n", bh_timer_get_msec(&t) /
-    1000);*/
 
     return BCNN_SUCCESS;
 }
@@ -173,8 +168,6 @@ int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
                                                bcnn_tensor *biases) {
     int src_sz = bcnn_tensor_size(src_tensor);
     int dst_sz = bcnn_tensor_size(dst_tensor);
-    /*bh_timer t = { 0 };
-    bh_timer_start(&t);*/
 
     if (src_tensor->grad_data_gpu)
         bcnn_cuda_fill_f32(src_sz, 0.0f, src_tensor->grad_data_gpu, 1);
@@ -205,10 +198,6 @@ int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
             src_tensor->grad_data_gpu);
         bcnn_cuda_check(cudaPeekAtLastError());
     }
-
-    /*bh_timer_stop(&t);
-    fprintf(stderr, "sepconv-backward-time %lf sec\n", bh_timer_get_msec(&t) /
-    1000);*/
 
     return BCNN_SUCCESS;
 }

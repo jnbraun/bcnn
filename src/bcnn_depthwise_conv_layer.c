@@ -28,11 +28,7 @@
 #include "cblas.h"
 #endif
 
-#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
-#include <bh/bh_timer.h>
-
-#include <bh/bh_log.h>
 
 /* Depthwise Separable convolution */
 
@@ -272,10 +268,6 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
 
     sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
     bcnn_forward_activation_cpu(dst_tensor->data, sz, layer->activation);
-
-    /*bh_timer_stop(&t);
-    fprintf(stderr, "sep-conv-forward-time %lf sec\n", bh_timer_get_msec(&t) /
-    1000);*/
 
     return BCNN_SUCCESS;
 }
@@ -532,10 +524,6 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
             }
         }
     }
-
-    /*bh_timer_stop(&t);
-    fprintf(stderr, "sep-conv-backward-time %lf sec\n", bh_timer_get_msec(&t) /
-    1000);*/
 
     return BCNN_SUCCESS;
 }

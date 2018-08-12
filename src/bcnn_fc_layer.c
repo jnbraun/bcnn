@@ -25,10 +25,8 @@
 #include "cblas.h"
 #endif
 
-#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
-#include <bh/bh_log.h>
 #include "bcnn_activation_layer.h"
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"

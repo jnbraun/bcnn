@@ -10,7 +10,6 @@
 #include <bh/bh_timer.h>
 #include <bip/bip.h>
 
-#include <bh/bh_log.h>
 #include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
@@ -403,7 +402,7 @@ void predict_detections_video(int w_frame, int h_frame, bcnn_net *net,
         memcpy(pred + (avg_window - 1) * out_sz,
                net->tensors[net->num_tensors - 1].data, out_sz * sizeof(float));
     } else {
-        bcnn_log(net->log_ctx, BH_LOG_ERROR,
+        bcnn_log(net->log_ctx, BCNN_LOG_ERROR,
                  "Incorrect last layer. Should be a yolo layer");
         return;
     }
@@ -439,7 +438,7 @@ void predict_detections_img(int w_frame, int h_frame, bcnn_net *net,
         memcpy(pred, net->tensors[net->num_tensors - 1].data,
                out_sz * sizeof(float));
     } else {
-        bcnn_log(net->log_ctx, BH_LOG_ERROR,
+        bcnn_log(net->log_ctx, BCNN_LOG_ERROR,
                  "Incorrect last layer. Should be a yolo layer");
         return;
     }

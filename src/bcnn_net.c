@@ -21,16 +21,11 @@
  */
 
 /* include bh helpers */
-#include <bh/bh_log.h>
-#include <bh/bh_macros.h>
-#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
-#include <bh/bh_timer.h>
 
 /* include bip image processing lib */
 #include <bip/bip.h>
 
-#include <bh/bh_log.h>
 #include "bcnn/bcnn.h"
 #include "bcnn_activation_layer.h"
 #include "bcnn_avgpool_layer.h"
@@ -100,8 +95,8 @@ bcnn_status bcnn_free_net(bcnn_net *net) {
     return BCNN_SUCCESS;
 }
 
-void bcnn_net_set_log_context(bcnn_net *net, bh_log_callback fct,
-                              bh_log_level level) {
+void bcnn_net_set_log_context(bcnn_net *net, bcnn_log_callback fct,
+                              bcnn_log_level level) {
     net->log_ctx.fct = fct;
     net->log_ctx.lvl = level;
 }

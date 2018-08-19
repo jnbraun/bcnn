@@ -94,11 +94,12 @@ typedef unsigned __int64 uint64_t;
         }                                                          \
     } while (0)
 
-#define BCNN_CHECK_STATUS(s)       \
-    do {                           \
-        if ((s) != BCNN_SUCCESS) { \
-            return (s);            \
-        }                          \
+#define BCNN_CHECK_STATUS(s)         \
+    do {                             \
+        bcnn_status ret = (s);       \
+        if ((ret) != BCNN_SUCCESS) { \
+            return (ret);            \
+        }                            \
     } while (0)
 
 #define BCNN_ERROR(ctx, err, fmt, ...)                         \
@@ -614,7 +615,9 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 char *src_id, char *label_id, char *dst_id);
 
 /* YOLO */
-typedef struct { float x, y, w, h; } yolo_box;
+typedef struct {
+    float x, y, w, h;
+} yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

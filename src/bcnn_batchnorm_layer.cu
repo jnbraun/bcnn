@@ -1,24 +1,24 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * Copyright (c) 2016 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #ifdef BCNN_USE_CUDA
 
@@ -189,28 +189,31 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                      bcnn_tensor *bn_mean, bcnn_tensor *bn_var,
                                      bcnn_tensor *bn_scales,
                                      bcnn_tensor *bn_biases) {
-#ifndef BCNN_USE_CUDNN
     int batch_size = src_tensor->n;
     int sz = dst_tensor->w * dst_tensor->h * dst_tensor->c;
-#else
+#ifdef BCNN_USE_CUDNN
     float alpha = 1.0f;
     float beta = 0.0f;
 #endif
+
+    if (src_tensor != dst_tensor) {
+        bcnn_cuda_copy_f32(sz * batch_size, src_tensor->data_gpu, 1,
+                           dst_tensor->data_gpu, 1);
+    }
+    bcnn_cuda_copy_f32(sz * batch_size, dst_tensor->data_gpu, 1,
+                       layer->bn_workspace_gpu, 1);
 
     if (layer->net_state) {
 #ifdef BCNN_USE_CUDNN
         bcnn_cudnn_check(cudnnBatchNormalizationForwardTraining(
             bcnn_cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &alpha, &beta,
-            layer->dst_tensor_desc, src_tensor->data_gpu,
+            layer->dst_tensor_desc,
+            /*src_tensor->data_gpu*/ layer->bn_workspace_gpu,
             layer->dst_tensor_desc, dst_tensor->data_gpu, layer->bias_desc,
             bn_scales->data_gpu, bn_biases->data_gpu, 0.1, bn_mean->data_gpu,
             bn_var->data_gpu, 0.0001, layer->saved_mean.data_gpu,
             layer->saved_variance.data_gpu));
 #else
-        bcnn_cuda_copy_f32(sz * batch_size, src_tensor->data_gpu, 1,
-                           dst_tensor->data_gpu, 1);
-        bcnn_cuda_copy_f32(sz * batch_size, dst_tensor->data_gpu, 1,
-                           layer->bn_workspace_gpu, 1);
         fast_mean_gpu(dst_tensor->data_gpu, batch_size, dst_tensor->c,
                       dst_tensor->h * dst_tensor->w,
                       layer->saved_mean.data_gpu);
@@ -270,14 +273,12 @@ int bcnn_backward_batchnorm_layer_gpu(bcnn_layer *layer,
                                       bcnn_tensor *bn_mean, bcnn_tensor *bn_var,
                                       bcnn_tensor *bn_scales,
                                       bcnn_tensor *bn_biases) {
-#ifndef BCNN_USE_CUDNN
     int batch_size = src_tensor->n;
     int sz = dst_tensor->w * dst_tensor->h * dst_tensor->c;
-#else
+#ifdef BCNN_USE_CUDNN
     float a_data = 1.0f, a_param = 1.0f;
     float b_data = 0.0f, b_param = 1.0f;
 #endif
-
     if (!layer->net_state) {
         layer->saved_mean.data_gpu = bn_mean->data_gpu;
         layer->saved_variance.data_gpu = bn_var->data_gpu;
@@ -286,11 +287,15 @@ int bcnn_backward_batchnorm_layer_gpu(bcnn_layer *layer,
 #ifdef BCNN_USE_CUDNN
     bcnn_cudnn_check(cudnnBatchNormalizationBackward(
         bcnn_cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &a_data, &b_data,
-        &a_param, &b_param, layer->dst_tensor_desc, src_tensor->data_gpu,
+        &a_param, &b_param, layer->dst_tensor_desc,
+        /*src_tensor->data_gpu*/ layer->bn_workspace_gpu,
         layer->dst_tensor_desc, dst_tensor->grad_data_gpu,
-        layer->dst_tensor_desc, src_tensor->grad_data_gpu, layer->bias_desc,
-        bn_scales->data_gpu, bn_scales->grad_data_gpu, bn_biases->grad_data_gpu,
-        0.0001, layer->saved_mean.data_gpu, layer->saved_variance.data_gpu));
+        layer->dst_tensor_desc, /*src_tensor->grad_data_gpu*/ layer->x_norm_gpu,
+        layer->bias_desc, bn_scales->data_gpu, bn_scales->grad_data_gpu,
+        bn_biases->grad_data_gpu, 0.0001, layer->saved_mean.data_gpu,
+        layer->saved_variance.data_gpu));
+    bcnn_cuda_copy_f32(sz * batch_size, layer->x_norm_gpu, 1,
+                       dst_tensor->grad_data_gpu, 1);
 #else
     bcnn_cuda_grad_bias(bn_biases->grad_data_gpu, dst_tensor->grad_data_gpu,
                         batch_size, dst_tensor->c,
@@ -315,11 +320,11 @@ int bcnn_backward_batchnorm_layer_gpu(bcnn_layer *layer,
         layer->saved_variance.data_gpu, layer->saved_mean.grad_data_gpu,
         layer->saved_variance.grad_data_gpu, src_tensor->n, dst_tensor->c,
         dst_tensor->w * dst_tensor->h, dst_tensor->grad_data_gpu);
-
-    if (src_tensor->grad_data_gpu)
+#endif
+    if (src_tensor->grad_data_gpu && src_tensor != dst_tensor) {
         bcnn_cuda_copy_f32(sz * batch_size, dst_tensor->grad_data_gpu, 1,
                            src_tensor->grad_data_gpu, 1);
-#endif
+    }
 
     return BCNN_SUCCESS;
 }

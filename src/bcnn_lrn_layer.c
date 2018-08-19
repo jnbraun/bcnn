@@ -190,7 +190,7 @@ int bcnn_forward_lrn_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
     // Not implemented
-    return 0
+    return 0;
 // return bcnn_forward_lrn_layer_gpu(node->layer, src, dst);
 #else
     return bcnn_forward_lrn_layer_cpu(node->layer, src, dst);
@@ -201,8 +201,9 @@ int bcnn_backward_lrn_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-// Not implemented
-// return bcnn_backward_lrn_layer_gpu(node->layer, src, dst);
+    // Not implemented
+    // return bcnn_backward_lrn_layer_gpu(node->layer, src, dst);
+    return 0;
 #else
     return bcnn_backward_lrn_layer_cpu(node->layer, src, dst);
 #endif

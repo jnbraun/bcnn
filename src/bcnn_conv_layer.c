@@ -20,16 +20,17 @@
  * SOFTWARE.
  */
 
-#include "bcnn_activation_layer.h"
-#include "bcnn_batchnorm_layer.h"
-#include "bcnn_mat.h"
-#include "bcnn_utils.h"
+#include <bh/bh_macros.h>
+#include <bh/bh_string.h>
 
 #ifdef BCNN_USE_BLAS
 #include "cblas.h"
 #endif
 
-#include <bh/bh_string.h>
+#include "bcnn_activation_layer.h"
+#include "bcnn_batchnorm_layer.h"
+#include "bcnn_mat.h"
+#include "bcnn_utils.h"
 
 bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
                                          int stride, int pad, int num_groups,
@@ -211,7 +212,7 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     BCNN_CHECK_AND_LOG(net->log_ctx, node.layer->num_groups == 1,
                        BCNN_INVALID_PARAMETER,
                        "CUDNN version doesn't support groups > 1");
-#endif
+#endif  // CUDNN_MAJOR
     bcnn_cudnn_check(cudnnGetConvolutionForwardAlgorithm(
         bcnn_cudnn_handle(), node.layer->src_tensor_desc,
         node.layer->filter_desc, node.layer->conv_desc,
@@ -253,13 +254,13 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         net->tensors[node.src[0]].c / num_groups * size * size;
     net->workspace_size =
         bh_max(net->workspace_size, node.layer->workspace_size);
+#endif  // BCNN_USE_CUDNN
     if (node.layer->batch_norm) {
         int sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
         node.layer->x_norm_gpu = bcnn_cuda_memcpy_f32(node.layer->x_norm, sz);
         node.layer->bn_workspace_gpu =
             bcnn_cuda_memcpy_f32(node.layer->workspace, sz);
     }
-#endif  // BCNN_USE_CUDNN
 #endif  // BCNN_USE_CUDA
     node.layer->activation = activation;
     bcnn_net_add_node(net, node);
@@ -446,13 +447,13 @@ int bcnn_forward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                     src_tensor->w, layer->size, layer->stride, layer->pad,
                     layer->conv_workspace_gpu);
             }
-            bcnn_cuda_gemm(
-                0, 0, layer->num / layer->num_groups, dst_sz2d, w_sz, 1.0f,
-                weights->data_gpu, w_sz, layer->conv_workspace_gpu, dst_sz2d,
-                1.0f,
-                dst_tensor->data_gpu + (i * layer->num + j) * layer->num /
-                                           layer->num_groups * dst_sz2d,
-                dst_sz2d);
+            bcnn_cuda_gemm(0, 0, layer->num / layer->num_groups, dst_sz2d, w_sz,
+                           1.0f, weights->data_gpu, w_sz,
+                           layer->conv_workspace_gpu, dst_sz2d, 1.0f,
+                           dst_tensor->data_gpu +
+                               (i * layer->num_groups + j) * layer->num /
+                                   layer->num_groups * dst_sz2d,
+                           dst_sz2d);
         }
     }
     if (!layer->batch_norm) {
@@ -490,6 +491,16 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
         dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size,
         layer->activation);
 
+    if (layer->batch_norm) {
+        bcnn_backward_batchnorm_layer_gpu(layer, dst_tensor, dst_tensor,
+                                          bn_mean, bn_var, bn_scales, biases);
+    } else {
+#ifndef BCNN_USE_CUDNN
+        bcnn_cuda_grad_bias(biases->grad_data_gpu, dst_tensor->grad_data_gpu,
+                            batch_size, layer->num, dst_sz2d);
+#endif
+    }
+
 #ifdef BCNN_USE_CUDNN
     bcnn_cudnn_check(cudnnConvolutionBackwardBias(
         bcnn_cudnn_handle(), &one, layer->dst_tensor_desc,
@@ -510,13 +521,6 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             src_tensor->grad_data_gpu));
     }
 #else
-    if (layer->batch_norm) {
-        bcnn_backward_batchnorm_layer_gpu(layer, dst_tensor, dst_tensor,
-                                          bn_mean, bn_var, bn_scales, biases);
-    } else {
-        bcnn_cuda_grad_bias(biases->grad_data_gpu, dst_tensor->grad_data_gpu,
-                            batch_size, layer->num, dst_sz2d);
-    }
     for (i = 0; i < batch_size; ++i) {
         for (int j = 0; j < layer->num_groups; ++j) {
             if (layer->size == 1)
@@ -535,14 +539,13 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                                 dst_sz2d,
                 dst_sz2d, layer->conv_workspace_gpu, dst_sz2d, 1,
                 weights->grad_data_gpu + j * w_sz / layer->num_groups, n);
-
             if (src_tensor->grad_data_gpu) {
                 if (layer->size == 1) {
                     bcnn_cuda_gemm(
                         1, 0, n, dst_sz2d, layer->num / layer->num_groups, 1,
                         weights->data_gpu + j * w_sz / layer->num_groups, n,
                         dst_tensor->grad_data_gpu +
-                            +(i * layer->num_groups + j) * layer->num /
+                            (i * layer->num_groups + j) * layer->num /
                                 layer->num_groups * dst_sz2d,
                         dst_sz2d, 0,
                         src_tensor->grad_data_gpu +
@@ -550,7 +553,7 @@ int bcnn_backward_conv_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                         dst_sz2d);
                 } else {
                     bcnn_cuda_gemm(
-                        1, 0, n, dst_sz2d, layer->num, 1,
+                        1, 0, n, dst_sz2d, layer->num / layer->num_groups, 1,
                         weights->data_gpu + j * w_sz / layer->num_groups, n,
                         dst_tensor->grad_data_gpu +
                             (i * layer->num_groups + j) * layer->num /

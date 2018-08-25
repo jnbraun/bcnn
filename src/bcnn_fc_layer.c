@@ -99,14 +99,14 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
     if (net->learner.optimizer == ADAM) {
-        int weights_size = bcnn_tensor_size(&node.layer->weights);
+        int weights_size = bcnn_tensor_size(&weights);
         node.layer->adam_m = (float *)calloc(weights_size, sizeof(float));
         node.layer->adam_v = (float *)calloc(weights_size, sizeof(float));
     }
 
 #ifdef BCNN_USE_CUDA
     if (net->learner.optimizer == ADAM) {
-        int weights_size = bcnn_tensor_size(&node.layer->weights);
+        int weights_size = bcnn_tensor_size(&weights);
         node.layer->adam_m_gpu =
             bcnn_cuda_memcpy_f32(node.layer->adam_m, weights_size);
         node.layer->adam_v_gpu =

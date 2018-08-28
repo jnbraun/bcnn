@@ -22,11 +22,13 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+enable_language(C ASM)
 # C99
 set (CMAKE_C_STANDARD 99)
 
 # Compiler flags
 set(CMAKE_C_FLAGS "-O3")
+set(CMAKE_ASM_FLAGS "${CFLAGS} -x assembler-with-cpp")
 
 # Blas backend
 if (USE_BLAS)
@@ -143,7 +145,11 @@ add_subdirectory(bip)
 if (USE_CUDA)
 file(GLOB SRC_LIB src/*.c src/*.cu)
 else()
-file(GLOB SRC_LIB src/*.c)
+    if(USE_NEON AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+        file(GLOB SRC_LIB src/*.c src/openblas/*.c src/openblas/generic/*.c src/openblas/arm64/*.S)
+    else()
+        file(GLOB SRC_LIB src/*.c)
+    endif()
 endif()
 list(REMOVE_ITEM SRC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/src/bcnn_cl.c)
 file(GLOB SRC_CLI src/bcnn_cl.c)

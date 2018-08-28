@@ -27,6 +27,7 @@
 #include <bh/bh_timer.h>
 #ifdef BCNN_USE_NEON
 #include <arm_neon.h>
+#include <bh/bh_macros.h>
 #endif
 
 bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,

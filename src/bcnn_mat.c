@@ -22,10 +22,15 @@
 
 #include "bcnn_mat.h"
 
+#include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 
 #include "bcnn/bcnn.h"
+
+#if (defined(__aarch64__))
+#include "openblas/openblas_sgemm.h"
+#endif
 
 int bcnn_fill_f32(int n, float a, float *x) {
     int i;
@@ -1378,6 +1383,11 @@ static void sgemm(int m, int n, int k, float alpha, const float *A,
 int bcnn_gemm(int trans_a, int trans_b, int m, int n, int k, float alpha,
               float *A, int lda, float *B, int ldb, float beta, float *C,
               int ldc) {
+#if (defined(__aarch64__))
+    // Switch A and B as OpenBlas is column major
+    openblas_sgemm(trans_b, trans_a, n, m, k, alpha, B, ldb, A, lda, beta, C,
+                   ldc);
+#else
     int inc_row_A = (!trans_a) ? lda : 1;
     int inc_col_A = (!trans_a) ? 1 : lda;
 
@@ -1391,6 +1401,6 @@ int bcnn_gemm(int trans_a, int trans_b, int m, int n, int k, float alpha,
         sgemm(m, n, k, alpha, A, inc_row_A, inc_col_A, B, inc_row_B, inc_col_B,
               beta, C, ldc, 1);
     }
-
+#endif
     return 0;
 }

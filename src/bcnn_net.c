@@ -41,6 +41,7 @@
 #include "bcnn_mat.h"
 #include "bcnn_maxpool_layer.h"
 #include "bcnn_softmax_layer.h"
+#include "bcnn_upsample_layer.h"
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
@@ -307,7 +308,6 @@ void bcnn_net_set_input_shape(bcnn_net *net, int input_width, int input_height,
 bcnn_status bcnn_init_workload(bcnn_net *net) {
     int i;
     int n = net->num_nodes;
-    int k = (net->nodes[n - 1].layer->type == COST ? (n - 2) : (n - 1));
 
     net->input_buffer = (unsigned char *)calloc(
         net->input_width * net->input_height * net->input_channels, 1);
@@ -420,6 +420,9 @@ int bcnn_forward(bcnn_net *net) {
             case CONCAT:
                 bcnn_forward_concat_layer(net, &node);
                 break;
+            case UPSAMPLE:
+                bcnn_forward_upsample_layer(net, &node);
+                break;
             case YOLO:
                 bcnn_forward_yolo_layer(net, &node);
                 break;
@@ -475,6 +478,9 @@ int bcnn_backward(bcnn_net *net) {
             case CONCAT:
                 bcnn_backward_concat_layer(net, &node);
                 break;
+            case UPSAMPLE:
+                bcnn_backward_upsample_layer(net, &node);
+                break;
             case YOLO:
                 bcnn_backward_yolo_layer(net, &node);
                 break;
@@ -511,7 +517,8 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
     bcnn_data_augment *param = &(net->data_aug);
     int input_size = bcnn_tensor_size(&net->tensors[0]);
     int en = (net->nodes[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
-    int output_size = bcnn_tensor_size3d(&net->tensors[net->nodes[en].dst[0]]);
+    int output_size =
+        bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 1].src[0]]);
 
     memset(x, 0, sz * net->batch_size * sizeof(float));
     if (net->task != PREDICT) {
@@ -720,7 +727,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
     if (net->task != PREDICT) {
         bcnn_cuda_memcpy_host2dev(
             net->tensors[1].data_gpu, net->tensors[1].data,
-            bcnn_tensor_size(&net->tensors[net->nodes[en].dst[0]]));
+            bcnn_tensor_size(&net->tensors[net->nodes[nb - 1].src[0]]));
     }
 #endif
     return BCNN_SUCCESS;
@@ -744,18 +751,19 @@ int bcnn_predict_on_batch(bcnn_net *net, bcnn_iterator *iter, float **pred,
                           float *error) {
     int nb = net->num_nodes;
     int en = (net->nodes[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
-    int output_size = bcnn_tensor_size(&net->tensors[net->nodes[en].dst[0]]);
+    int output_size =
+        bcnn_tensor_size(&net->tensors[net->nodes[nb - 1].src[0]]);
 
     bcnn_iter_batch(net, iter);
 
     bcnn_forward(net);
 
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_dev2host(net->tensors[net->nodes[en].dst[0]].data_gpu,
-                              net->tensors[net->nodes[en].dst[0]].data,
+    bcnn_cuda_memcpy_dev2host(net->tensors[net->nodes[nb - 1].src[0]].data_gpu,
+                              net->tensors[net->nodes[nb - 1].src[0]].data,
                               output_size);
 #endif
-    (*pred) = net->tensors[net->nodes[en].dst[0]].data;
+    (*pred) = net->tensors[net->nodes[nb - 1].src[0]].data;
     *error = *(net->tensors[net->nodes[nb - 1].dst[0]].data);
 
     return BCNN_SUCCESS;
@@ -1073,8 +1081,9 @@ int bcnn_visualize_network(bcnn_net *net) {
                      ++k) {
                     sprintf(name, "sample%d_layer%d_fmap%d.png", i, j, k);
                     bip_write_float_image_norm(
-                        name, net->tensors[net->nodes[j].dst[0]].data + i * sz +
-                                  k * w * h,
+                        name,
+                        net->tensors[net->nodes[j].dst[0]].data + i * sz +
+                            k * w * h,
                         w, h, 1, w * sizeof(float));
                 }
             }
@@ -1156,6 +1165,7 @@ int bcnn_free_layer(bcnn_layer **layer) {
     bh_free(p_layer->binary_weight);
     bh_free(p_layer->binary_workspace);
     bh_free(p_layer->cost);
+    bh_free(p_layer->mask);
 #ifdef BCNN_USE_CUDA
     if (p_layer->indexes_gpu) bcnn_cuda_free(p_layer->indexes_gpu);
     if (p_layer->x_norm_gpu) bcnn_cuda_free(p_layer->x_norm_gpu);

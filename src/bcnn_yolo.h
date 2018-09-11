@@ -10,15 +10,8 @@ extern "C" {
 void bcnn_forward_yolo_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_yolo_layer(bcnn_net *net, bcnn_node *node);
 
-#ifdef BCNN_USE_CUDA
-void bcnn_forward_yolo_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                   bcnn_tensor *label, bcnn_tensor *dst_tensor);
-void bcnn_backward_yolo_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                   bcnn_tensor *dst_tensor);
-#endif
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif // BCNN_YOLO_H
+#endif  // BCNN_YOLO_H

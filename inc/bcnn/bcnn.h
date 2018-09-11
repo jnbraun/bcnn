@@ -260,6 +260,7 @@ typedef enum {
     BATCHNORM,
     LRN,
     CONCAT,
+    UPSAMPLE,
     YOLO,
     RESHAPE,
     COST
@@ -456,10 +457,13 @@ typedef struct bcnn_layer {
     float beta;   // LRN
     float k;      // LRN
     float num_constraints;
-    int classes;  // Yolo: # classes
-    int coords;   // Yolo: # coords
-    int truths;   // Yolo
-    float *cost;  // Yolo
+    int classes;    // Yolo: # classes
+    int coords;     // Yolo: # coords
+    int truths;     // Yolo
+    int max_boxes;  // Yolo
+    int total;      // Yolo v3
+    int *mask;      // Yolo v3
+    float *cost;    // Yolo
 } bcnn_layer;
 
 typedef struct {
@@ -602,6 +606,10 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
 /* Dropout layer */
 bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id);
 
+/* Upsample layer */
+bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, char *src_id,
+                                    char *dst_id);
+
 /* Cost layer */
 void bcnn_LiftedStructSimilaritySoftmax_loss_backward(bcnn_layer *layer,
                                                       bcnn_tensor *src_tensor,
@@ -615,9 +623,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 char *src_id, char *label_id, char *dst_id);
 
 /* YOLO */
-typedef struct {
-    float x, y, w, h;
-} yolo_box;
+typedef struct { float x, y, w, h; } yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;
@@ -629,10 +635,11 @@ typedef struct yolo_detection {
 } yolo_detection;
 
 bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
-                                float *anchors, char *src_id, char *dst_id);
-void bcnn_yolo_get_detections(bcnn_net *net, bcnn_node *node, int w, int h,
-                              int netw, int neth, float thresh, int relative,
-                              yolo_detection *dets);
+                                int total, int *mask, float *anchors,
+                                char *src_id, char *dst_id);
+yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int w, int h, int netw,
+                                         int neth, float thresh, int relative,
+                                         int *num_dets);
 
 // Temporary put these functions here
 float overlap(float x1, float w1, float x2, float w2);

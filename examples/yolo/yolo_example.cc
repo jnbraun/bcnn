@@ -181,8 +181,9 @@ void load_yolo_weights(bcnn_net *net, char *model) {
 
 void setup_yolo_tiny_net(bcnn_net *net, int input_width, int input_height,
                          char *model) {
+    int num_classes = 80;
+    int boxes_per_cell = 3;
     bcnn_net_set_input_shape(net, input_width, input_height, 3, 1);
-
     bcnn_add_convolutional_layer(net, 16, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"input", (char *)"conv1");
     bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv1",
@@ -215,16 +216,31 @@ void setup_yolo_tiny_net(bcnn_net *net, int input_width, int input_height,
 
     bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"pool6", (char *)"conv7");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
+    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"conv7", (char *)"conv8");
-
-    // 80 classes
-    bcnn_add_convolutional_layer(net, 425, 1, 1, 0, 1, 0, XAVIER, NONE, 0,
+    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"conv8", (char *)"conv9");
-    float anchors[10] = {0.57273, 0.677385, 1.87446, 2.06253, 3.33843,
-                         5.47434, 7.88282,  3.52778, 9.77052, 9.16828};
-    bcnn_add_yolo_layer(net, 5, 80, 4, anchors, (char *)"conv9",
-                        (char *)"yolo");
+    bcnn_add_convolutional_layer(net, (boxes_per_cell * (5 + num_classes)), 1,
+                                 1, 0, 1, 0, XAVIER, NONE, 0, (char *)"conv9",
+                                 (char *)"conv10");
+    int mask[3] = {3, 4, 5};
+    float anchors[12] = {10, 14, 23, 27, 37, 58, 81, 82, 135, 169, 344, 319};
+    bcnn_add_yolo_layer(net, boxes_per_cell, num_classes, 4, 6, mask, anchors,
+                        (char *)"conv10", (char *)"yolo1");
+    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, XAVIER, LRELU, 0,
+                                 (char *)"conv8", (char *)"conv11");
+    bcnn_add_upsample_layer(net, 2, (char *)"conv11", (char *)"conv11_up");
+    bcnn_add_concat_layer(net, (char *)"conv11_up", (char *)"conv5",
+                          (char *)"conv12");
+    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
+                                 (char *)"conv12", (char *)"conv13");
+    bcnn_add_convolutional_layer(net, (boxes_per_cell * (5 + num_classes)), 1,
+                                 1, 0, 1, 0, XAVIER, NONE, 0, (char *)"conv13",
+                                 (char *)"conv14");
+    int mask2[3] = {0, 1, 2};
+    float anchors2[12] = {10, 14, 23, 27, 37, 58, 81, 82, 135, 169, 344, 319};
+    bcnn_add_yolo_layer(net, boxes_per_cell, num_classes, 4, 6, mask2, anchors2,
+                        (char *)"conv14", (char *)"yolo2");
     bcnn_compile_net(net, (char *)"predict");
     // Load yolo parameters
     load_yolo_weights(net, model);
@@ -291,30 +307,6 @@ void prepare_frame(unsigned char *frame, int w_frame, int h_frame, float *img,
     return;
 }
 
-void prepare_detection_results(bcnn_net *net, yolo_detection **dets,
-                               int *num_dets) {
-    // Get yolo_detection boxes
-    if (net->nodes[net->num_nodes - 1].layer->type == YOLO) {
-        bcnn_layer *yolo_layer = net->nodes[net->num_nodes - 1].layer;
-        // Number detections: num boxes (5) * spatial output size (number of
-        // cells)
-        int n = bcnn_tensor_size2d(&net->tensors[net->num_tensors - 1]) *
-                yolo_layer->num;
-        (*num_dets) = n;
-        yolo_detection *p_dets =
-            (yolo_detection *)calloc(n, sizeof(yolo_detection));
-        for (int i = 0; i < n; ++i) {
-            p_dets[i].prob =
-                (float *)calloc(yolo_layer->classes, sizeof(float));
-            if (yolo_layer->coords > 4) {
-                p_dets[i].mask =
-                    (float *)calloc(yolo_layer->coords - 4, sizeof(float));
-            }
-        }
-        *dets = p_dets;
-    }
-}
-
 void free_detection_results(yolo_detection *dets, int num_dets) {
     for (int i = 0; i < num_dets; ++i) {
         free(dets[i].prob);
@@ -378,10 +370,9 @@ static void do_nms_obj(yolo_detection *dets, int total, int classes,
     }
 }
 
-void predict_detections_video(int w_frame, int h_frame, bcnn_net *net,
-                              float *pred, int avg_window, float *avg_pred,
-                              yolo_detection *dets, int num_dets) {
-    float nms_tresh = 0.4f;
+yolo_detection *run_inference(int w_frame, int h_frame, bcnn_net *net,
+                              int *num_dets) {
+    float nms_tresh = 0.45f;
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
                               bcnn_tensor_size(&net->tensors[0]));
@@ -391,63 +382,16 @@ void predict_detections_video(int w_frame, int h_frame, bcnn_net *net,
     bcnn_forward(net);
     bh_timer_stop(&t);
     fprintf(stderr, "time= %lf msec\n", bh_timer_get_msec(&t));
-
-    bcnn_node *last_node = &net->nodes[net->num_nodes - 1];
-    int out_sz = bcnn_tensor_size(&net->tensors[net->num_tensors - 1]);
-    if (last_node->layer->type == YOLO) {
-        for (int i = 0; i < avg_window - 1; ++i) {
-            memcpy(pred + i * out_sz, pred + (i + 1) * out_sz,
-                   out_sz * sizeof(float));
-        }
-        memcpy(pred + (avg_window - 1) * out_sz,
-               net->tensors[net->num_tensors - 1].data, out_sz * sizeof(float));
-    } else {
-        bcnn_log(net->log_ctx, BCNN_LOG_ERROR,
-                 "Incorrect last layer. Should be a yolo layer");
-        return;
-    }
-
-    // Average predictions on the sliding time window
-    memset(avg_pred, 0, out_sz * sizeof(float));
-    for (int i = 0; i < avg_window; ++i) {
-        bcnn_axpy(out_sz, 1.0f / avg_window, pred + i * avg_window, avg_pred);
-    }
     // Get yolo_detection boxes
-    bcnn_yolo_get_detections(net, last_node, w_frame, h_frame, net->input_width,
-                             net->input_height, 0.45, 1, dets);
+    int ndets = 0;
+    yolo_detection *dets =
+        bcnn_yolo_get_detections(net, w_frame, h_frame, net->input_width,
+                                 net->input_height, 0.5, 1, &ndets);
     // Non max suppression
-    do_nms_obj(dets, num_dets, last_node->layer->classes, nms_tresh);
-}
-
-void predict_detections_img(int w_frame, int h_frame, bcnn_net *net,
-                            float *pred, yolo_detection *dets, int num_dets) {
-    float nms_tresh = 0.4f;
-#ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
-                              bcnn_tensor_size(&net->tensors[0]));
-#endif
-    bh_timer t = {0};
-    bh_timer_start(&t);
-    bcnn_forward(net);
-    bh_timer_stop(&t);
-    fprintf(stderr, "time= %lf msec\n", bh_timer_get_msec(&t));
-
-    bcnn_node *last_node = &net->nodes[net->num_nodes - 1];
-    int out_sz = bcnn_tensor_size(&net->tensors[net->num_tensors - 1]);
-    if (last_node->layer->type == YOLO) {
-        memcpy(pred, net->tensors[net->num_tensors - 1].data,
-               out_sz * sizeof(float));
-    } else {
-        bcnn_log(net->log_ctx, BCNN_LOG_ERROR,
-                 "Incorrect last layer. Should be a yolo layer");
-        return;
-    }
-
-    // Get yolo_detection boxes
-    bcnn_yolo_get_detections(net, last_node, w_frame, h_frame, net->input_width,
-                             net->input_height, 0.45, 1, dets);
-    // Non max suppression
-    do_nms_obj(dets, num_dets, last_node->layer->classes, nms_tresh);
+    int num_classes = net->nodes[net->num_nodes - 1].layer->classes;
+    do_nms_obj(dets, ndets, num_classes, nms_tresh);
+    *num_dets = ndets;
+    return dets;
 }
 
 #ifdef USE_OPENCV
@@ -496,9 +440,10 @@ void display_detections(cv::Mat &frame, yolo_detection *dets, int num_dets,
                 int y_tl = (dets[i].bbox.y - dets[i].bbox.h / 2) * frame.rows;
                 /*fprintf(stderr,
                         "det %d class %d bbox x %f y %f w %f h %f x_tl %d y_tl "
-                        "%d\n",
+                        "%d wimg %f himg %f\n",
                         i, j, dets[i].bbox.x, dets[i].bbox.y, dets[i].bbox.w,
-                        dets[i].bbox.h, x_tl, y_tl);*/
+                        dets[i].bbox.h, x_tl, y_tl, dets[i].bbox.w * frame.cols,
+                        dets[i].bbox.h * frame.rows);*/
                 cv::Rect box = cv::Rect(x_tl, y_tl, dets[i].bbox.w * frame.cols,
                                         dets[i].bbox.h * frame.rows);
                 int r, g, b;
@@ -549,14 +494,6 @@ int run(int argc, char **argv) {
     setup_yolo_tiny_net(net, w, h, argv[3]);
 
     int out_sz = bcnn_tensor_size(&net->tensors[net->num_tensors - 1]);
-    int avg_window = 3;
-    float *pred = (float *)calloc(avg_window * out_sz, sizeof(float));
-    float *avg_pred = (float *)calloc(out_sz, sizeof(float));
-    // Prepare yolo_detection results
-    yolo_detection *dets = NULL;
-    int num_dets = 0;
-    prepare_detection_results(net, &dets, &num_dets);
-
     if (strcmp(argv[1], "video") == 0) {
 #ifdef USE_OPENCV
         cv::VideoCapture cap;
@@ -568,10 +505,13 @@ int run(int argc, char **argv) {
         while (!frame.empty()) {
             cap >> frame;
             prepare_frame(frame, net->tensors[0].data, w, h);
-            predict_detections_video(frame.cols, frame.rows, net, pred,
-                                     avg_window, avg_pred, dets, num_dets);
+            int num_dets = 0;
+            yolo_detection *dets =
+                run_inference(frame.cols, frame.rows, net, &num_dets);
             display_detections(frame, dets, num_dets, 0.45, 80);
-            cv::imshow("yolov2-tiny example", frame);
+            cv::imshow("yolov3-tiny example", frame);
+            free_detection_results(dets, num_dets);
+            free(dets);
             int q = cv::waitKey(10);
             if (q == 27) {
                 break;
@@ -602,12 +542,14 @@ int run(int argc, char **argv) {
             return -1;
         }
 #endif
+        int num_dets = 0;
 #ifdef USE_OPENCV
         prepare_frame(img, net->tensors[0].data, w, h);
-        predict_detections_img(img.cols, img.rows, net, pred, dets, num_dets);
+        yolo_detection *dets =
+            run_inference(img.cols, img.rows, net, &num_dets);
 #else
         prepare_frame(img, w_frame, h_frame, net->tensors[0].data, w, h);
-        predict_detections_img(w_frame, h_frame, net, pred, dets, num_dets);
+        yolo_detection *dets = run_inference(w_frame, h_frame, net, &num_dets);
 #endif
 #ifdef USE_OPENCV
         display_detections(img, dets, num_dets, 0.45, 80);
@@ -617,6 +559,8 @@ int run(int argc, char **argv) {
 #else
         print_detections(w_frame, h_frame, dets, num_dets, 0.45, 80);
 #endif
+        free_detection_results(dets, num_dets);
+        free(dets);
     } else {
         fprintf(stderr, "[ERROR] Incorrect mode %s. Should be 'img' or 'video'",
                 argv[1]);
@@ -625,10 +569,6 @@ int run(int argc, char **argv) {
     }
 
     bcnn_end_net(&net);
-    free(pred);
-    free(avg_pred);
-    free_detection_results(dets, num_dets);
-    free(dets);
     return 0;
 }
 

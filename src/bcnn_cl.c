@@ -46,7 +46,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     bcnn_loss loss = EUCLIDEAN_LOSS;
     float rate = 1.0f;
     int n_tok;
-    char *src_id = NULL, *dst_id = NULL;
+    char *src_id = NULL, *dst_id = NULL, *src_id2 = NULL;
 
     file = fopen(config_file, "rt");
     if (file == 0) {
@@ -157,12 +157,15 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                                                src_id, dst_id);
                     } else if (strcmp(curr_layer, "{dropout}") == 0) {
                         bcnn_add_dropout_layer(net, rate, src_id);
+                    } else if (strcmp(curr_layer, "{concat}") == 0) {
+                        bcnn_add_concat_layer(net, src_id, src_id2, dst_id);
                     } else {
                         BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
                                    "Unknown Layer %s", curr_layer);
                     }
                     bh_free(curr_layer);
                     bh_free(src_id);
+                    bh_free(src_id2);
                     bh_free(dst_id);
                     a = NONE;
                 }
@@ -233,9 +236,14 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     beta = atoi(tok[1]);
                 else if (strcmp(tok[0], "k") == 0)
                     k = atoi(tok[1]);
-                else if (strcmp(tok[0], "src") == 0)
-                    bh_strfill(&src_id, tok[1]);
-                else if (strcmp(tok[0], "dst") == 0)
+                else if (strcmp(tok[0], "src") == 0) {
+                    char **srcids = NULL;
+                    int num_srcids = bh_strsplit(tok[1], ',', &srcids);
+                    bh_strfill(&src_id, srcids[0]);
+                    if (num_srcids > 1) {
+                        bh_strfill(&src_id2, srcids[1]);
+                    }
+                } else if (strcmp(tok[0], "dst") == 0)
                     bh_strfill(&dst_id, tok[1]);
                 else if (strcmp(tok[0], "output") == 0)
                     outputs = atoi(tok[1]);
@@ -344,6 +352,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                    "Error in config file: last layer must be a cost layer");
     }
     bh_free(src_id);
+    bh_free(src_id2);
     bh_free(dst_id);
     bh_free(curr_layer);
     fclose(file);

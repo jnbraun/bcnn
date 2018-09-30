@@ -718,12 +718,60 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
                 }
             }
         }
+    } else if (iter->type == ITER_MULTI) {
+        float *x2 = net->tensors[2].data;
+        float *x3 = net->tensors[3].data;
+        float *x4 = net->tensors[4].data;
+        /////////////////
+        for (i = 0; i < batch_size; ++i) {
+            bcnn_iterator_next(net, iter);
+            // Online data augmentation
+            if (net->task == TRAIN && net->state) {
+                bcnn_data_augmentation(iter->input_uchar, w_in, h_in, c_in,
+                                       param, img_tmp);
+                bcnn_data_augmentation(iter->input_uchar2, w_in, h_in, c_in,
+                                       param, img_tmp);
+            }
+            bcnn_convert_img_to_float(iter->input_uchar, w_in, h_in, c_in,
+                                      param->no_input_norm, param->swap_to_bgr,
+                                      param->mean_r, param->mean_g,
+                                      param->mean_b, x);
+            bcnn_convert_img_to_float(iter->input_uchar2, w_in, h_in, c_in,
+                                      param->no_input_norm, param->swap_to_bgr,
+                                      param->mean_r, param->mean_g,
+                                      param->mean_b, x2);
+            bcnn_convert_img_to_float(iter->input_uchar3, w_in, h_in, c_in,
+                                      param->no_input_norm, param->swap_to_bgr,
+                                      param->mean_r, param->mean_g,
+                                      param->mean_b, x3);
+            memcpy(x4, iter->input_float, 3 * sizeof(float));
+            x += sz;
+            x2 += sz;
+            x3 += sz;
+            x4 += 3;
+            if (net->task != PREDICT) {
+                for (j = 0; j < iter->label_width; ++j) {
+                    y[j] = iter->label_float[j];
+                    // fprintf(stderr, "y %f\n", y[j]);
+                }
+                y += output_size;
+            }
+        }
     }
     if (use_buffer_img) bh_free(img_tmp);
 
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
                               input_size);
+    if (iter->type == ITER_MULTI) {
+        bcnn_cuda_memcpy_host2dev(net->tensors[2].data_gpu,
+                                  net->tensors[2].data, input_size);
+        bcnn_cuda_memcpy_host2dev(net->tensors[3].data_gpu,
+                                  net->tensors[3].data, input_size);
+        bcnn_cuda_memcpy_host2dev(net->tensors[4].data_gpu,
+                                  net->tensors[4].data,
+                                  bcnn_tensor_size(&net->tensors[4]));
+    }
     if (net->task != PREDICT) {
         bcnn_cuda_memcpy_host2dev(
             net->tensors[1].data_gpu, net->tensors[1].data,

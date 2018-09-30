@@ -158,7 +158,7 @@ int bcnn_forward_concat_layer_gpu(bcnn_tensor *src0_tensor,
         bcnn_cuda_copy_f32(src0_sz, src0_tensor->data_gpu + j * src0_sz, 1,
                            dst_tensor->data_gpu + j * dst_sz, 1);
     }
-    for (j = 0; j < src0_tensor->n; ++j) {
+    for (j = 0; j < src1_tensor->n; ++j) {
         bcnn_cuda_copy_f32(src1_sz, src1_tensor->data_gpu + j * src1_sz, 1,
                            dst_tensor->data_gpu + src0_sz + j * dst_sz, 1);
     }
@@ -182,7 +182,7 @@ int bcnn_backward_concat_layer_gpu(bcnn_tensor *src0_tensor,
         }
     }
     if (src1_tensor->grad_data) {
-        for (j = 0; j < src0_tensor->n; ++j) {
+        for (j = 0; j < src1_tensor->n; ++j) {
             bcnn_cuda_axpy(src1_sz, 1.0f,
                            dst_tensor->grad_data_gpu + src0_sz + j * dst_sz, 1,
                            src1_tensor->grad_data_gpu + j * src1_sz, 1);

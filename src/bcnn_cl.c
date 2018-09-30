@@ -39,6 +39,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     int nb_lines = 0, nb_layers = 0;
     bcnn_padding padding_type = PADDING_SAME;
     int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0, num_groups = 1;
+    int in_w = 0, in_h = 0, in_c = 0;
     float alpha, beta, k;
     bcnn_activation a = NONE;
     bcnn_filler_type init = XAVIER;
@@ -80,8 +81,10 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                         "Invalid input node name. "
                         "Hint: Are you sure that 'src' field is correctly "
                         "setup?");
-                    if (strcmp(curr_layer, "{conv}") == 0 ||
-                        strcmp(curr_layer, "{convolutional}") == 0) {
+                    if (strcmp(curr_layer, "{input}") == 0) {
+                        bcnn_net_add_input(net, in_w, in_h, in_c, src_id);
+                    } else if (strcmp(curr_layer, "{conv}") == 0 ||
+                               strcmp(curr_layer, "{convolutional}") == 0) {
                         BCNN_CHECK_AND_LOG(
                             net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
@@ -236,7 +239,13 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     beta = atoi(tok[1]);
                 else if (strcmp(tok[0], "k") == 0)
                     k = atoi(tok[1]);
-                else if (strcmp(tok[0], "src") == 0) {
+                else if (strcmp(tok[0], "w") == 0) {
+                    in_w = atoi(tok[1]);
+                } else if (strcmp(tok[0], "h") == 0) {
+                    in_h = atoi(tok[1]);
+                } else if (strcmp(tok[0], "c") == 0) {
+                    in_c = atoi(tok[1]);
+                } else if (strcmp(tok[0], "src") == 0) {
                     char **srcids = NULL;
                     int num_srcids = bh_strsplit(tok[1], ',', &srcids);
                     bh_strfill(&src_id, srcids[0]);

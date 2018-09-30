@@ -19,10 +19,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include "bcnn/bcnn.h"
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
+#include "bcnn/bcnn.h"
 
 /* include bip image processing lib */
 #include <bip/bip.h>
@@ -250,10 +250,11 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            n_img, n_labels);
-        BCNN_CHECK_AND_LOG(
-            net->log_ctx, (net->input_height == iter->input_height &&
-                           net->input_width == iter->input_width),
-            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(net->log_ctx,
+                           (net->input_height == iter->input_height &&
+                            net->input_width == iter->input_width),
+                           BCNN_INVALID_DATA,
+                           "MNIST data: incoherent image width and height");
         iter->n_samples = n_img;
     }
 
@@ -697,6 +698,112 @@ static int bcnn_init_mnist_iterator(bcnn_net *net, bcnn_iterator *iter,
     return BCNN_SUCCESS;
 }
 
+static int bcnn_init_multi_iterator(bcnn_net *net, bcnn_iterator *iter,
+                                    char *path_input) {
+    int i;
+    FILE *f_list = NULL;
+    char *line = NULL;
+    char **tok = NULL;
+    int n_tok = 0;
+    unsigned char *img = NULL;
+    int out_w = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].w;
+    int out_h = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].h;
+    int out_c = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].c;
+
+    iter->type = ITER_MULTI;
+
+    f_list = fopen(path_input, "rb");
+    if (f_list == NULL) {
+        fprintf(stderr, "[ERROR] Can not open file %s\n", path_input);
+        return BCNN_INVALID_PARAMETER;
+    }
+
+    iter->input_width = net->input_width;
+    iter->input_height = net->input_width;
+    iter->input_depth = net->input_channels;
+    iter->input_uchar = (unsigned char *)calloc(
+        iter->input_width * iter->input_height * iter->input_depth,
+        sizeof(unsigned char));
+    iter->input_uchar2 = (unsigned char *)calloc(
+        iter->input_width * iter->input_height * iter->input_depth,
+        sizeof(unsigned char));
+    iter->input_uchar3 = (unsigned char *)calloc(
+        iter->input_width * iter->input_height * iter->input_depth,
+        sizeof(unsigned char));
+
+    line = bh_fgetline(f_list);
+    n_tok = bh_strsplit(line, ' ', &tok);
+
+    iter->label_width = out_w * out_h * out_c;
+
+    iter->label_float = (float *)calloc(iter->label_width, sizeof(float));
+
+    rewind(f_list);
+    iter->f_input = f_list;
+    bh_free(line);
+    bh_free(img);
+    for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
+    bh_free(tok);
+
+    return BCNN_SUCCESS;
+}
+
+static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
+    char *line = NULL;
+    char **tok = NULL;
+    int i, n_tok = 0, tmp_x, tmp_y;
+    int out_w = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].w;
+    int out_h = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].h;
+    int out_c = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].c;
+    unsigned char *img = NULL;
+    // nb_lines_skipped = (int)((float)rand() / RAND_MAX * net->batch_size);
+    // bh_fskipline(f, nb_lines_skipped);
+    line = bh_fgetline(iter->f_input);
+    if (line == NULL) {
+        rewind(iter->f_input);
+        line = bh_fgetline(iter->f_input);
+    }
+    n_tok = bh_strsplit(line, ' ', &tok);
+    // fprintf(stderr, "ntok %d iter->label_width %d\n", n_tok,
+    // iter->label_width);
+    /*if (net->task != PREDICT && net->prediction_type == CLASSIFICATION) {
+        BCNN_CHECK_AND_LOG(net->log_ctx, n_tok == 2, BCNN_INVALID_DATA,
+                           "Wrong data format for classification");
+    }*/
+
+    bcnn_load_image_from_path(net, tok[0], net->input_width, net->input_height,
+                              net->input_channels, iter->input_uchar,
+                              net->state, &net->data_aug.shift_x,
+                              &net->data_aug.shift_y);
+    bcnn_load_image_from_path(net, tok[1], net->input_width, net->input_height,
+                              net->input_channels, iter->input_uchar2,
+                              net->state, &net->data_aug.shift_x,
+                              &net->data_aug.shift_y);
+    bcnn_load_image_from_path(net, tok[2], net->input_width, net->input_height,
+                              net->input_channels, iter->input_uchar3,
+                              net->state, &net->data_aug.shift_x,
+                              &net->data_aug.shift_y);
+    iter->input_float[0] = atof(tok[3]);
+    iter->input_float[1] = atof(tok[4]);
+    iter->input_float[2] = atof(tok[5]);
+    // Label
+    if (net->prediction_type != SEGMENTATION) {
+        BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == iter->label_width + 6),
+                           BCNN_INVALID_DATA, "Unexpected label format");
+        for (i = 0; i < iter->label_width; ++i) {
+            iter->label_float[i] = (float)atof(tok[i + 6]);
+        }
+    }
+
+    bh_free(line);
+    for (i = 0; i < n_tok; ++i) {
+        bh_free(tok[i]);
+    }
+    bh_free(tok);
+
+    return BCNN_SUCCESS;
+}
+
 int bcnn_iterator_initialize(bcnn_net *net, bcnn_iterator *iter,
                              char *path_input, char *path_label, char *type) {
     if (strcmp(type, "mnist") == 0) {
@@ -707,6 +814,8 @@ int bcnn_iterator_initialize(bcnn_net *net, bcnn_iterator *iter,
         return bcnn_init_list_iterator(net, iter, path_input);
     } else if (strcmp(type, "cifar10") == 0) {
         return bcnn_init_cifar10_iterator(net, iter, path_input);
+    } else if (strcmp(type, "multi") == 0) {
+        return bcnn_init_multi_iterator(net, iter, path_input);
     } else {
         BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
                    "Unknown data_format. Available are 'mnist' 'bin' 'list' "
@@ -729,6 +838,9 @@ int bcnn_iterator_next(bcnn_net *net, bcnn_iterator *iter) {
         case ITER_LIST:
             bcnn_list_iter(net, iter);
             break;
+        case ITER_MULTI:
+            bcnn_multi_iter(net, iter);
+            break;
         default:
             break;
     }
@@ -746,6 +858,8 @@ int bcnn_iterator_terminate(bcnn_iterator *iter) {
         fclose(iter->f_list);
     }
     bh_free(iter->input_uchar);
+    bh_free(iter->input_uchar2);
+    bh_free(iter->input_uchar3);
     bh_free(iter->label_float);
     bh_free(iter->label_uchar);
     bh_free(iter->label_int);

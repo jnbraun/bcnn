@@ -151,7 +151,8 @@ typedef enum {
     ITER_LIST,
     ITER_CSV,
     ITER_MNIST,
-    ITER_CIFAR10
+    ITER_CIFAR10,
+    ITER_MULTI
 } bcnn_iterator_type;
 
 typedef struct {
@@ -165,6 +166,9 @@ typedef struct {
     int input_height;
     int input_depth;
     unsigned char *input_uchar;
+    unsigned char *input_uchar2;
+    unsigned char *input_uchar3;
+    float input_float[3];
     int label_width;
     int *label_int;
     float *label_float;
@@ -623,7 +627,9 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 char *src_id, char *label_id, char *dst_id);
 
 /* YOLO */
-typedef struct { float x, y, w, h; } yolo_box;
+typedef struct {
+    float x, y, w, h;
+} yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

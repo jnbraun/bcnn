@@ -722,60 +722,165 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
         float *x2 = net->tensors[2].data;
         float *x3 = net->tensors[3].data;
         float *x4 = net->tensors[4].data;
+        float *x5 = net->tensors[5].data;
+        unsigned char *buf =
+            (unsigned char *)calloc(output_size, sizeof(unsigned char));
+        unsigned char *tmp2 = (unsigned char *)calloc(
+            bcnn_tensor_size3d(&net->tensors[4]), sizeof(unsigned char));
         /////////////////
         for (i = 0; i < batch_size; ++i) {
             bcnn_iterator_next(net, iter);
             // Online data augmentation
+            param->apply_fliph = 0;
             if (net->task == TRAIN && net->state) {
+                if (param->random_fliph) {
+                    param->apply_fliph = ((float)rand() / RAND_MAX > 0.5f);
+                }
                 bcnn_data_augmentation(iter->input_uchar, w_in, h_in, c_in,
                                        param, img_tmp);
                 bcnn_data_augmentation(iter->input_uchar2, w_in, h_in, c_in,
                                        param, img_tmp);
             }
-            bcnn_convert_img_to_float(iter->input_uchar, w_in, h_in, c_in,
-                                      param->no_input_norm, param->swap_to_bgr,
-                                      param->mean_r, param->mean_g,
-                                      param->mean_b, x);
-            bcnn_convert_img_to_float(iter->input_uchar2, w_in, h_in, c_in,
-                                      param->no_input_norm, param->swap_to_bgr,
-                                      param->mean_r, param->mean_g,
-                                      param->mean_b, x2);
-            bcnn_convert_img_to_float(iter->input_uchar3, w_in, h_in, c_in,
-                                      param->no_input_norm, param->swap_to_bgr,
-                                      param->mean_r, param->mean_g,
-                                      param->mean_b, x3);
-            memcpy(x4, iter->input_float, 3 * sizeof(float));
+            if (param->apply_fliph) {
+                bcnn_convert_img_to_float(iter->input_uchar, w_in, h_in, c_in,
+                                          param->no_input_norm,
+                                          param->swap_to_bgr, param->mean_r,
+                                          param->mean_g, param->mean_b, x2);
+                bcnn_convert_img_to_float(iter->input_uchar2, w_in, h_in, c_in,
+                                          param->no_input_norm,
+                                          param->swap_to_bgr, param->mean_r,
+                                          param->mean_g, param->mean_b, x);
+            } else {
+                bcnn_convert_img_to_float(iter->input_uchar, w_in, h_in, c_in,
+                                          param->no_input_norm,
+                                          param->swap_to_bgr, param->mean_r,
+                                          param->mean_g, param->mean_b, x);
+                bcnn_convert_img_to_float(iter->input_uchar2, w_in, h_in, c_in,
+                                          param->no_input_norm,
+                                          param->swap_to_bgr, param->mean_r,
+                                          param->mean_g, param->mean_b, x2);
+            }
+#ifdef USE_GRID
+            if (param->apply_fliph) {
+                bip_fliph_image(iter->input_uchar3, w_in, h_in, c_in,
+                                w_in * c_in, img_tmp, w_in * c_in);
+                memcpy(iter->input_uchar3, img_tmp,
+                       w_in * h_in * c_in * sizeof(unsigned char));
+                bcnn_convert_img_to_float(iter->input_uchar3, w_in, h_in, c_in,
+                                          param->no_input_norm,
+                                          param->swap_to_bgr, param->mean_r,
+                                          param->mean_g, param->mean_b, x3);
+                x4[0] = -iter->input_float[0];
+                x4[1] = iter->input_float[1];
+                x4[2] = iter->input_float[2];
+            } else {
+                bcnn_convert_img_to_float(iter->input_uchar3, w_in, h_in, c_in,
+                                          param->no_input_norm,
+                                          param->swap_to_bgr, param->mean_r,
+                                          param->mean_g, param->mean_b, x3);
+                memcpy(x4, iter->input_float, 3 * sizeof(float));
+            }
             x += sz;
-            x2 += sz;
-            x3 += sz;
-            x4 += 3;
+            x2 += bcnn_tensor_size3d(&net->tensors[2]);
+            x3 += bcnn_tensor_size3d(&net->tensors[3]);
+            x4 += bcnn_tensor_size3d(&net->tensors[4]);
+#else
+            if (param->apply_fliph) {
+                bip_fliph_image(iter->input_uchar3, net->tensors[3].w,
+                                net->tensors[3].h, net->tensors[3].c,
+                                net->tensors[3].w * net->tensors[3].c, img_tmp,
+                                net->tensors[3].w * net->tensors[3].c);
+                memcpy(iter->input_uchar3, img_tmp,
+                       net->tensors[3].w * net->tensors[3].h *
+                           net->tensors[3].c * sizeof(unsigned char));
+                bcnn_convert_img_to_float(
+                    iter->input_uchar3, net->tensors[3].w, net->tensors[3].h,
+                    net->tensors[3].c, param->no_input_norm, param->swap_to_bgr,
+                    param->mean_r, param->mean_g, param->mean_b, x3);
+                bip_fliph_image(iter->input_uchar4, net->tensors[4].w,
+                                net->tensors[4].h, net->tensors[4].c,
+                                net->tensors[4].w * net->tensors[4].c, tmp2,
+                                net->tensors[4].w * net->tensors[4].c);
+                memcpy(iter->input_uchar4, tmp2,
+                       net->tensors[4].w * net->tensors[4].h *
+                           net->tensors[4].c * sizeof(unsigned char));
+                bcnn_convert_img_to_float(
+                    iter->input_uchar4, net->tensors[4].w, net->tensors[4].h,
+                    net->tensors[4].c, param->no_input_norm, param->swap_to_bgr,
+                    param->mean_r, param->mean_g, param->mean_b, x4);
+                x5[0] = -iter->input_float[0];
+                x5[1] = iter->input_float[1];
+                x5[2] = iter->input_float[2];
+                memcpy(x5, iter->input_float, 3 * sizeof(float));
+            } else {
+                bcnn_convert_img_to_float(
+                    iter->input_uchar3, net->tensors[3].w, net->tensors[3].h,
+                    net->tensors[3].c, param->no_input_norm, param->swap_to_bgr,
+                    param->mean_r, param->mean_g, param->mean_b, x3);
+                bcnn_convert_img_to_float(
+                    iter->input_uchar4, net->tensors[4].w, net->tensors[4].h,
+                    net->tensors[4].c, param->no_input_norm, param->swap_to_bgr,
+                    param->mean_r, param->mean_g, param->mean_b, x4);
+                memcpy(x5, iter->input_float, 3 * sizeof(float));
+            }
+            x += sz;
+            x2 += bcnn_tensor_size3d(&net->tensors[2]);
+            x3 += bcnn_tensor_size3d(&net->tensors[3]);
+            x4 += bcnn_tensor_size3d(&net->tensors[4]);
+            x5 += bcnn_tensor_size3d(&net->tensors[5]);
+#endif
             if (net->task != PREDICT) {
-                for (j = 0; j < iter->label_width; ++j) {
-                    y[j] = iter->label_float[j];
-                    // fprintf(stderr, "y %f\n", y[j]);
+                if (net->prediction_type != HEATMAP_REGRESSION) {
+                    if (param->apply_fliph) {
+                        y[0] = -iter->label_float[0];
+                        for (j = 1; j < iter->label_width; ++j) {
+                            y[j] = iter->label_float[j];
+                        }
+                    } else {
+                        for (j = 0; j < iter->label_width; ++j) {
+                            y[j] = iter->label_float[j];
+                        }
+                    }
+                } else {
+                    int lw = net->tensors[1].w;
+                    int lh = net->tensors[1].h;
+                    int lc = net->tensors[1].c;
+                    if (param->apply_fliph) {
+                        bip_fliph_image(iter->label_uchar, lw, lh, lc, lw * lc,
+                                        buf, lw * lc);
+                        memcpy(iter->label_uchar, buf,
+                               lw * lh * lc * sizeof(unsigned char));
+                    }
+                    bcnn_convert_img_to_float(iter->label_uchar, lw, lh, lc,
+                                              param->no_input_norm,
+                                              param->swap_to_bgr, param->mean_r,
+                                              param->mean_g, param->mean_b, y);
                 }
                 y += output_size;
             }
         }
+        bh_free(buf);
+        bh_free(tmp2);
     }
     if (use_buffer_img) bh_free(img_tmp);
-
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
                               input_size);
     if (iter->type == ITER_MULTI) {
         bcnn_cuda_memcpy_host2dev(net->tensors[2].data_gpu,
-                                  net->tensors[2].data, input_size);
+                                  net->tensors[2].data,
+                                  bcnn_tensor_size(&net->tensors[2]));
         bcnn_cuda_memcpy_host2dev(net->tensors[3].data_gpu,
-                                  net->tensors[3].data, input_size);
+                                  net->tensors[3].data,
+                                  bcnn_tensor_size(&net->tensors[3]));
         bcnn_cuda_memcpy_host2dev(net->tensors[4].data_gpu,
                                   net->tensors[4].data,
                                   bcnn_tensor_size(&net->tensors[4]));
     }
     if (net->task != PREDICT) {
-        bcnn_cuda_memcpy_host2dev(
-            net->tensors[1].data_gpu, net->tensors[1].data,
-            bcnn_tensor_size(&net->tensors[net->nodes[nb - 1].src[0]]));
+        bcnn_cuda_memcpy_host2dev(net->tensors[1].data_gpu,
+                                  net->tensors[1].data,
+                                  bcnn_tensor_size(&net->tensors[1]));
     }
 #endif
     return BCNN_SUCCESS;
@@ -1129,9 +1234,8 @@ int bcnn_visualize_network(bcnn_net *net) {
                      ++k) {
                     sprintf(name, "sample%d_layer%d_fmap%d.png", i, j, k);
                     bip_write_float_image_norm(
-                        name,
-                        net->tensors[net->nodes[j].dst[0]].data + i * sz +
-                            k * w * h,
+                        name, net->tensors[net->nodes[j].dst[0]].data + i * sz +
+                                  k * w * h,
                         w, h, 1, w * sizeof(float));
                 }
             }

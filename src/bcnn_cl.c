@@ -38,7 +38,8 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     char **tok = NULL;
     int nb_lines = 0, nb_layers = 0;
     bcnn_padding padding_type = PADDING_SAME;
-    int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0, num_groups = 1;
+    int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0, num_groups = 1,
+        batchnorm = 0;
     int in_w = 0, in_h = 0, in_c = 0;
     float alpha, beta, k;
     bcnn_activation a = NONE;
@@ -90,9 +91,9 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_convolutional_layer(net, n_filts, size, stride,
-                                                     pad, num_groups, 0, init,
-                                                     a, 0, src_id, dst_id);
+                        bcnn_add_convolutional_layer(
+                            net, n_filts, size, stride, pad, num_groups,
+                            batchnorm, init, a, 0, src_id, dst_id);
                     } else if (strcmp(curr_layer, "{deconv}") == 0 ||
                                strcmp(curr_layer, "{deconvolutional}") == 0) {
                         BCNN_CHECK_AND_LOG(
@@ -245,6 +246,9 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     in_h = atoi(tok[1]);
                 } else if (strcmp(tok[0], "c") == 0) {
                     in_c = atoi(tok[1]);
+                } else if (strcmp(tok[0], "bn") == 0 ||
+                           strcmp(tok[0], "batchnorm") == 0) {
+                    batchnorm = atoi(tok[1]);
                 } else if (strcmp(tok[0], "src") == 0) {
                     char **srcids = NULL;
                     int num_srcids = bh_strsplit(tok[1], ',', &srcids);

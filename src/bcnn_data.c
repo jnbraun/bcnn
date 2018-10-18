@@ -557,7 +557,7 @@ int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
     int brightness = 0;
 
     if (param->random_fliph) {
-        if ((float)rand() / RAND_MAX > 0.5f) {
+        if (param->apply_fliph) {
             bip_fliph_image(img, width, height, depth, width * depth, buffer,
                             width * depth);
             memcpy(img, buffer, sz * sizeof(unsigned char));
@@ -725,18 +725,22 @@ static int bcnn_init_multi_iterator(bcnn_net *net, bcnn_iterator *iter,
         iter->input_width * iter->input_height * iter->input_depth,
         sizeof(unsigned char));
     iter->input_uchar2 = (unsigned char *)calloc(
-        iter->input_width * iter->input_height * iter->input_depth,
-        sizeof(unsigned char));
+        bcnn_tensor_size3d(&net->tensors[2]), sizeof(unsigned char));
     iter->input_uchar3 = (unsigned char *)calloc(
-        iter->input_width * iter->input_height * iter->input_depth,
-        sizeof(unsigned char));
+        bcnn_tensor_size3d(&net->tensors[3]), sizeof(unsigned char));
+    iter->input_uchar4 = (unsigned char *)calloc(
+        bcnn_tensor_size3d(&net->tensors[4]), sizeof(unsigned char));
 
     line = bh_fgetline(f_list);
     n_tok = bh_strsplit(line, ' ', &tok);
 
     iter->label_width = out_w * out_h * out_c;
-
-    iter->label_float = (float *)calloc(iter->label_width, sizeof(float));
+    if (net->prediction_type == HEATMAP_REGRESSION) {
+        iter->label_uchar =
+            (unsigned char *)calloc(iter->label_width, sizeof(unsigned char));
+    } else {
+        iter->label_float = (float *)calloc(iter->label_width, sizeof(float));
+    }
 
     rewind(f_list);
     iter->f_input = f_list;
@@ -744,7 +748,6 @@ static int bcnn_init_multi_iterator(bcnn_net *net, bcnn_iterator *iter,
     bh_free(img);
     for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
     bh_free(tok);
-
     return BCNN_SUCCESS;
 }
 
@@ -755,7 +758,6 @@ static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
     int out_w = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].w;
     int out_h = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].h;
     int out_c = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].c;
-    unsigned char *img = NULL;
     // nb_lines_skipped = (int)((float)rand() / RAND_MAX * net->batch_size);
     // bh_fskipline(f, nb_lines_skipped);
     line = bh_fgetline(iter->f_input);
@@ -775,24 +777,47 @@ static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
                               net->input_channels, iter->input_uchar,
                               net->state, &net->data_aug.shift_x,
                               &net->data_aug.shift_y);
-    bcnn_load_image_from_path(net, tok[1], net->input_width, net->input_height,
-                              net->input_channels, iter->input_uchar2,
-                              net->state, &net->data_aug.shift_x,
-                              &net->data_aug.shift_y);
-    bcnn_load_image_from_path(net, tok[2], net->input_width, net->input_height,
-                              net->input_channels, iter->input_uchar3,
-                              net->state, &net->data_aug.shift_x,
-                              &net->data_aug.shift_y);
+    bcnn_load_image_from_path(net, tok[1], net->tensors[2].w, net->tensors[2].h,
+                              net->tensors[2].c, iter->input_uchar2, net->state,
+                              &net->data_aug.shift_x, &net->data_aug.shift_y);
+    bcnn_load_image_from_path(net, tok[2], net->tensors[3].w, net->tensors[3].h,
+                              net->tensors[3].c, iter->input_uchar3, net->state,
+                              &net->data_aug.shift_x, &net->data_aug.shift_y);
+#ifdef USE_GRID
     iter->input_float[0] = atof(tok[3]);
     iter->input_float[1] = atof(tok[4]);
     iter->input_float[2] = atof(tok[5]);
+#else
+    bcnn_load_image_from_path(net, tok[3], net->tensors[4].w, net->tensors[4].h,
+                              net->tensors[4].c, iter->input_uchar4, net->state,
+                              &net->data_aug.shift_x, &net->data_aug.shift_y);
+    iter->input_float[0] = atof(tok[4]);
+    iter->input_float[1] = atof(tok[5]);
+    iter->input_float[2] = atof(tok[6]);
+#endif
+
     // Label
-    if (net->prediction_type != SEGMENTATION) {
+    if (net->prediction_type != HEATMAP_REGRESSION) {
+#ifdef USE_GRID
         BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == iter->label_width + 6),
                            BCNN_INVALID_DATA, "Unexpected label format");
         for (i = 0; i < iter->label_width; ++i) {
             iter->label_float[i] = (float)atof(tok[i + 6]);
         }
+#else
+        BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == iter->label_width + 7),
+                           BCNN_INVALID_DATA, "Unexpected label format");
+        for (i = 0; i < iter->label_width; ++i) {
+            iter->label_float[i] = (float)atof(tok[i + 7]);
+        }
+#endif
+    } else {
+        BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == 1 + 4), BCNN_INVALID_DATA,
+                           "Unexpected label format");
+        bcnn_load_image_from_path(
+            net, tok[4], net->tensors[1].w, net->tensors[1].h,
+            net->tensors[1].c, iter->label_uchar, net->state,
+            &net->data_aug.shift_x, &net->data_aug.shift_y);
     }
 
     bh_free(line);
@@ -860,6 +885,8 @@ int bcnn_iterator_terminate(bcnn_iterator *iter) {
     bh_free(iter->input_uchar);
     bh_free(iter->input_uchar2);
     bh_free(iter->input_uchar3);
+    bh_free(iter->input_uchar4);
+    // bh_free(iter->input_float);
     bh_free(iter->label_float);
     bh_free(iter->label_uchar);
     bh_free(iter->label_int);

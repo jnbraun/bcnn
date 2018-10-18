@@ -118,6 +118,8 @@ typedef unsigned __int64 uint64_t;
         bcnn_log((ctx), BCNN_LOG_WARNING, (fmt), ##__VA_ARGS__); \
     } while (0)
 
+//#define USE_GRID
+
 /**
  * \brief Enum of error codes.
  */
@@ -168,7 +170,8 @@ typedef struct {
     unsigned char *input_uchar;
     unsigned char *input_uchar2;
     unsigned char *input_uchar3;
-    float input_float[3];
+    unsigned char *input_uchar4;
+    float input_float[7];
     int label_width;
     int *label_int;
     float *label_float;
@@ -213,6 +216,7 @@ typedef struct {
     float distortion;     /**< Current distortion factor. */
     float distortion_kx;  /**< Current distortion x kernel. */
     float distortion_ky;  /**< Current distortion y kernel. */
+    int apply_fliph;      /**< Current flip flag. */
     float mean_r;
     float mean_g;
     float mean_b;

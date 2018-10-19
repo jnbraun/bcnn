@@ -19,10 +19,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include "bcnn/bcnn.h"
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
-#include "bcnn/bcnn.h"
 
 /* include bip image processing lib */
 #include <bip/bip.h>
@@ -250,11 +250,10 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            n_img, n_labels);
-        BCNN_CHECK_AND_LOG(net->log_ctx,
-                           (net->input_height == iter->input_height &&
-                            net->input_width == iter->input_width),
-                           BCNN_INVALID_DATA,
-                           "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, (net->input_height == iter->input_height &&
+                           net->input_width == iter->input_width),
+            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
         iter->n_samples = n_img;
     }
 
@@ -783,32 +782,42 @@ static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
     bcnn_load_image_from_path(net, tok[2], net->tensors[3].w, net->tensors[3].h,
                               net->tensors[3].c, iter->input_uchar3, net->state,
                               &net->data_aug.shift_x, &net->data_aug.shift_y);
-#ifdef USE_GRID
+#if defined(USE_GRID)
     iter->input_float[0] = atof(tok[3]);
     iter->input_float[1] = atof(tok[4]);
     iter->input_float[2] = atof(tok[5]);
-#else
+#elif defined(USE_FACECROP)
     bcnn_load_image_from_path(net, tok[3], net->tensors[4].w, net->tensors[4].h,
                               net->tensors[4].c, iter->input_uchar4, net->state,
                               &net->data_aug.shift_x, &net->data_aug.shift_y);
     iter->input_float[0] = atof(tok[4]);
     iter->input_float[1] = atof(tok[5]);
     iter->input_float[2] = atof(tok[6]);
+#elif defined(USE_MASKHP)
+    bcnn_load_image_from_path(net, tok[3], net->tensors[4].w, net->tensors[4].h,
+                              net->tensors[4].c, iter->input_uchar4, net->state,
+                              &net->data_aug.shift_x, &net->data_aug.shift_y);
 #endif
 
     // Label
     if (net->prediction_type != HEATMAP_REGRESSION) {
-#ifdef USE_GRID
+#if defined(USE_GRID)
         BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == iter->label_width + 6),
                            BCNN_INVALID_DATA, "Unexpected label format");
         for (i = 0; i < iter->label_width; ++i) {
             iter->label_float[i] = (float)atof(tok[i + 6]);
         }
-#else
+#elif defined(USE_FACECROP)
         BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == iter->label_width + 7),
                            BCNN_INVALID_DATA, "Unexpected label format");
         for (i = 0; i < iter->label_width; ++i) {
             iter->label_float[i] = (float)atof(tok[i + 7]);
+        }
+#elif defined(USE_MASKHP)
+        BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == iter->label_width + 4),
+                           BCNN_INVALID_DATA, "Unexpected label format");
+        for (i = 0; i < iter->label_width; ++i) {
+            iter->label_float[i] = (float)atof(tok[i + 4]);
         }
 #endif
     } else {

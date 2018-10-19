@@ -119,6 +119,7 @@ typedef unsigned __int64 uint64_t;
     } while (0)
 
 //#define USE_GRID
+#define USE_MASKHP
 
 /**
  * \brief Enum of error codes.
@@ -631,9 +632,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 char *src_id, char *label_id, char *dst_id);
 
 /* YOLO */
-typedef struct {
-    float x, y, w, h;
-} yolo_box;
+typedef struct { float x, y, w, h; } yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

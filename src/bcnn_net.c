@@ -760,7 +760,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
                                           param->swap_to_bgr, param->mean_r,
                                           param->mean_g, param->mean_b, x2);
             }
-#ifdef USE_GRID
+#if defined(USE_GRID)
             if (param->apply_fliph) {
                 bip_fliph_image(iter->input_uchar3, w_in, h_in, c_in,
                                 w_in * c_in, img_tmp, w_in * c_in);
@@ -784,7 +784,45 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
             x2 += bcnn_tensor_size3d(&net->tensors[2]);
             x3 += bcnn_tensor_size3d(&net->tensors[3]);
             x4 += bcnn_tensor_size3d(&net->tensors[4]);
-#else
+#elif defined(USE_MASKHP)
+            if (param->apply_fliph) {
+                bip_fliph_image(iter->input_uchar3, net->tensors[3].w,
+                                net->tensors[3].h, net->tensors[3].c,
+                                net->tensors[3].w * net->tensors[3].c, img_tmp,
+                                net->tensors[3].w * net->tensors[3].c);
+                memcpy(iter->input_uchar3, img_tmp,
+                       net->tensors[3].w * net->tensors[3].h *
+                           net->tensors[3].c * sizeof(unsigned char));
+                bcnn_convert_img_to_float(
+                    iter->input_uchar3, net->tensors[3].w, net->tensors[3].h,
+                    net->tensors[3].c, param->no_input_norm, param->swap_to_bgr,
+                    param->mean_r, param->mean_g, param->mean_b, x3);
+                bip_fliph_image(iter->input_uchar4, net->tensors[4].w,
+                                net->tensors[4].h, net->tensors[4].c,
+                                net->tensors[4].w * net->tensors[4].c, tmp2,
+                                net->tensors[4].w * net->tensors[4].c);
+                memcpy(iter->input_uchar4, tmp2,
+                       net->tensors[4].w * net->tensors[4].h *
+                           net->tensors[4].c * sizeof(unsigned char));
+                bcnn_convert_img_to_float(
+                    iter->input_uchar4, net->tensors[4].w, net->tensors[4].h,
+                    net->tensors[4].c, param->no_input_norm, param->swap_to_bgr,
+                    param->mean_r, param->mean_g, param->mean_b, x4);
+            } else {
+                bcnn_convert_img_to_float(
+                    iter->input_uchar3, net->tensors[3].w, net->tensors[3].h,
+                    net->tensors[3].c, param->no_input_norm, param->swap_to_bgr,
+                    param->mean_r, param->mean_g, param->mean_b, x3);
+                bcnn_convert_img_to_float(
+                    iter->input_uchar4, net->tensors[4].w, net->tensors[4].h,
+                    net->tensors[4].c, param->no_input_norm, param->swap_to_bgr,
+                    param->mean_r, param->mean_g, param->mean_b, x4);
+            }
+            x += sz;
+            x2 += bcnn_tensor_size3d(&net->tensors[2]);
+            x3 += bcnn_tensor_size3d(&net->tensors[3]);
+            x4 += bcnn_tensor_size3d(&net->tensors[4]);
+#elif defined(USE_FACECROP)
             if (param->apply_fliph) {
                 bip_fliph_image(iter->input_uchar3, net->tensors[3].w,
                                 net->tensors[3].h, net->tensors[3].c,
@@ -1234,8 +1272,9 @@ int bcnn_visualize_network(bcnn_net *net) {
                      ++k) {
                     sprintf(name, "sample%d_layer%d_fmap%d.png", i, j, k);
                     bip_write_float_image_norm(
-                        name, net->tensors[net->nodes[j].dst[0]].data + i * sz +
-                                  k * w * h,
+                        name,
+                        net->tensors[net->nodes[j].dst[0]].data + i * sz +
+                            k * w * h,
                         w, h, 1, w * sizeof(float));
                 }
             }

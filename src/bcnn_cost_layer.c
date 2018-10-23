@@ -128,7 +128,6 @@ void bcnn_compute_error(bcnn_layer *layer, bcnn_tensor *src_tensor,
     int input_size = src_tensor->w * src_tensor->h * src_tensor->c;
     int batch_size = src_tensor->n;
     int sz = src_tensor->n * input_size;
-
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_dev2host(dst_tensor->grad_data_gpu, dst_tensor->grad_data,
                               sz);
@@ -237,7 +236,6 @@ int bcnn_forward_cost_layer(bcnn_net *net, bcnn_node *node) {
     if (!label->data) {
         return BCNN_SUCCESS;
     }
-
     switch (layer->loss) {
         case EUCLIDEAN_LOSS:
             bcnn_euclidean_loss_forward(src_tensor, label, dst_tensor);

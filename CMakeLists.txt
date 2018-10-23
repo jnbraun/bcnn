@@ -30,6 +30,9 @@ set (CMAKE_C_STANDARD 99)
 set(CMAKE_C_FLAGS "-O3")
 set(CMAKE_ASM_FLAGS "${CFLAGS} -x assembler-with-cpp")
 
+# Get the target system processor
+message(STATUS "[bcnn] Targeted system processor: " ${CMAKE_SYSTEM_PROCESSOR})
+
 # Blas backend
 if (USE_BLAS)
     add_definitions(-DBCNN_USE_BLAS)

@@ -146,7 +146,8 @@ typedef enum {
     CLASSIFICATION,
     REGRESSION,
     HEATMAP_REGRESSION,
-    SEGMENTATION
+    SEGMENTATION,
+    DETECTION
 } bcnn_target;
 
 typedef enum {
@@ -269,6 +270,7 @@ typedef enum {
     BATCHNORM,
     LRN,
     CONCAT,
+    ELTWISE,
     UPSAMPLE,
     YOLO,
     RESHAPE,
@@ -386,8 +388,6 @@ void bcnn_tensor_destroy(bcnn_tensor *t);
 void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w,
                            int has_grad);
 
-void bcnn_tensor_set_shape_from_tensor(bcnn_tensor *dst, bcnn_tensor *src);
-
 void bcnn_tensor_allocate(bcnn_tensor *t);
 
 void bcnn_tensor_free(bcnn_tensor *t);
@@ -397,8 +397,6 @@ int bcnn_tensor_size(bcnn_tensor *tensor);
 int bcnn_tensor_size3d(bcnn_tensor *t);
 
 int bcnn_tensor_size2d(bcnn_tensor *t);
-
-void bcnn_tensor_assign(bcnn_tensor *dst, bcnn_tensor *src);
 
 /**
  * \brief Structure defining a generic layer.
@@ -612,6 +610,10 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
 bcnn_status bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
                                   char *dst_id);
 
+/* Elementwise addition layer */
+bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
+                                   char *src_id1, char *src_id2, char *dst_id);
+
 /* Dropout layer */
 bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id);
 
@@ -632,7 +634,14 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 char *src_id, char *label_id, char *dst_id);
 
 /* YOLO */
-typedef struct { float x, y, w, h; } yolo_box;
+#define BCNN_DETECTION_MAX_BOXES 50
+
+/* TODO: move to private header */
+bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter);
+
+typedef struct {
+    float x, y, w, h;
+} yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;
@@ -643,9 +652,9 @@ typedef struct yolo_detection {
     int sort_class;
 } yolo_detection;
 
-bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int n, int classes, int coords,
-                                int total, int *mask, float *anchors,
-                                char *src_id, char *dst_id);
+bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
+                                int classes, int coords, int total, int *mask,
+                                float *anchors, char *src_id, char *dst_id);
 yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int w, int h, int netw,
                                          int neth, float thresh, int relative,
                                          int *num_dets);

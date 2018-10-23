@@ -19,10 +19,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include "bcnn/bcnn.h"
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
+#include "bcnn/bcnn.h"
 
 /* include bip image processing lib */
 #include <bip/bip.h>
@@ -250,10 +250,11 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            n_img, n_labels);
-        BCNN_CHECK_AND_LOG(
-            net->log_ctx, (net->input_height == iter->input_height &&
-                           net->input_width == iter->input_width),
-            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(net->log_ctx,
+                           (net->input_height == iter->input_height &&
+                            net->input_width == iter->input_width),
+                           BCNN_INVALID_DATA,
+                           "MNIST data: incoherent image width and height");
         iter->n_samples = n_img;
     }
 
@@ -467,9 +468,14 @@ static int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter,
         sizeof(unsigned char));
     line = bh_fgetline(f_list);
     n_tok = bh_strsplit(line, ' ', &tok);
-    if (net->prediction_type != SEGMENTATION) {
+    if (net->prediction_type == CLASSIFICATION ||
+        net->prediction_type == REGRESSION ||
+        net->prediction_type == HEATMAP_REGRESSION) {
         iter->label_width = n_tok - 1;
-    } else {
+    } else if (net->prediction_type == DETECTION) {
+        iter->label_width =
+            5 * BCNN_DETECTION_MAX_BOXES;  // 4 coords + class id
+    } else if (net->prediction_type == SEGMENTATION) {
         iter->label_width = out_w * out_h * out_c;
     }
     iter->label_float = (float *)calloc(iter->label_width, sizeof(float));
@@ -479,6 +485,131 @@ static int bcnn_init_list_iterator(bcnn_net *net, bcnn_iterator *iter,
     bh_free(line);
     bh_free(img);
     for (i = 0; i < n_tok; ++i) bh_free(tok[i]);
+    bh_free(tok);
+
+    return BCNN_SUCCESS;
+}
+
+static float bcnn_rand_between(float min, float max) {
+    return ((float)rand() / RAND_MAX * (max - min)) + min;
+}
+
+bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter) {
+    char *line = NULL;
+    char **tok = NULL;
+    line = bh_fgetline(iter->f_input);
+    if (line == NULL) {
+        rewind(iter->f_input);
+        line = bh_fgetline(iter->f_input);
+    }
+    int n_tok = bh_strsplit(line, ' ', &tok);
+    if (((n_tok - 1) % 5 != 0)) {
+        bcnn_log(net->log_ctx, BCNN_LOG_WARNING,
+                 "Wrong data format for detection %s. Found %d labels but "
+                 "expected multiple of 5",
+                 line);
+        return BCNN_INVALID_DATA;
+    }
+    int w_img = 0, h_img = 0, c_img = 0, x_ul = 0, y_ul = 0;
+    unsigned char *pimg = NULL;
+    bip_load_image(tok[0], &pimg, &w_img, &h_img, &c_img);
+    if (!(w_img > 0 && h_img > 0 && pimg)) {
+        bcnn_log(net->log_ctx, BCNN_LOG_WARNING, "Skip invalid image %s",
+                 tok[0]);
+        bh_free(pimg);
+        bh_free(line);
+        for (int i = 0; i < n_tok; ++i) {
+            bh_free(tok[i]);
+        }
+        bh_free(tok);
+        return BCNN_INVALID_DATA;
+    }
+    if (net->input_channels != c_img) {
+        bcnn_log(net->log_ctx, BCNN_LOG_WARNING,
+                 "Skip image %s: unexpected number of channels");
+        bh_free(pimg);
+        bh_free(line);
+        for (int i = 0; i < n_tok; ++i) {
+            bh_free(tok[i]);
+        }
+        bh_free(tok);
+        return BCNN_INVALID_DATA;
+    }
+
+    float wh_ratio = w_img / h_img;
+    int nh, nw;
+    if (wh_ratio < 1) {
+        nh = net->input_height;
+        nw = nh * wh_ratio;
+    } else {
+        nw = net->input_width;
+        nh = nw / wh_ratio;
+    }
+    unsigned char *buf =
+        (unsigned char *)calloc(nw * nh * c_img, sizeof(unsigned char));
+    bip_resize_bilinear(pimg, w_img, h_img, w_img * c_img, buf, nw, nh,
+                        nw * c_img, c_img);
+    int dx, dy;  // Canvas offsets
+    if (net->task == TRAIN && net->state) {
+        dx = (int)bcnn_rand_between(0.f, (float)(net->input_width - nw));
+        dy = (int)bcnn_rand_between(0.f, (float)(net->input_height - nh));
+    } else {
+        dx = (net->input_width - nw) / 2;
+        dy = (net->input_height - nh) / 2;
+    }
+    memset(net->input_buffer, 128,
+           net->input_channels * net->input_width * net->input_height);
+    bip_crop_image(buf, nw, nh, nw * c_img, -dx, -dy, net->input_buffer,
+                   net->input_width, net->input_height,
+                   net->input_width * net->input_channels, net->input_channels);
+    bh_free(buf);
+    if (net->task == TRAIN && net->state) {
+        // TODO: only brightness / contrast / flip is currently supported for
+        // detection
+        net->data_aug.apply_fliph = 0;
+        if (net->data_aug.random_fliph) {
+            net->data_aug.apply_fliph = ((float)rand() / RAND_MAX > 0.5f);
+        }
+        bcnn_data_augmentation(net->input_buffer, net->input_width,
+                               net->input_height, net->input_channels,
+                               &net->data_aug, iter->input_uchar);
+    }
+    if (net->task != PREDICT) {
+        // Fill labels
+        memset(iter->label_float, 0, iter->label_width * sizeof(float));
+        int num_boxes = (n_tok - 1) / 5;
+        if (num_boxes > BCNN_DETECTION_MAX_BOXES) {
+            num_boxes = BCNN_DETECTION_MAX_BOXES;
+        }
+        int offset = 1;  // Offset the image path
+        float scale_x = (float)nw / (float)net->input_width;
+        float scale_y = (float)nh / (float)net->input_height;
+        float scale_dx = (float)dx / (float)net->input_width;
+        float scale_dy = (float)dy / (float)net->input_height;
+        int skip = 0;
+        for (int i = 0; i < num_boxes; ++i) {
+            // We encode box center (x, y) and w, h
+            iter->label_float[(i - skip) * 5 + 4] =
+                (float)atoi(tok[5 * i + offset]);
+            iter->label_float[(i - skip) * 5 + 0] =
+                (float)atof(tok[5 * i + 1 + offset]) * scale_x + scale_dx;
+            iter->label_float[(i - skip) * 5 + 1] =
+                (float)atof(tok[5 * i + 2 + offset]) * scale_y + scale_dy;
+            iter->label_float[(i - skip) * 5 + 2] =
+                (float)atof(tok[5 * i + 3 + offset]) * scale_x;
+            iter->label_float[(i - skip) * 5 + 3] =
+                (float)atof(tok[5 * i + 4 + offset]) * scale_y;
+            if (net->data_aug.apply_fliph) {
+                iter->label_float[(i - skip) * 5 + 0] =
+                    1.0f - iter->label_float[(i - skip) * 5 + 0];
+            }
+        }
+    }
+    bh_free(pimg);
+    bh_free(line);
+    for (int i = 0; i < n_tok; ++i) {
+        bh_free(tok[i]);
+    }
     bh_free(tok);
 
     return BCNN_SUCCESS;

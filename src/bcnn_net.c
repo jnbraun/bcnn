@@ -36,6 +36,7 @@
 #include "bcnn_deconv_layer.h"
 #include "bcnn_depthwise_conv_layer.h"
 #include "bcnn_dropout_layer.h"
+#include "bcnn_eltwise_layer.h"
 #include "bcnn_fc_layer.h"
 #include "bcnn_lrn_layer.h"
 #include "bcnn_mat.h"
@@ -209,6 +210,8 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val) {
             net->prediction_type = HEATMAP_REGRESSION;
         } else if (strcmp(val, "segmentation") == 0) {
             net->prediction_type = SEGMENTATION;
+        } else if (strcmp(val, "detection") == 0) {
+            net->prediction_type = DETECTION;
         }
     } else if (strcmp(name, "finetune_id") == 0) {
         net->nb_finetune++;
@@ -315,6 +318,13 @@ bcnn_status bcnn_init_workload(bcnn_net *net) {
     // Allocate tensor for input node
     bcnn_tensor_allocate(&net->tensors[0]);
 
+    // Special case for detection: allocate label tensor
+    if (net->prediction_type == DETECTION && net->task != PREDICT) {
+        bcnn_tensor_set_shape(&net->tensors[1], net->batch_size, 1, 1,
+                              BCNN_DETECTION_MAX_BOXES * 5, 0);
+        bcnn_tensor_allocate(&net->tensors[1]);
+    }
+
 #ifdef BCNN_USE_CUDA
     net->workspace_gpu = bcnn_cuda_malloc_f32(net->workspace_size);
     for (i = 0; i < n; ++i) {
@@ -420,6 +430,9 @@ int bcnn_forward(bcnn_net *net) {
             case CONCAT:
                 bcnn_forward_concat_layer(net, &node);
                 break;
+            case ELTWISE:
+                bcnn_forward_eltwise_layer(net, &node);
+                break;
             case UPSAMPLE:
                 bcnn_forward_upsample_layer(net, &node);
                 break;
@@ -478,6 +491,9 @@ int bcnn_backward(bcnn_net *net) {
             case CONCAT:
                 bcnn_backward_concat_layer(net, &node);
                 break;
+            case ELTWISE:
+                bcnn_backward_eltwise_layer(net, &node);
+                break;
             case UPSAMPLE:
                 bcnn_backward_upsample_layer(net, &node);
                 break;
@@ -519,15 +535,32 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
     int en = (net->nodes[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
     int output_size =
         bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 1].src[0]]);
-
     memset(x, 0, sz * net->batch_size * sizeof(float));
+
     if (net->task != PREDICT) {
-        memset(y, 0, output_size * net->batch_size * sizeof(float));
+        memset(y, 0, bcnn_tensor_size(&net->tensors[1]) * sizeof(float));
     }
     if (use_buffer_img) {
         img_tmp = (unsigned char *)calloc(sz_img, sizeof(unsigned char));
     }
-    if (iter->type == ITER_MNIST || iter->type == ITER_CIFAR10) {
+    if (net->prediction_type == DETECTION) {
+        for (i = 0; i < net->batch_size; ++i) {
+            if (bcnn_data_iter_detection(net, iter) != BCNN_SUCCESS) {
+                --i;
+                continue;
+            }
+            bcnn_convert_img_to_float(iter->input_uchar, w_in, h_in, c_in,
+                                      param->no_input_norm, param->swap_to_bgr,
+                                      param->mean_r, param->mean_g,
+                                      param->mean_b, x);
+            x += sz;
+            if (net->task != PREDICT) {
+                int label_sz = bcnn_tensor_size3d(&net->tensors[1]);
+                memcpy(y, iter->label_float, label_sz * sizeof(float));
+                y += label_sz;
+            }
+        }
+    } else if (iter->type == ITER_MNIST || iter->type == ITER_CIFAR10) {
         for (i = 0; i < net->batch_size; ++i) {
             bcnn_iterator_next(net, iter);
             // Data augmentation
@@ -934,14 +967,27 @@ int bcnn_train_on_batch(bcnn_net *net, bcnn_iterator *iter, float *loss) {
     bcnn_backward(net);
     // Update network weight
     bcnn_update(net);
-    *loss = net->tensors[net->nodes[net->num_nodes - 1].dst[0]].data[0];
+    if (net->prediction_type == DETECTION) {
+        *loss = 0;
+        int n = 0;
+        for (int i = 0; i < net->num_nodes; ++i) {
+            if (net->nodes[i].layer->cost) {
+                *loss += net->nodes[i].layer->cost[0];
+                ++n;
+            }
+        }
+        if (n > 0) {
+            *loss /= n;
+        }
+    } else {
+        *loss = net->tensors[net->nodes[net->num_nodes - 1].dst[0]].data[0];
+    }
     return BCNN_SUCCESS;
 }
 
 int bcnn_predict_on_batch(bcnn_net *net, bcnn_iterator *iter, float **pred,
                           float *error) {
     int nb = net->num_nodes;
-    int en = (net->nodes[nb - 1].layer->type == COST ? (nb - 2) : (nb - 1));
     int output_size =
         bcnn_tensor_size(&net->tensors[net->nodes[nb - 1].src[0]]);
 
@@ -955,7 +1001,21 @@ int bcnn_predict_on_batch(bcnn_net *net, bcnn_iterator *iter, float **pred,
                               output_size);
 #endif
     (*pred) = net->tensors[net->nodes[nb - 1].src[0]].data;
-    *error = *(net->tensors[net->nodes[nb - 1].dst[0]].data);
+    if (net->nodes[net->num_nodes - 1].layer->type == YOLO) {
+        *error = 0;
+        int n = 0;
+        for (int i = 0; i < net->num_nodes; ++i) {
+            if (net->nodes[i].layer->cost) {
+                *error += net->nodes[i].layer->cost[0];
+                ++n;
+            }
+        }
+        if (n > 0) {
+            *error /= n;
+        }
+    } else {
+        *error = *(net->tensors[net->nodes[nb - 1].dst[0]].data);
+    }
 
     return BCNN_SUCCESS;
 }
@@ -1246,7 +1306,7 @@ bcnn_status bcnn_load_model_legacy(bcnn_net *net, char *filename) {
 
     return BCNN_SUCCESS;
 }
-
+#if 0
 int bcnn_visualize_network(bcnn_net *net) {
     int i, j, k, sz, w, h, c;
     bcnn_layer *layer = NULL;
@@ -1313,7 +1373,7 @@ int bcnn_visualize_network(bcnn_net *net) {
                 ftmp = fopen(name, "wt");
                 layer = net->nodes[j].layer;
                 for (k = 0; k < sz; ++k) {
-                    fprintf(ftmp, "%f ", layer->weights.data[k]);
+                    fprintf(ftmp, "%f ", net->tensors[net->nodes[j].src[1]].data[k]);
                 }
                 fprintf(ftmp, "\n");
                 fclose(ftmp);
@@ -1336,6 +1396,7 @@ int bcnn_visualize_network(bcnn_net *net) {
 
     return BCNN_SUCCESS;
 }
+#endif
 
 int bcnn_free_layer(bcnn_layer **layer) {
     bcnn_layer *p_layer = (*layer);

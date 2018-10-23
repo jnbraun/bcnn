@@ -41,6 +41,9 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0, num_groups = 1,
         batchnorm = 0;
     int in_w = 0, in_h = 0, in_c = 0;
+    int num_anchors, boxes_per_cell, num_classes, num_coords = 4;
+    int *anchors_mask = NULL;
+    float *anchors = NULL;
     float alpha, beta, k;
     bcnn_activation a = NONE;
     bcnn_filler_type init = XAVIER;
@@ -163,6 +166,17 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                         bcnn_add_dropout_layer(net, rate, src_id);
                     } else if (strcmp(curr_layer, "{concat}") == 0) {
                         bcnn_add_concat_layer(net, src_id, src_id2, dst_id);
+                    } else if (strcmp(curr_layer, "{yolo}") == 0) {
+                        BCNN_CHECK_AND_LOG(
+                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            "Cost layer: invalid input node name. "
+                            "Hint: Are you sure that 'dst' field is correctly "
+                            "setup?");
+                        bcnn_add_yolo_layer(
+                            net, boxes_per_cell, num_classes, num_coords,
+                            num_anchors, anchors_mask, anchors, src_id, dst_id);
+                        bh_free(anchors);
+                        bh_free(anchors_mask);
                     } else {
                         BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
                                    "Unknown Layer %s", curr_layer);
@@ -234,7 +248,37 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     pad = atoi(tok[1]);
                 else if (strcmp(tok[0], "num_groups") == 0)
                     num_groups = atoi(tok[1]);
-                else if (strcmp(tok[0], "alpha") == 0)
+                else if (strcmp(tok[0], "boxes_per_cell") == 0) {
+                    boxes_per_cell = atoi(tok[1]);
+                } else if (strcmp(tok[0], "num_anchors") == 0) {
+                    num_anchors = atoi(tok[1]);
+                } else if (strcmp(tok[0], "num_classes") == 0) {
+                    num_classes = atoi(tok[1]);
+                } else if (strcmp(tok[0], "num_coords") == 0) {
+                    num_coords = atoi(tok[1]);
+                } else if (strcmp(tok[0], "anchors") == 0) {
+                    char **str_anchors = NULL;
+                    int sz = bh_strsplit(tok[1], ',', &str_anchors);
+                    anchors = (float *)calloc(sz, sizeof(float));
+                    for (int i = 0; i < sz; ++i) {
+                        anchors[i] = atof(str_anchors[i]);
+                    }
+                    for (int i = 0; i < sz; ++i) {
+                        bh_free(str_anchors[i]);
+                    }
+                    bh_free(str_anchors);
+                } else if (strcmp(tok[0], "anchors_mask") == 0) {
+                    char **str_anchors_mask = NULL;
+                    int sz = bh_strsplit(tok[1], ',', &str_anchors_mask);
+                    anchors_mask = (int *)calloc(sz, sizeof(float));
+                    for (int i = 0; i < sz; ++i) {
+                        anchors_mask[i] = atoi(str_anchors_mask[i]);
+                    }
+                    for (int i = 0; i < sz; ++i) {
+                        bh_free(str_anchors_mask[i]);
+                    }
+                    bh_free(str_anchors_mask);
+                } else if (strcmp(tok[0], "alpha") == 0)
                     alpha = atoi(tok[1]);
                 else if (strcmp(tok[0], "beta") == 0)
                     beta = atoi(tok[1]);
@@ -342,8 +386,9 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                 } else
                     bcnn_set_param(net, tok[0], tok[1]);
 
-                bh_free(tok[0]);
-                bh_free(tok[1]);
+                for (int i = 0; i < n_tok; ++i) {
+                    bh_free(tok[i]);
+                }
                 bh_free(tok);
                 bh_free(line);
                 break;
@@ -360,6 +405,17 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
             "Cost layer: invalid input node name. "
             "Hint: Are you sure that 'dst' field is correctly setup?");
         bcnn_add_cost_layer(net, loss, cost, 1.0f, src_id, "label", dst_id);
+    } else if (strcmp(curr_layer, "{yolo}") == 0) {
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, src_id, BCNN_INVALID_PARAMETER,
+            "Cost layer: invalid input node name. "
+            "Hint: Are you sure that 'src' field is correctly setup?");
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+            "Cost layer: invalid input node name. "
+            "Hint: Are you sure that 'dst' field is correctly setup?");
+        bcnn_add_yolo_layer(net, boxes_per_cell, num_classes, num_coords,
+                            num_anchors, anchors_mask, anchors, src_id, dst_id);
     } else {
         BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
                    "Error in config file: last layer must be a cost layer");

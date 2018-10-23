@@ -84,14 +84,6 @@ void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w,
     t->has_grad = has_grad;
 }
 
-void bcnn_tensor_set_shape_from_tensor(bcnn_tensor *dst, bcnn_tensor *src) {
-    dst->n = src->n;
-    dst->c = src->c;
-    dst->h = src->h;
-    dst->w = src->w;
-    dst->has_grad = src->has_grad;
-}
-
 int bcnn_tensor_size(bcnn_tensor *t) { return t->w * t->h * t->c * t->n; }
 
 int bcnn_tensor_size3d(bcnn_tensor *t) { return t->w * t->h * t->c; }
@@ -137,30 +129,6 @@ void bcnn_tensor_free(bcnn_tensor *t) {
     if (t->has_grad) {
         bcnn_cuda_free(t->grad_data_gpu);
         t->grad_data_gpu = NULL;
-    }
-#endif
-#endif
-}
-
-/* bcnn_tensor_assign carries out a shallow copy */
-void bcnn_tensor_assign(bcnn_tensor *dst, bcnn_tensor *src) {
-    dst->n = src->n;
-    dst->c = src->c;
-    dst->h = src->h;
-    dst->w = src->w;
-    dst->has_grad = src->has_grad;
-    // Copy of the pointers
-    dst->data = src->data;
-#ifndef BCNN_DEPLOY_ONLY
-    if (dst->has_grad) {
-        dst->grad_data = src->grad_data;
-    }
-#endif
-#ifdef BCNN_USE_CUDA
-    dst->data_gpu = src->data_gpu;
-#ifndef BCNN_DEPLOY_ONLY
-    if (dst->has_grad) {
-        dst->grad_data_gpu = src->grad_data_gpu;
     }
 #endif
 #endif

@@ -655,9 +655,9 @@ typedef struct yolo_detection {
 bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                                 int classes, int coords, int total, int *mask,
                                 float *anchors, char *src_id, char *dst_id);
-yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int w, int h, int netw,
-                                         int neth, float thresh, int relative,
-                                         int *num_dets);
+yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w, int h,
+                                         int netw, int neth, float thresh,
+                                         int relative, int *num_dets);
 
 // Temporary put these functions here
 float overlap(float x1, float w1, float x2, float w2);

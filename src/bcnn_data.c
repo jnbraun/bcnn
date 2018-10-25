@@ -574,6 +574,8 @@ bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter) {
                                net->input_height, net->input_channels,
                                &net->data_aug, iter->input_uchar);
     }
+    memcpy(iter->input_uchar, net->input_buffer,
+           net->input_channels * net->input_width * net->input_height);
     if (net->task != PREDICT) {
         // Fill labels
         memset(iter->label_float, 0, iter->label_width * sizeof(float));
@@ -589,8 +591,6 @@ bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter) {
         int skip = 0;
         for (int i = 0; i < num_boxes; ++i) {
             // We encode box center (x, y) and w, h
-            iter->label_float[(i - skip) * 5 + 4] =
-                (float)atoi(tok[5 * i + offset]);
             iter->label_float[(i - skip) * 5 + 0] =
                 (float)atof(tok[5 * i + 1 + offset]) * scale_x + scale_dx;
             iter->label_float[(i - skip) * 5 + 1] =
@@ -603,6 +603,9 @@ bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter) {
                 iter->label_float[(i - skip) * 5 + 0] =
                     1.0f - iter->label_float[(i - skip) * 5 + 0];
             }
+            // Class
+            iter->label_float[(i - skip) * 5 + 4] =
+                (float)atoi(tok[5 * i + offset]);
         }
     }
     bh_free(pimg);

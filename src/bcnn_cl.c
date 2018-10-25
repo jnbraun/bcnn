@@ -498,6 +498,8 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     int out_h = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].h;
     int out_c = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].c;
     int output_size = out_w * out_h * out_c;
+    unsigned char *dump_img = (unsigned char *)calloc(
+        net->tensors[0].w * net->tensors[0].h * 3, sizeof(unsigned char));
 
     if (bcnn_iterator_initialize(net, &iter_data, param->test_input,
                                  param->path_test_label,
@@ -536,6 +538,169 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
                             out_w, out_h, 1, out_w * sizeof(float));
                     }
                 }
+            } else if (net->prediction_type == DETECTION) {
+                for (int b = 0; b < net->batch_size; ++b) {
+                    int num_dets = 0;
+                    yolo_detection *dets = bcnn_yolo_get_detections(
+                        net, b, net->input_width, net->input_height,
+                        net->input_width, net->input_height, 0.5, 1, &num_dets);
+                    int sz = bcnn_tensor_size3d(&net->tensors[0]);
+                    if (net->tensors[0].c == 3) {
+                        memcpy(dump_img, net->tensors[0].data + b * sz, sz);
+                    } else if (net->tensors[0].c == 1) {
+                        for (int p = 0;
+                             p < bcnn_tensor_size2d(&net->tensors[0]); ++p) {
+                            dump_img[3 * p] =
+                                127 * (net->tensors[0].data[b * sz + p] + 1);
+                            dump_img[3 * p + 1] =
+                                127 * (net->tensors[0].data[b * sz + p] + 1);
+                            dump_img[3 * p + 2] =
+                                127 * (net->tensors[0].data[b * sz + p] + 1);
+                        }
+                    }
+                    for (j = 0;
+                         j < net->nodes[net->num_nodes - 1].layer->classes;
+                         ++j) {
+                        // truth
+                        int sz_label = bcnn_tensor_size3d(&net->tensors[1]);
+                        for (int t = 0; t < BCNN_DETECTION_MAX_BOXES; ++t) {
+                            int x_tl =
+                                (net->tensors[1].data[b * sz_label + t * 5] -
+                                 net->tensors[1]
+                                         .data[b * sz_label + t * 5 + 2] /
+                                     2) *
+                                net->tensors[0].w;
+                            int y_tl =
+                                (net->tensors[1]
+                                     .data[b * sz_label + t * 5 + 1] -
+                                 net->tensors[1]
+                                         .data[b * sz_label + t * 5 + 3] /
+                                     2) *
+                                net->tensors[0].h;
+                            int wbox =
+                                net->tensors[1].data[b * sz_label + t * 5 + 2] *
+                                net->tensors[0].w;
+                            int hbox =
+                                net->tensors[1].data[b * sz_label + t * 5 + 3] *
+                                net->tensors[0].h;
+                            for (int p = x_tl; p < x_tl + wbox; ++p) {
+                                if (p > 0 && p < net->input_width && y_tl > 0 &&
+                                    y_tl < net->input_height) {
+                                    dump_img[3 *
+                                             (y_tl * net->input_width + p)] = 0;
+                                    dump_img[3 * (y_tl * net->input_width + p) +
+                                             1] = 0;
+                                    dump_img[3 * (y_tl * net->input_width + p) +
+                                             2] = 255;
+                                }
+                                if (p > 0 && p < net->input_width &&
+                                    y_tl + hbox > 0 &&
+                                    y_tl + hbox < net->input_height) {
+                                    dump_img[3 *
+                                             ((y_tl + hbox) * net->input_width +
+                                              p)] = 0;
+                                    dump_img[3 * ((y_tl + hbox) *
+                                                      net->input_width +
+                                                  p) +
+                                             1] = 0;
+                                    dump_img[3 * ((y_tl + hbox) *
+                                                      net->input_width +
+                                                  p) +
+                                             2] = 255;
+                                }
+                            }
+                            // Vertical
+                            for (int p = y_tl; p < y_tl + hbox; ++p) {
+                                if (p > 0 && p < net->input_height &&
+                                    x_tl > 0 && x_tl < net->input_width) {
+                                    dump_img[3 *
+                                             (p * net->input_width + x_tl)] = 0;
+                                    dump_img[3 * (p * net->input_width + x_tl) +
+                                             1] = 0;
+                                    dump_img[3 * (p * net->input_width + x_tl) +
+                                             2] = 255;
+                                }
+                                if (x_tl + wbox > 0 &&
+                                    x_tl + wbox < net->input_width && p > 0 &&
+                                    p < net->input_height) {
+                                    dump_img[3 * (p * net->input_width +
+                                                  (x_tl + wbox))] = 0;
+                                    dump_img[3 * (p * net->input_width +
+                                                  (x_tl + wbox)) +
+                                             1] = 0;
+                                    dump_img[3 * (p * net->input_width +
+                                                  (x_tl + wbox)) +
+                                             2] = 255;
+                                }
+                            }
+                        }
+                    }
+                    for (int d = 0; d < num_dets; ++d) {
+                        if (dets[d].prob[0] > 0) {
+                            int x_tl = (dets[d].bbox.x - dets[d].bbox.w / 2) *
+                                       net->tensors[0].w;
+                            int y_tl = (dets[d].bbox.y - dets[d].bbox.h / 2) *
+                                       net->tensors[0].h;
+                            int wbox = dets[d].bbox.w * net->tensors[0].w;
+                            int hbox = dets[d].bbox.h * net->tensors[0].h;
+                            for (int p = x_tl; p < x_tl + wbox; ++p) {
+                                if (p > 0 && p < net->input_width && y_tl > 0 &&
+                                    y_tl < net->input_height) {
+                                    dump_img[3 * (y_tl * net->input_width +
+                                                  p)] = 255;
+                                    dump_img[3 * (y_tl * net->input_width + p) +
+                                             1] = 0;
+                                    dump_img[3 * (y_tl * net->input_width + p) +
+                                             2] = 0;
+                                }
+                                if (p > 0 && p < net->input_width &&
+                                    y_tl + hbox > 0 &&
+                                    y_tl + hbox < net->input_height) {
+                                    dump_img[3 *
+                                             ((y_tl + hbox) * net->input_width +
+                                              p)] = 255;
+                                    dump_img[3 * ((y_tl + hbox) *
+                                                      net->input_width +
+                                                  p) +
+                                             1] = 0;
+                                    dump_img[3 * ((y_tl + hbox) *
+                                                      net->input_width +
+                                                  p) +
+                                             2] = 0;
+                                }
+                            }
+                            // Vertical
+                            for (int p = y_tl; p < y_tl + hbox; ++p) {
+                                if (p > 0 && p < net->input_height &&
+                                    x_tl > 0 && x_tl < net->input_width) {
+                                    dump_img[3 * (p * net->input_width +
+                                                  x_tl)] = 255;
+                                    dump_img[3 * (p * net->input_width + x_tl) +
+                                             1] = 0;
+                                    dump_img[3 * (p * net->input_width + x_tl) +
+                                             2] = 0;
+                                }
+                                if (x_tl + wbox > 0 &&
+                                    x_tl + wbox < net->input_width && p > 0 &&
+                                    p < net->input_height) {
+                                    dump_img[3 * (p * net->input_width +
+                                                  (x_tl + wbox))] = 255;
+                                    dump_img[3 * (p * net->input_width +
+                                                  (x_tl + wbox)) +
+                                             1] = 0;
+                                    dump_img[3 * (p * net->input_width +
+                                                  (x_tl + wbox)) +
+                                             2] = 0;
+                                }
+                            }
+                        }
+                    }
+                    sprintf(out_pred_name, "det_%d.png", b);
+                    bip_write_image(out_pred_name, dump_img, net->tensors[0].w,
+                                    net->tensors[0].h, 3,
+                                    net->tensors[0].w * 3);
+                    bh_free(dets);
+                }
             } else {
                 for (j = 0; j < net->batch_size; ++j) {
                     for (k = 0; k < output_size; ++k)
@@ -545,6 +710,7 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
             }
         }
     }
+
     // Process last instances
     n = param->nb_pred % net->batch_size;
     if (n > 0) {
@@ -569,6 +735,7 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
         }
     }
     *error = err / param->nb_pred;
+    bh_free(dump_img);
 
     if (f != NULL) fclose(f);
     bcnn_iterator_terminate(&iter_data);
@@ -615,10 +782,10 @@ int run(char *config_file) {
         if (param.input_model != NULL)
             bcnn_load_model(net, param.input_model);
         else {
-            BCNN_ERROR(
-                net->log_ctx, BCNN_INVALID_PARAMETER,
-                "No model in input. Inform which model to use in config file "
-                "with field 'input_model'");
+            BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
+                       "No model in input. Inform which model to use in "
+                       "config file "
+                       "with field 'input_model'");
         }
         BCNN_INFO(net->log_ctx, "Start prediction...");
         BCNN_CHECK_STATUS(bcnncl_predict(net, &param, &error_test, 1));

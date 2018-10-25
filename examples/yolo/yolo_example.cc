@@ -385,7 +385,7 @@ yolo_detection *run_inference(int w_frame, int h_frame, bcnn_net *net,
     // Get yolo_detection boxes
     int ndets = 0;
     yolo_detection *dets =
-        bcnn_yolo_get_detections(net, w_frame, h_frame, net->input_width,
+        bcnn_yolo_get_detections(net, 0, w_frame, h_frame, net->input_width,
                                  net->input_height, 0.5, 1, &ndets);
     // Non max suppression
     int num_classes = net->nodes[net->num_nodes - 1].layer->classes;

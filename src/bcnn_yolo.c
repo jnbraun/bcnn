@@ -26,7 +26,12 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     }
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
                        "Yolo layer: invalid input node name %s", src_id);
-
+    BCNN_CHECK_AND_LOG(net->log_ctx,
+                       num_boxes_per_cell * (classes + coords + 1) ==
+                           net->tensors[node.src[0]].c,
+                       BCNN_INVALID_PARAMETER,
+                       "Yolo layer: inconsistent number of channels %d",
+                       num_boxes_per_cell * (classes + coords + 1));
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = YOLO;
     node.layer->num = num_boxes_per_cell;  // num bboxes per cell
@@ -270,14 +275,17 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
                                     n * src_tensor->w * src_tensor->h +
                                         j * src_tensor->w + i,
                                     layer->coords);
-                    avg_anyobj += dst_tensor->data[obj_index];
-                    /*dst_tensor->grad_data[obj_index] =
-                        (0 - dst_tensor->data[obj_index]);*/
                     dst_tensor->grad_data[obj_index] =
                         (dst_tensor->data[obj_index] - 0);
-                    if (best_iou > 0.7) {  // thresh set to default 0.7
+                    /*dst_tensor->grad_data[obj_index] =
+                        0 - dst_tensor->data[obj_index];*/
+                    if (best_iou > 0.5) {  // thresh set to default 0.7
                         dst_tensor->grad_data[obj_index] = 0;
                     }
+                    avg_anyobj += dst_tensor->data[obj_index];
+                    /*fprintf(stderr, "%d %d %f %f\n", j, i,
+                            dst_tensor->data[obj_index],
+                            dst_tensor->data[box_index]);*/
                 }
             }
         }
@@ -304,6 +312,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
                     best_n = n;
                 }
             }
+            // fprintf(stderr, "best_iou %f best_n %d\n", best_iou, best_n);
             int mask_n = -1;
             for (int k = 0; k < layer->num; ++k) {
                 if (layer->mask[k] == best_n) {
@@ -312,6 +321,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
                 }
             }
             if (mask_n >= 0) {
+                // Box coordinates
                 int box_index =
                     entry_index(layer, dst_tensor, b,
                                 mask_n * src_tensor->w * src_tensor->h +
@@ -322,6 +332,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
                     box_index, i, j, src_tensor->w, src_tensor->h,
                     net->input_width, net->input_height, dst_tensor->grad_data,
                     (2 - truth.w * truth.h), src_tensor->w * src_tensor->h);
+                // Objectness
                 int obj_index =
                     entry_index(layer, dst_tensor, b,
                                 mask_n * src_tensor->w * src_tensor->h +
@@ -349,20 +360,6 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
                                  class_index, class, layer->classes,
                                  src_tensor->w * src_tensor->h, &avg_cat);
                 int stride = src_tensor->w * src_tensor->h;
-                /*fprintf(stderr, "coords %f %f %f %f conf %f class %f\n",
-                        dst_tensor->data[box_index + 0 * stride],
-                        dst_tensor->data[box_index + 1 * stride],
-                        dst_tensor->data[box_index + 2 * stride],
-                        dst_tensor->data[box_index + 3 * stride],
-                        dst_tensor->data[box_index + 4 * stride],
-                        dst_tensor->data[box_index + 5 * stride]);
-                fprintf(stderr, "grad coords %f %f %f %f conf %f class %f\n",
-                        dst_tensor->grad_data[box_index + 0 * stride],
-                        dst_tensor->grad_data[box_index + 1 * stride],
-                        dst_tensor->grad_data[box_index + 2 * stride],
-                        dst_tensor->grad_data[box_index + 3 * stride],
-                        dst_tensor->grad_data[box_index + 4 * stride],
-                        dst_tensor->grad_data[box_index + 5 * stride]);*/
                 ++count;
                 ++class_count;
                 if (iou > 0.5f) {
@@ -468,9 +465,9 @@ static void correct_region_boxes(yolo_detection *dets, int n, int w, int h,
 }
 
 // w = 640 h = 480 netw = 416 neth = 416
-yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int w, int h, int netw,
-                                         int neth, float thresh, int relative,
-                                         int *num_dets) {
+yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w, int h,
+                                         int netw, int neth, float thresh,
+                                         int relative, int *num_dets) {
     int i, j, n, z;
     int count = 0;
     // First, compute the total number of detections
@@ -480,9 +477,12 @@ yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int w, int h, int netw,
             bcnn_tensor *dst = &net->tensors[net->nodes[k].dst[0]];
             for (i = 0; i < dst->w * dst->h; ++i) {
                 for (n = 0; n < layer->num; ++n) {
-                    int obj_index = entry_index(
-                        layer, dst, 0, n * dst->w * dst->h + i, layer->coords);
+                    int obj_index =
+                        entry_index(layer, dst, batch, n * dst->w * dst->h + i,
+                                    layer->coords);
                     if (dst->data[obj_index] > thresh) {
+                        fprintf(stderr, "loc %d box %d obj_index %d obj %f\n",
+                                i, n, obj_index, dst->data[obj_index]);
                         ++count;
                     }
                 }
@@ -512,14 +512,15 @@ yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int w, int h, int netw,
                 int row = i / dst->w;
                 int col = i % dst->w;
                 for (n = 0; n < layer->num; ++n) {
-                    int obj_index = entry_index(
-                        layer, dst, 0, n * dst->w * dst->h + i, layer->coords);
+                    int obj_index =
+                        entry_index(layer, dst, batch, n * dst->w * dst->h + i,
+                                    layer->coords);
                     float objectness = dst->data[obj_index];
                     if (objectness <= thresh) {
                         continue;
                     }
-                    int box_index =
-                        entry_index(layer, dst, 0, n * dst->w * dst->h + i, 0);
+                    int box_index = entry_index(layer, dst, batch,
+                                                n * dst->w * dst->h + i, 0);
                     dets[count].bbox = get_yolo_box(
                         dst->data, layer->biases.data, layer->mask[n],
                         box_index, col, row, dst->w, dst->h, net->input_width,
@@ -527,9 +528,9 @@ yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int w, int h, int netw,
                     dets[count].objectness = objectness;
                     dets[count].classes = layer->classes;
                     for (j = 0; j < layer->classes; ++j) {
-                        int class_index =
-                            entry_index(layer, dst, 0, n * dst->w * dst->h + i,
-                                        layer->coords + 1 + j);
+                        int class_index = entry_index(layer, dst, batch,
+                                                      n * dst->w * dst->h + i,
+                                                      layer->coords + 1 + j);
                         float prob = objectness * dst->data[class_index];
                         dets[count].prob[j] = (prob > thresh) ? prob : 0;
                     }

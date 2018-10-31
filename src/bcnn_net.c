@@ -677,9 +677,10 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
             // bcnn_list_iter(net, iter);
             bcnn_iterator_next(net, iter);
             // Online data augmentation
-            if (net->task == TRAIN && net->state)
+            if (net->task == TRAIN && net->state) {
                 bcnn_data_augmentation(iter->input_uchar, w_in, h_in, c_in,
                                        param, img_tmp);
+            }
             bcnn_convert_img_to_float(iter->input_uchar, w_in, h_in, c_in,
                                       param->no_input_norm, param->swap_to_bgr,
                                       param->mean_r, param->mean_g,
@@ -771,9 +772,12 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
                 }
                 bcnn_data_augmentation(iter->input_uchar, w_in, h_in, c_in,
                                        param, img_tmp);
+#ifndef USE_HPONLY
                 bcnn_data_augmentation(iter->input_uchar2, w_in, h_in, c_in,
                                        param, img_tmp);
+#endif
             }
+#ifndef USE_HPONLY
             if (param->apply_fliph) {
                 bcnn_convert_img_to_float(iter->input_uchar, w_in, h_in, c_in,
                                           param->no_input_norm,
@@ -793,6 +797,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
                                           param->swap_to_bgr, param->mean_r,
                                           param->mean_g, param->mean_b, x2);
             }
+#endif
 #if defined(USE_GRID)
             if (param->apply_fliph) {
                 bip_fliph_image(iter->input_uchar3, w_in, h_in, c_in,
@@ -899,9 +904,28 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
             x3 += bcnn_tensor_size3d(&net->tensors[3]);
             x4 += bcnn_tensor_size3d(&net->tensors[4]);
             x5 += bcnn_tensor_size3d(&net->tensors[5]);
+#elif defined(USE_HPONLY)
+            bcnn_convert_img_to_float(iter->input_uchar, w_in, h_in, c_in,
+                                      param->no_input_norm, param->swap_to_bgr,
+                                      param->mean_r, param->mean_g,
+                                      param->mean_b, x);
+            if (param->apply_fliph) {
+                x2[0] = -iter->input_float[0];
+            } else {
+                x2[0] = iter->input_float[0];
+            }
+            x2[1] = iter->input_float[1];
+            x2[2] = iter->input_float[2];
+            x += sz;
+            x2 += bcnn_tensor_size3d(&net->tensors[2]);
 #endif
             if (net->task != PREDICT) {
                 if (net->prediction_type != HEATMAP_REGRESSION) {
+#if defined(USE_HPONLY)
+                    for (j = 0; j < iter->label_width; ++j) {
+                        y[j] = iter->label_float[j];
+                    }
+#else
                     if (param->apply_fliph) {
                         y[0] = -iter->label_float[0];
                         for (j = 1; j < iter->label_width; ++j) {
@@ -912,6 +936,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
                             y[j] = iter->label_float[j];
                         }
                     }
+#endif
                 } else {
                     int lw = net->tensors[1].w;
                     int lh = net->tensors[1].h;

@@ -119,7 +119,8 @@ typedef unsigned __int64 uint64_t;
     } while (0)
 
 //#define USE_GRID
-#define USE_MASKHP
+//#define USE_MASKHP
+#define USE_HPONLY
 
 /**
  * \brief Enum of error codes.
@@ -639,9 +640,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
 /* TODO: move to private header */
 bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter);
 
-typedef struct {
-    float x, y, w, h;
-} yolo_box;
+typedef struct { float x, y, w, h; } yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

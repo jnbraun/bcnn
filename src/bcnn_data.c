@@ -19,10 +19,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include "bcnn/bcnn.h"
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
-#include "bcnn/bcnn.h"
 
 /* include bip image processing lib */
 #include <bip/bip.h>
@@ -250,11 +250,10 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            n_img, n_labels);
-        BCNN_CHECK_AND_LOG(net->log_ctx,
-                           (net->input_height == iter->input_height &&
-                            net->input_width == iter->input_width),
-                           BCNN_INVALID_DATA,
-                           "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, (net->input_height == iter->input_height &&
+                           net->input_width == iter->input_width),
+            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
         iter->n_samples = n_img;
     }
 
@@ -910,6 +909,11 @@ static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
                               net->input_channels, iter->input_uchar,
                               net->state, &net->data_aug.shift_x,
                               &net->data_aug.shift_y);
+#if defined(USE_HPONLY)
+    iter->input_float[0] = atof(tok[1]);
+    iter->input_float[1] = atof(tok[2]);
+    iter->input_float[2] = atof(tok[3]);
+#else
     bcnn_load_image_from_path(net, tok[1], net->tensors[2].w, net->tensors[2].h,
                               net->tensors[2].c, iter->input_uchar2, net->state,
                               &net->data_aug.shift_x, &net->data_aug.shift_y);
@@ -932,6 +936,7 @@ static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
                               net->tensors[4].c, iter->input_uchar4, net->state,
                               &net->data_aug.shift_x, &net->data_aug.shift_y);
 #endif
+#endif  // USE_HPONLY
 
     // Label
     if (net->prediction_type != HEATMAP_REGRESSION) {
@@ -948,6 +953,12 @@ static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
             iter->label_float[i] = (float)atof(tok[i + 7]);
         }
 #elif defined(USE_MASKHP)
+        BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == iter->label_width + 4),
+                           BCNN_INVALID_DATA, "Unexpected label format");
+        for (i = 0; i < iter->label_width; ++i) {
+            iter->label_float[i] = (float)atof(tok[i + 4]);
+        }
+#elif defined(USE_HPONLY)
         BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == iter->label_width + 4),
                            BCNN_INVALID_DATA, "Unexpected label format");
         for (i = 0; i < iter->label_width; ++i) {

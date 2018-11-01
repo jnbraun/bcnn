@@ -27,6 +27,12 @@ add_definitions(-DBIP_USE_STB_IMAGE)
 include_directories (${PROJECT_SOURCE_DIR}/thirdparty)
 endif()
 	
-file(GLOB SOURCES src/*.c)
+file(GLOB SOURCES src/bip.c)
+
+add_executable(prepare_label examples/prepare_label.c)
+target_link_libraries(prepare_label bip -lm)
+add_executable(simul_reflections examples/simul_reflections.c)
+target_link_libraries(simul_reflections bip -lm)
+
 
 add_library(bip STATIC ${SOURCES})

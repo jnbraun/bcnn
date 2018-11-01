@@ -3,9 +3,9 @@ project (bcnn)
 
 # User configuration settings
 option(USE_AVX "Build with AVX instructions" ON)
-option(USE_CUDA "Build with CUDA libraries" OFF)
-option(USE_CUDNN "Build with CuDNN library" OFF)
-option(USE_BLAS "Build with BLAS library" ON)
+option(USE_CUDA "Build with CUDA libraries" ON)
+option(USE_CUDNN "Build with CuDNN library" ON)
+option(USE_BLAS "Build with BLAS library" OFF)
 option(USE_NEON "Build with Neon instructions" OFF)
 # Building examples
 option(BUILD_EXAMPLES "Build examples" ON)
@@ -77,8 +77,8 @@ if (USE_CUDA)
         #"-gencode arch=compute_30,code=sm_30;"
         #"-gencode arch=compute_35,code=sm_35;"
         "-gencode arch=compute_50,code=sm_50;"
-        #"-gencode arch=compute_50,code=compute_50;"
-        #"-gencode arch=compute_52,code=sm_52;"
+        "-gencode arch=compute_50,code=compute_50;"
+        "-gencode arch=compute_52,code=sm_52;"
         #"-gencode arch=compute_60,code=sm_60;"
         #"-gencode arch=compute_61,code=sm_61;"
     )

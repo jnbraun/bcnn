@@ -913,6 +913,10 @@ static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
     iter->input_float[0] = atof(tok[1]);
     iter->input_float[1] = atof(tok[2]);
     iter->input_float[2] = atof(tok[3]);
+#elif defined(USE_2EYES)
+    bcnn_load_image_from_path(net, tok[1], net->tensors[2].w, net->tensors[2].h,
+                              net->tensors[2].c, iter->input_uchar2, net->state,
+                              &net->data_aug.shift_x, &net->data_aug.shift_y);
 #else
     bcnn_load_image_from_path(net, tok[1], net->tensors[2].w, net->tensors[2].h,
                               net->tensors[2].c, iter->input_uchar2, net->state,
@@ -963,6 +967,12 @@ static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
                            BCNN_INVALID_DATA, "Unexpected label format");
         for (i = 0; i < iter->label_width; ++i) {
             iter->label_float[i] = (float)atof(tok[i + 4]);
+        }
+#elif defined(USE_2EYES)
+        BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == iter->label_width + 2),
+                           BCNN_INVALID_DATA, "Unexpected label format");
+        for (i = 0; i < iter->label_width; ++i) {
+            iter->label_float[i] = (float)atof(tok[i + 2]);
         }
 #endif
     } else {

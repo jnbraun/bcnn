@@ -918,10 +918,13 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
             x2[2] = iter->input_float[2];
             x += sz;
             x2 += bcnn_tensor_size3d(&net->tensors[2]);
+#elif defined(USE_2EYES)
+            x += sz;
+            x2 += bcnn_tensor_size3d(&net->tensors[2]);
 #endif
             if (net->task != PREDICT) {
                 if (net->prediction_type != HEATMAP_REGRESSION) {
-#if defined(USE_HPONLY)
+#if defined(USE_HPONLY) || defined(USE_2EYES)
                     for (j = 0; j < iter->label_width; ++j) {
                         y[j] = iter->label_float[j];
                     }
@@ -963,6 +966,11 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
     bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
                               input_size);
     if (iter->type == ITER_MULTI) {
+#if defined(USE_HPONLY) || defined(USE_2EYES)
+        bcnn_cuda_memcpy_host2dev(net->tensors[2].data_gpu,
+                                  net->tensors[2].data,
+                                  bcnn_tensor_size(&net->tensors[2]));
+#else
         bcnn_cuda_memcpy_host2dev(net->tensors[2].data_gpu,
                                   net->tensors[2].data,
                                   bcnn_tensor_size(&net->tensors[2]));
@@ -972,6 +980,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
         bcnn_cuda_memcpy_host2dev(net->tensors[4].data_gpu,
                                   net->tensors[4].data,
                                   bcnn_tensor_size(&net->tensors[4]));
+#endif
     }
     if (net->task != PREDICT) {
         bcnn_cuda_memcpy_host2dev(net->tensors[1].data_gpu,

@@ -120,7 +120,8 @@ typedef unsigned __int64 uint64_t;
 
 //#define USE_GRID
 //#define USE_MASKHP
-#define USE_HPONLY
+//#define USE_HPONLY
+#define USE_2EYES
 
 /**
  * \brief Enum of error codes.

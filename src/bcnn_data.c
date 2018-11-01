@@ -19,10 +19,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include "bcnn/bcnn.h"
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
+#include "bcnn/bcnn.h"
 
 /* include bip image processing lib */
 #include <bip/bip.h>
@@ -250,10 +250,11 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            n_img, n_labels);
-        BCNN_CHECK_AND_LOG(
-            net->log_ctx, (net->input_height == iter->input_height &&
-                           net->input_width == iter->input_width),
-            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(net->log_ctx,
+                           (net->input_height == iter->input_height &&
+                            net->input_width == iter->input_width),
+                           BCNN_INVALID_DATA,
+                           "MNIST data: incoherent image width and height");
         iter->n_samples = n_img;
     }
 
@@ -680,6 +681,13 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter) {
 }
 
 /* Data augmentation */
+static int rand_between(int min, int max) {
+    if (min > max) {
+        return 0.f;
+    }
+    return (int)(((float)rand() / RAND_MAX * (max - min)) + min + 0.5);
+}
+
 int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
                            bcnn_data_augment *param, unsigned char *buffer) {
     int sz = width * height * depth;
@@ -786,6 +794,13 @@ int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
         bip_image_perlin_distortion(img, width * depth, width, height, depth,
                                     buffer, width * depth, param->distortion,
                                     kx, ky);
+        memcpy(img, buffer, width * height * depth * sizeof(unsigned char));
+    }
+    if (param->max_random_spots > 0) {
+        int num_spots = rand_between(0, param->max_random_spots);
+        bip_add_random_spotlights(img, width * depth, width, height, depth,
+                                  buffer, width * depth, num_spots, 0.3f, 3.0f,
+                                  0.3f, 3.0f);
         memcpy(img, buffer, width * height * depth * sizeof(unsigned char));
     }
 

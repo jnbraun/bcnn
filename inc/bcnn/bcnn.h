@@ -225,8 +225,10 @@ typedef struct {
     float mean_g;
     float mean_b;
     int swap_to_bgr;
-    int no_input_norm; /**< If set to 1, Input data range is not normalized
-                          between [-1;1] */
+    int no_input_norm;    /**< If set to 1, Input data range is not normalized
+                             between [-1;1] */
+    int max_random_spots; /**< Add a random number between [0;max_random_spots]
+                             of saturated blobs. */
 } bcnn_data_augment;
 
 /**
@@ -641,7 +643,9 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
 /* TODO: move to private header */
 bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter);
 
-typedef struct { float x, y, w, h; } yolo_box;
+typedef struct {
+    float x, y, w, h;
+} yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

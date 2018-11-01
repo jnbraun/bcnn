@@ -239,6 +239,56 @@ bip_status bip_image_perlin_distortion(uint8_t *src, size_t src_stride,
     return BIP_SUCCESS;
 }
 
+static int rand_between(int min, int max) {
+    if (min > max) {
+        return 0.f;
+    }
+    return (int)(((float)rand() / RAND_MAX * (max - min)) + min + 0.5);
+}
+
+static float frand_between(float min, float max) {
+    if (min > max) {
+        return 0.f;
+    }
+    return ((float)rand() / RAND_MAX * (max - min)) + min + 0.5;
+}
+
+bip_status bip_add_random_spotlights(
+    uint8_t *src, size_t src_stride, size_t width, size_t height, size_t depth,
+    uint8_t *dst, size_t dst_stride, uint32_t num_spots, float min_spot_width,
+    float max_spot_width, float min_spot_height, float max_spot_height) {
+    BIP_CHECK_SIZE(width);
+    BIP_CHECK_SIZE(height);
+    BIP_CHECK_PTR(src);
+    BIP_CHECK_PTR(dst);
+    if (dst != src) {
+        memcpy(dst, src, width * height * depth);
+    }
+    uint8_t *dst0 = dst;
+    for (uint32_t i = 0; i < num_spots; ++i) {
+        int mu_x = rand_between(0, width - 1);
+        int mu_y = rand_between(0, height - 1);
+        float sigma_x = frand_between(min_spot_width, max_spot_width);
+        float sigma_y = frand_between(min_spot_height, max_spot_height);
+        float inv_sigma2_x = 1 / (sigma_x * sigma_x);
+        float inv_sigma2_y = 1 / (sigma_y * sigma_y);
+        dst = dst0;
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                float val =
+                    exp(-0.5f * (inv_sigma2_x * (x - (mu_x)) * (x - (mu_x)) +
+                                 inv_sigma2_y * (y - (mu_y)) * (y - (mu_y))));
+                for (int c = 0; c < depth; ++c) {
+                    dst[depth * x + c] = (unsigned char)bh_clamp(
+                        255.0f * val + dst[depth * x + c], 0, 255);
+                }
+            }
+            dst += dst_stride;
+        }
+    }
+    return BIP_SUCCESS;
+}
+
 /* Basic image manipulations */
 bip_status bip_crop_image(uint8_t *src, size_t src_width, size_t src_height,
                           size_t src_stride, int32_t x_ul, int32_t y_ul,

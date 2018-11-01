@@ -1,24 +1,24 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * Copyright (c) 2016 Jean-Noel Braun.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #ifndef BIP_H
 #define BIP_H
@@ -194,6 +194,27 @@ bip_status bip_image_perlin_distortion(uint8_t *src, size_t src_stride,
                                        size_t depth, uint8_t *dst,
                                        size_t dst_stride, float distortion,
                                        float kx, float ky);
+
+/**
+ * \brief   Add spotlight-like saturated blobs on an image.
+ *
+ * \param   src             Pointer to input image.
+ * \param   src_stride      Input image row size in bytes.
+ * \param   width           Input image width.
+ * \param   height          Input image height.
+ * \param   depth           Input image depth.
+ * \param   dst             Pointer to output image (may be the input image).
+ * \param   dst_stride      Output image row size in bytes.
+ * \param   num_spots       Number of spotlight blobs.
+ * \param   min_spot_width  Minimal spot size along x-coordinate (in pixels).
+ * \param   max_spot_width  Maximal spot size along x-coordinate (in pixels).
+ * \param   min_spot_height Minimal spot size along y-coordinate (in pixels).
+ * \param   max_spot_height Maximal spot size along y-coordinate (in pixels).
+ */
+bip_status bip_add_random_spotlights(
+    uint8_t *src, size_t src_stride, size_t width, size_t height, size_t depth,
+    uint8_t *dst, size_t dst_stride, uint32_t num_spots, float min_spot_width,
+    float max_spot_width, float min_spot_height, float max_spot_height);
 
 /**
  * \brief   Mirror the borders of an image given an canvas.
@@ -486,29 +507,29 @@ bip_status bip_pyramid_up(uint8_t *src, size_t src_width, size_t src_height,
                           size_t dst_height, size_t dst_stride);
 
 /**
-* \brief    Invert image (negative).
-*
-* \param    src             Pointer to input image.
-* \param    width           Image width.
-* \param    height          Image height.
-* \param    depth           Image depth.
-* \param    src_stride      Input image row size in bytes.
-* \param    dst             Pointer to output image.
-*/
+ * \brief    Invert image (negative).
+ *
+ * \param    src             Pointer to input image.
+ * \param    width           Image width.
+ * \param    height          Image height.
+ * \param    depth           Image depth.
+ * \param    src_stride      Input image row size in bytes.
+ * \param    dst             Pointer to output image.
+ */
 bip_status bip_invert_image(uint8_t *src, size_t width, size_t height,
                             size_t depth, size_t src_stride, uint8_t *dst,
                             size_t dst_stride);
 
 /**
-* \brief    Horizontal flip image.
-*
-* \param    src             Pointer to input image.
-* \param    width           Image width.
-* \param    height          Image height.
-* \param    depth           Image depth.
-* \param    src_stride      Input image row size in bytes.
-* \param    dst             Pointer to output image.
-*/
+ * \brief    Horizontal flip image.
+ *
+ * \param    src             Pointer to input image.
+ * \param    width           Image width.
+ * \param    height          Image height.
+ * \param    depth           Image depth.
+ * \param    src_stride      Input image row size in bytes.
+ * \param    dst             Pointer to output image.
+ */
 bip_status bip_fliph_image(uint8_t *src, size_t width, size_t height,
                            size_t depth, size_t src_stride, uint8_t *dst,
                            size_t dst_stride);
@@ -564,14 +585,14 @@ bip_status bip_lbp_histogram_features(uint8_t *src, size_t src_width,
 
 #ifdef BIP_USE_STB_IMAGE
 /**
-* \brief    Load image from file.
-*
-* \param    filename            Image file path.
-* \param    src                 Pointer to loaded image.
-* \param    src_width           Image width.
-* \param    src_height          Image height.
-* \param    src_depth           Image depth.
-*/
+ * \brief    Load image from file.
+ *
+ * \param    filename            Image file path.
+ * \param    src                 Pointer to loaded image.
+ * \param    src_width           Image width.
+ * \param    src_height          Image height.
+ * \param    src_depth           Image depth.
+ */
 bip_status bip_load_image(char *filename, uint8_t **src, int32_t *src_width,
                           int32_t *src_height, int32_t *src_depth);
 
@@ -590,45 +611,45 @@ bip_status bip_load_image_from_memory(unsigned char *buffer, int buffer_size,
                                       int32_t *src_height, int32_t *src_depth);
 
 /**
-* \brief    Write image on disk.
-*
-* \param    filename            Image file path.
-* \param    src                 Pointer to image.
-* \param    src_width           Image width.
-* \param    src_height          Image height.
-* \param    src_depth           Image depth.
-* \param    src_stride          Image row size in bytes.
-*/
+ * \brief    Write image on disk.
+ *
+ * \param    filename            Image file path.
+ * \param    src                 Pointer to image.
+ * \param    src_width           Image width.
+ * \param    src_height          Image height.
+ * \param    src_depth           Image depth.
+ * \param    src_stride          Image row size in bytes.
+ */
 bip_status bip_write_image(char *filename, uint8_t *src, int32_t src_width,
                            int32_t src_height, int32_t src_depth,
                            int32_t src_stride);
 
 /**
-* \brief    Write image to memory buffer.
-*
-* \param    buffer              Pointer to output buffer.
-* \param    buffer_size         Size of output buffer.
-* \param    src                 Pointer to image.
-* \param    src_width           Image width.
-* \param    src_height          Image height.
-* \param    src_depth           Image depth.
-* \param    src_stride          Image row size in bytes.
-*/
+ * \brief    Write image to memory buffer.
+ *
+ * \param    buffer              Pointer to output buffer.
+ * \param    buffer_size         Size of output buffer.
+ * \param    src                 Pointer to image.
+ * \param    src_width           Image width.
+ * \param    src_height          Image height.
+ * \param    src_depth           Image depth.
+ * \param    src_stride          Image row size in bytes.
+ */
 bip_status bip_write_image_to_memory(unsigned char **buffer,
                                      int32_t *buffer_size, uint8_t *src,
                                      int32_t src_width, int32_t src_height,
                                      int32_t src_depth, int32_t src_stride);
 
 /**
-* \brief Write image (as a float array) on disk.
-*
-* \param    filename            Image file path.
-* \param    src                 Pointer to image.
-* \param    src_width           Image width.
-* \param    src_height          Image height.
-* \param    src_depth           Image depth.
-* \param    src_stride          Image row size in bytes.
-*/
+ * \brief Write image (as a float array) on disk.
+ *
+ * \param    filename            Image file path.
+ * \param    src                 Pointer to image.
+ * \param    src_width           Image width.
+ * \param    src_height          Image height.
+ * \param    src_depth           Image depth.
+ * \param    src_stride          Image row size in bytes.
+ */
 bip_status bip_write_float_image(char *filename, float *src, int32_t src_width,
                                  int32_t src_height, int32_t src_depth,
                                  int32_t src_stride);
@@ -638,15 +659,15 @@ bip_status bip_write_float_image_norm(char *filename, float *src,
                                       int32_t src_depth, int32_t src_stride);
 
 /**
-* \brief    Write image (as a double array) on disk.
-*
-* \param    filename            Image file path.
-* \param    src                 Pointer to image.
-* \param    src_width           Image width.
-* \param    src_height          Image height.
-* \param    src_depth           Image depth.
-* \param    src_stride          Image row size in bytes.
-*/
+ * \brief    Write image (as a double array) on disk.
+ *
+ * \param    filename            Image file path.
+ * \param    src                 Pointer to image.
+ * \param    src_width           Image width.
+ * \param    src_height          Image height.
+ * \param    src_depth           Image depth.
+ * \param    src_stride          Image row size in bytes.
+ */
 bip_status bip_write_double_image(char *filename, double *src,
                                   int32_t src_width, int32_t src_height,
                                   int32_t src_depth, int32_t src_stride);

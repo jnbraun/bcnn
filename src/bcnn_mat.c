@@ -901,11 +901,6 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
 #define NR 8
 #endif  // BCNN_USE_NEON
 
-float A_[MC * KC] __attribute__((aligned(32)));
-float B_[KC * NC] __attribute__((aligned(32)));
-float C_[MR * NR] __attribute__((aligned(32)));
-float AB_[MR * NR] __attribute__((aligned(32)));
-
 static int equal(float a, float b) {
     const float EPSILON = 1e-5;
     if (fabsf(a - b) < EPSILON) {
@@ -1055,6 +1050,7 @@ static void sgemm_nn_pack_B(int kc, int nc, const float *B, int inc_row_B,
 
 static void sgemm_ukernel(int kc, float alpha, const float *A, const float *B,
                           float beta, float *C, int inc_row_C, int inc_col_C) {
+    float AB[MR * NR] __attribute__((aligned(32)));
 #if (defined(BCNN_USE_AVX))
     __m256 abv0 = _mm256_setzero_ps();
     __m256 abv1 = _mm256_setzero_ps();
@@ -1089,14 +1085,14 @@ static void sgemm_ukernel(int kc, float alpha, const float *A, const float *B,
         A += MR;
         B += NR;
     }
-    _mm256_store_ps(AB_ + 0, abv0);
-    _mm256_store_ps(AB_ + 8, abv1);
-    _mm256_store_ps(AB_ + 16, abv2);
-    _mm256_store_ps(AB_ + 24, abv3);
-    _mm256_store_ps(AB_ + 32, abv4);
-    _mm256_store_ps(AB_ + 40, abv5);
-    _mm256_store_ps(AB_ + 48, abv6);
-    _mm256_store_ps(AB_ + 56, abv7);
+    _mm256_store_ps(AB + 0, abv0);
+    _mm256_store_ps(AB + 8, abv1);
+    _mm256_store_ps(AB + 16, abv2);
+    _mm256_store_ps(AB + 24, abv3);
+    _mm256_store_ps(AB + 32, abv4);
+    _mm256_store_ps(AB + 40, abv5);
+    _mm256_store_ps(AB + 48, abv6);
+    _mm256_store_ps(AB + 56, abv7);
 #elif (defined(BCNN_USE_NEON))
 #if (defined(__aarch64__))
     float32x4_t av0, av1, bv0, bv1;
@@ -1142,22 +1138,22 @@ static void sgemm_ukernel(int kc, float alpha, const float *A, const float *B,
         B += NR;
         A += MR;
     }
-    vst1q_f32(AB_, abv0);
-    vst1q_f32(AB_ + 4, abv1);
-    vst1q_f32(AB_ + 8, abv2);
-    vst1q_f32(AB_ + 12, abv3);
-    vst1q_f32(AB_ + 16, abv4);
-    vst1q_f32(AB_ + 20, abv5);
-    vst1q_f32(AB_ + 24, abv6);
-    vst1q_f32(AB_ + 28, abv7);
-    vst1q_f32(AB_ + 32, abv8);
-    vst1q_f32(AB_ + 36, abv9);
-    vst1q_f32(AB_ + 40, abv10);
-    vst1q_f32(AB_ + 44, abv11);
-    vst1q_f32(AB_ + 48, abv12);
-    vst1q_f32(AB_ + 52, abv13);
-    vst1q_f32(AB_ + 56, abv14);
-    vst1q_f32(AB_ + 60, abv15);
+    vst1q_f32(AB, abv0);
+    vst1q_f32(AB + 4, abv1);
+    vst1q_f32(AB + 8, abv2);
+    vst1q_f32(AB + 12, abv3);
+    vst1q_f32(AB + 16, abv4);
+    vst1q_f32(AB + 20, abv5);
+    vst1q_f32(AB + 24, abv6);
+    vst1q_f32(AB + 28, abv7);
+    vst1q_f32(AB + 32, abv8);
+    vst1q_f32(AB + 36, abv9);
+    vst1q_f32(AB + 40, abv10);
+    vst1q_f32(AB + 44, abv11);
+    vst1q_f32(AB + 48, abv12);
+    vst1q_f32(AB + 52, abv13);
+    vst1q_f32(AB + 56, abv14);
+    vst1q_f32(AB + 60, abv15);
 #else
     float32x4_t abv0 = vdupq_n_f32(0.0f);
     float32x4_t abv1 = vdupq_n_f32(0.0f);
@@ -1179,19 +1175,19 @@ static void sgemm_ukernel(int kc, float alpha, const float *A, const float *B,
         A += MR;
         B += NR;
     }
-    vst1q_f32(AB_ + 0, abv0);
-    vst1q_f32(AB_ + 4, abv1);
-    vst1q_f32(AB_ + 8, abv2);
-    vst1q_f32(AB_ + 12, abv3);
+    vst1q_f32(AB + 0, abv0);
+    vst1q_f32(AB + 4, abv1);
+    vst1q_f32(AB + 8, abv2);
+    vst1q_f32(AB + 12, abv3);
 #endif  // __aarch64__
 #else
     for (int i = 0; i < MR * NR; ++i) {
-        AB_[i] = 0.0f;
+        AB[i] = 0.0f;
     }
     for (int l = 0; l < kc; ++l) {
         for (int j = 0; j < NR; ++j) {
             for (int i = 0; i < MR; ++i) {
-                AB_[i + j * MR] += A[i] * B[j];
+                AB[i + j * MR] += A[i] * B[j];
             }
         }
         A += MR;
@@ -1214,13 +1210,13 @@ static void sgemm_ukernel(int kc, float alpha, const float *A, const float *B,
     if (!equal(alpha, 1.0)) {
         for (int j = 0; j < NR; ++j) {
             for (int i = 0; i < MR; ++i) {
-                C[i * inc_row_C + j * inc_col_C] += alpha * AB_[i + j * MR];
+                C[i * inc_row_C + j * inc_col_C] += alpha * AB[i + j * MR];
             }
         }
     } else {
         for (int j = 0; j < NR; ++j) {
             for (int i = 0; i < MR; ++i) {
-                C[i * inc_row_C + j * inc_col_C] += AB_[i + j * MR];
+                C[i * inc_row_C + j * inc_col_C] += AB[i + j * MR];
             }
         }
     }
@@ -1263,7 +1259,8 @@ static void sgemm_scal(int m, int n, float alpha, float *X, int incRowX,
 }
 
 static void sgemm_mkernel(int mc, int nc, int kc, float alpha, float beta,
-                          float *C, int inc_row_C, int inc_col_C) {
+                          float *C, int inc_row_C, int inc_col_C,
+                          float *buffer_A, float *buffer_B) {
     int mp = (mc + MR - 1) / MR;
     int np = (nc + NR - 1) / NR;
 
@@ -1271,6 +1268,7 @@ static void sgemm_mkernel(int mc, int nc, int kc, float alpha, float beta,
     int _nr = nc % NR;
 
     int i, j;
+    float buffer_C[MR * NR] __attribute__((aligned(32)));
 
     for (j = 0; j < np; ++j) {
         int nr = (j != np - 1 || _nr == 0) ? NR : _nr;
@@ -1279,15 +1277,16 @@ static void sgemm_mkernel(int mc, int nc, int kc, float alpha, float beta,
             int mr = (i != mp - 1 || _mr == 0) ? MR : _mr;
 
             if (mr == MR && nr == NR) {
-                sgemm_ukernel(kc, alpha, &A_[i * kc * MR], &B_[j * kc * NR],
-                              beta, &C[i * MR * inc_row_C + j * NR], inc_row_C,
+                sgemm_ukernel(kc, alpha, &buffer_A[i * kc * MR],
+                              &buffer_B[j * kc * NR], beta,
+                              &C[i * MR * inc_row_C + j * NR], inc_row_C,
                               inc_col_C);
             } else {
-                sgemm_ukernel(kc, alpha, &A_[i * kc * MR], &B_[j * kc * NR],
-                              0.0, C_, 1, MR);
+                sgemm_ukernel(kc, alpha, &buffer_A[i * kc * MR],
+                              &buffer_B[j * kc * NR], 0.0, buffer_C, 1, MR);
                 sgemm_scal(mr, nr, beta, &C[i * MR * inc_row_C + j * NR],
                            inc_row_C, inc_col_C);
-                sgemm_axpy(mr, nr, 1.0, C_, 1, MR,
+                sgemm_axpy(mr, nr, 1.0, buffer_C, 1, MR,
                            &C[i * MR * inc_row_C + j * NR], inc_row_C,
                            inc_col_C);
             }
@@ -1317,22 +1316,24 @@ static void sgemm_nn(int m, int n, int k, float alpha, const float *A,
         return;
     }
 
+    float buffer_A[MC * KC] __attribute__((aligned(32)));
+    float buffer_B[KC * NC] __attribute__((aligned(32)));
+
     for (j = 0; j < nb; ++j) {
         nc = (j != nb - 1 || _nc == 0) ? NC : _nc;
-
         for (l = 0; l < kb; ++l) {
             kc = (l != kb - 1 || _kc == 0) ? KC : _kc;
             _beta = (l == 0) ? beta : 1.0f;
 
             sgemm_nn_pack_B(kc, nc, &B[l * KC * inc_row_B + j * NC], inc_row_B,
-                            inc_col_B, B_);
+                            inc_col_B, buffer_B);
             for (i = 0; i < mb; ++i) {
                 mc = (i != mb - 1 || _mc == 0) ? MC : _mc;
                 sgemm_nn_pack_A(mc, kc, &A[i * MC * inc_row_A + l * KC],
-                                inc_row_A, inc_col_A, A_);
+                                inc_row_A, inc_col_A, buffer_A);
                 sgemm_mkernel(mc, nc, kc, alpha, _beta,
                               &C[i * MC * inc_row_C + j * NC], inc_row_C,
-                              inc_col_C);
+                              inc_col_C, buffer_A, buffer_B);
             }
         }
     }
@@ -1360,21 +1361,25 @@ static void sgemm(int m, int n, int k, float alpha, const float *A,
         return;
     }
 
+    float buffer_A[MC * KC] __attribute__((aligned(32)));
+    float buffer_B[KC * NC] __attribute__((aligned(32)));
+
     for (j = 0; j < nb; ++j) {
         nc = (j != nb - 1 || _nc == 0) ? NC : _nc;
 
         for (l = 0; l < kb; ++l) {
             kc = (l != kb - 1 || _kc == 0) ? KC : _kc;
             _beta = (l == 0) ? beta : 1.0f;
+
             sgemm_pack_B(kc, nc, &B[l * KC * inc_row_B + j * NC], inc_row_B,
-                         inc_col_B, B_);
+                         inc_col_B, buffer_B);
             for (i = 0; i < mb; ++i) {
                 mc = (i != mb - 1 || _mc == 0) ? MC : _mc;
                 sgemm_pack_A(mc, kc, &A[i * MC * inc_row_A + l * KC], inc_row_A,
-                             inc_col_A, A_);
+                             inc_col_A, buffer_A);
                 sgemm_mkernel(mc, nc, kc, alpha, _beta,
                               &C[i * MC * inc_row_C + j * NC], inc_row_C,
-                              inc_col_C);
+                              inc_col_C, buffer_A, buffer_B);
             }
         }
     }

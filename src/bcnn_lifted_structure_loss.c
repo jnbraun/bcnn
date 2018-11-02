@@ -1,8 +1,13 @@
 
-#include <bh/bh_mem.h>
 #include "bcnn/bcnn.h"
+
+#include <bh/bh_mem.h>
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
+
+#ifdef BCNN_USE_BLAS
+#include "cblas.h"
+#endif
 
 void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
                                                      bcnn_tensor *src_tensor,
@@ -55,8 +60,13 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
     // dot =-2 XX_transpose
     float *dot_ =
         (float *)bh_align_calloc(M_ * M_ * sizeof(float), align_offset);
+#if BCNN_USE_BLAS
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, M_, N_, K_, -2.0,
+                src_tensor->data, K_, src_tensor->data, K_, 0, dot_, N_);
+#else
     bcnn_gemm(layer->gemm_ctx, 0, 1, M_, N_, K_, -2.0, src_tensor->data, K_,
               src_tensor->data, K_, 0, dot_, N_);
+#endif
 
     // one array
     float *one =

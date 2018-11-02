@@ -21,6 +21,7 @@
  */
 
 /* include bh helpers */
+#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
 /* include bip image processing lib */
@@ -99,7 +100,7 @@ bcnn_status bcnn_free_net(bcnn_net *net) {
     bh_free(net->finetune_id);
     bcnn_net_free_tensors(net);
     // Gemm context
-    bh_free(net->gemm_ctx);
+    bh_align_free(net->gemm_ctx);
     return BCNN_SUCCESS;
 }
 
@@ -110,7 +111,7 @@ void bcnn_net_set_log_context(bcnn_net *net, bcnn_log_callback fct,
 }
 
 bcnn_status bcnn_net_create_gemm_context(bcnn_net *net) {
-    net->gemm_ctx = (bcnn_gemm_context *)calloc(1, sizeof(bcnn_gemm_context));
+    net->gemm_ctx = bh_align_calloc(sizeof(bcnn_gemm_context), 32);
     if (net->gemm_ctx) {
         return BCNN_SUCCESS;
     } else {
@@ -351,9 +352,6 @@ bcnn_status bcnn_init_workload(bcnn_net *net) {
     }
 #endif
 
-    // Internal gemm
-    bcnn_gemm_init(net->gemm_ctx);
-
     return BCNN_SUCCESS;
 }
 
@@ -366,7 +364,6 @@ bcnn_status bcnn_free_workload(bcnn_net *net) {
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_free(net->workspace_gpu);
 #endif
-    bcnn_gemm_terminate(net->gemm_ctx);
     return BCNN_SUCCESS;
 }
 

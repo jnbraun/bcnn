@@ -47,21 +47,50 @@
 extern "C" {
 #endif
 
-/* Gemm context */
+#if (defined(__aarch64__))
+#define GEMM_ALIGN 0x03fffUL
+#define MC 128
+#define KC 240
+#define NC 12288
+#define MR 4
+#define NR 4
+#else
+#ifdef BCNN_USE_NEON
+#define MC 384
+#define KC 384
+#define NC 4096
+#if (defined(__aarch64__))  // legacy
+#define MR 8
+#define NR 8
+#else
+#define MR 4
+#define NR 4
+#endif  // __aarch64__
+#else
+#define MC 128
+#define KC 384
+#define NC 4096
+#define MR 8
+#define NR 8
+#endif  // BCNN_USE_NEON
+#endif  // __aarch64__
+
 typedef struct bcnn_gemm_context {
-    unsigned int mc, kc, nc;
-    unsigned int mr, nr;
-    unsigned long align;
-    unsigned int buffer_size;
-    float *buffer_a;
+#if !defined(BCNN_USE_BLAS) && !defined(BCNN_USE_CUDA)
+#if (defined(__aarch64__))  // use sgemm_openblas
+    float buffer_a[(((MC + NC) * KC * sizeof(float) + GEMM_ALIGN) &
+                    ~(GEMM_ALIGN))] __attribute__((aligned(32)));
     float *buffer_b;
-    float *buffer_ab;
     float *buffer_c;
+    float *buffer_ab;
+#else
+    float buffer_a[MC * KC] __attribute__((aligned(32)));
+    float buffer_b[KC * NC] __attribute__((aligned(32)));
+    float buffer_c[MR * NR] __attribute__((aligned(32)));
+    float buffer_ab[MR * NR] __attribute__((aligned(32)));
+#endif
+#endif
 } bcnn_gemm_context;
-/* gemm init context */
-void bcnn_gemm_init(bcnn_gemm_context *ctx);
-/* gemm terminate */
-void bcnn_gemm_terminate(bcnn_gemm_context *ctx);
 
 /* Matrix computation routines */
 int bcnn_fill_f32(int n, float a, float *x);

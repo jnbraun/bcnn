@@ -3,8 +3,8 @@ project (bcnn)
 
 # User configuration settings
 option(USE_AVX "Build with AVX instructions" ON)
-option(USE_CUDA "Build with CUDA libraries" ON)
-option(USE_CUDNN "Build with CuDNN library" ON)
+option(USE_CUDA "Build with CUDA libraries" OFF)
+option(USE_CUDNN "Build with CuDNN library" OFF)
 option(USE_BLAS "Build with BLAS library" OFF)
 option(USE_NEON "Build with Neon instructions" OFF)
 # Building examples

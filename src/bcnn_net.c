@@ -46,6 +46,8 @@
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
+bcnn_status bcnn_net_create_gemm_context(bcnn_net *net);
+
 bcnn_status bcnn_init_net(bcnn_net **net) {
     bcnn_net *p_net = NULL;
     if (*net == NULL) {
@@ -61,6 +63,8 @@ bcnn_status bcnn_init_net(bcnn_net **net) {
     bh_strfill(&label.name, "label");
     // Input node is set to be the second node
     bcnn_net_add_tensor(*net, label);
+    // Internal context for gemm
+    BCNN_CHECK_STATUS(bcnn_net_create_gemm_context(*net));
 
     return BCNN_SUCCESS;
 }
@@ -94,6 +98,8 @@ bcnn_status bcnn_free_net(bcnn_net *net) {
     }
     bh_free(net->finetune_id);
     bcnn_net_free_tensors(net);
+    // Gemm context
+    bh_free(net->gemm_ctx);
     return BCNN_SUCCESS;
 }
 
@@ -101,6 +107,15 @@ void bcnn_net_set_log_context(bcnn_net *net, bcnn_log_callback fct,
                               bcnn_log_level level) {
     net->log_ctx.fct = fct;
     net->log_ctx.lvl = level;
+}
+
+bcnn_status bcnn_net_create_gemm_context(bcnn_net *net) {
+    net->gemm_ctx = (bcnn_gemm_context *)calloc(1, sizeof(bcnn_gemm_context));
+    if (net->gemm_ctx) {
+        return BCNN_SUCCESS;
+    } else {
+        return BCNN_FAILED_ALLOC;
+    }
 }
 
 int bcnn_set_param(bcnn_net *net, char *name, char *val) {
@@ -336,6 +351,9 @@ bcnn_status bcnn_init_workload(bcnn_net *net) {
     }
 #endif
 
+    // Internal gemm
+    bcnn_gemm_init(net->gemm_ctx);
+
     return BCNN_SUCCESS;
 }
 
@@ -348,6 +366,7 @@ bcnn_status bcnn_free_workload(bcnn_net *net) {
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_free(net->workspace_gpu);
 #endif
+    bcnn_gemm_terminate(net->gemm_ctx);
     return BCNN_SUCCESS;
 }
 

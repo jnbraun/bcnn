@@ -128,6 +128,7 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
          num_channels_per_group * size * size;
     node.layer->conv_workspace = (float *)calloc(sz, sizeof(float));
+    node.layer->gemm_ctx = net->gemm_ctx;
 
     if (batch_norm) {
         node.layer->batch_norm = 1;
@@ -311,7 +312,8 @@ int bcnn_forward_conv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k,
                         1.0f, a, k, b, n, 1.0f, c, n);
 #else
-            bcnn_gemm(0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c, n);
+            bcnn_gemm(layer->gemm_ctx, 0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c,
+                      n);
 #endif
         }
     }
@@ -370,7 +372,8 @@ int bcnn_backward_conv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, m, n, k, 1.0f,
                         a, k, b, k, 1.0f, c, n);
 #else
-            bcnn_gemm(0, 1, m, n, k, 1.0f, a, k, b, k, 1.0f, c, n);
+            bcnn_gemm(layer->gemm_ctx, 0, 1, m, n, k, 1.0f, a, k, b, k, 1.0f, c,
+                      n);
 #endif
 
             if (src_tensor->grad_data) {
@@ -385,15 +388,16 @@ int bcnn_backward_conv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, n, k,
                                 m, 1.0f, a, n, b, k, 0.0f, src_grad, k);
 #else
-                    bcnn_gemm(1, 0, n, k, m, 1.0f, a, n, b, k, 0.0f, src_grad,
-                              k);
+                    bcnn_gemm(layer->gemm_ctx, 1, 0, n, k, m, 1.0f, a, n, b, k,
+                              0.0f, src_grad, k);
 #endif
                 } else {
 #if BCNN_USE_BLAS
                     cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, n, k,
                                 m, 1.0f, a, n, b, k, 0.0f, c, k);
 #else
-                    bcnn_gemm(1, 0, n, k, m, 1.0f, a, n, b, k, 0.0f, c, k);
+                    bcnn_gemm(layer->gemm_ctx, 1, 0, n, k, m, 1.0f, a, n, b, k,
+                              0.0f, c, k);
 #endif
                     bcnn_col2im(layer->conv_workspace,
                                 src_tensor->c / layer->num_groups,

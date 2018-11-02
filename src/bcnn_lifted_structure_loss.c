@@ -60,10 +60,6 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
     // dot =-2 XX_transpose
     float *dot_ =
         (float *)bh_align_calloc(M_ * M_ * sizeof(float), align_offset);
-<<<<<<< HEAD
-    bcnn_gemm(layer->gemm_ctx, 0, 1, M_, N_, K_, -2.0, src_tensor->data, K_,
-              src_tensor->data, K_, 0, dot_, N_);
-=======
 #if BCNN_USE_BLAS
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, M_, N_, K_, -2.0,
                 src_tensor->data, K_, src_tensor->data, K_, 0, dot_, N_);
@@ -71,7 +67,6 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
     bcnn_gemm(layer->gemm_ctx, 0, 1, M_, N_, K_, -2.0, src_tensor->data, K_,
               src_tensor->data, K_, 0, dot_, N_);
 #endif
->>>>>>> thread_safe
 
     // one array
     float *one =

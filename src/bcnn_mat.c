@@ -884,30 +884,6 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
 
 // This implementation follows the Blis micro-kernel algorithm
 // Reference: BLIS: A Framework for Rapidly Instantiating BLAS Functionality
-<<<<<<< HEAD
-#if 0
-#ifdef BCNN_USE_NEON
-#define ctx ->mc 384
-#define ctx ->kc 384
-#define ctx ->nc 4096
-#if (defined(__aarch64__))
-#define MR 8
-#define NR 8
-#else
-#define MR 4
-#define NR 4
-#endif  // __aarch64__
-#else
-#define ctx ->mc 128
-#define ctx ->kc 384
-#define ctx ->nc 4096
-#define MR 8
-#define NR 8
-#endif  // BCNN_USE_NEON
-#endif
-
-=======
->>>>>>> thread_safe
 static int equal(float a, float b) {
     const float EPSILON = 1e-5;
     if (fabsf(a - b) < EPSILON) {

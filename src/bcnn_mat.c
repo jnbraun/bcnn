@@ -866,6 +866,8 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
     }
 }
 
+#if !defined(BCNN_USE_BLAS) && !defined(BCNN_USE_CUDA)
+
 // General Matrix-Matrix multiplication
 //             ldb n
 //          _________
@@ -882,6 +884,7 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
 
 // This implementation follows the Blis micro-kernel algorithm
 // Reference: BLIS: A Framework for Rapidly Instantiating BLAS Functionality
+<<<<<<< HEAD
 #if 0
 #ifdef BCNN_USE_NEON
 #define ctx ->mc 384
@@ -903,6 +906,8 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
 #endif  // BCNN_USE_NEON
 #endif
 
+=======
+>>>>>>> thread_safe
 static int equal(float a, float b) {
     const float EPSILON = 1e-5;
     if (fabsf(a - b) < EPSILON) {
@@ -1407,3 +1412,5 @@ int bcnn_gemm(bcnn_gemm_context *ctx, int trans_a, int trans_b, int m, int n,
 #endif
     return 0;
 }
+
+#endif  // !defined(BCNN_USE_BLAS) && !defined(BCNN_USE_CUDA)

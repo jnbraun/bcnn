@@ -89,6 +89,11 @@ typedef struct bcnn_gemm_context {
     float buffer_c[MR * NR] __attribute__((aligned(32)));
     float buffer_ab[MR * NR] __attribute__((aligned(32)));
 #endif
+#else
+    float *buffer_a;
+    float *buffer_b;
+    float *buffer_c;
+    float *buffer_ab;
 #endif
 } bcnn_gemm_context;
 

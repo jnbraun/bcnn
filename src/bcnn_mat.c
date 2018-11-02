@@ -866,8 +866,6 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
     }
 }
 
-#if !defined(BCNN_USE_BLAS) && !defined(BCNN_USE_CUDA)
-
 // General Matrix-Matrix multiplication
 //             ldb n
 //          _________
@@ -1388,5 +1386,3 @@ int bcnn_gemm(bcnn_gemm_context *ctx, int trans_a, int trans_b, int m, int n,
 #endif
     return 0;
 }
-
-#endif  // !defined(BCNN_USE_BLAS) && !defined(BCNN_USE_CUDA)

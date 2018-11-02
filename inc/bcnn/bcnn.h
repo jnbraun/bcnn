@@ -330,6 +330,11 @@ typedef struct bcnn_log_context {
     bcnn_log_level lvl;
 } bcnn_log_context;
 
+/**
+ * Gemm context (internal use)
+ */
+typedef struct bcnn_gemm_context bcnn_gemm_context;
+
 static const int align_offset_ = 32;
 /**
  * Tensor struct
@@ -464,6 +469,7 @@ typedef struct bcnn_layer {
     int total;      // Yolo v3
     int *mask;      // Yolo v3
     float *cost;    // Yolo
+    bcnn_gemm_context *gemm_ctx;
 } bcnn_layer;
 
 typedef struct {
@@ -502,6 +508,7 @@ typedef struct {
     float *workspace_gpu;
 #endif
     bcnn_log_context log_ctx;
+    bcnn_gemm_context *gemm_ctx;
 } bcnn_net;
 
 /* Logging */
@@ -623,7 +630,9 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 char *src_id, char *label_id, char *dst_id);
 
 /* YOLO */
-typedef struct { float x, y, w, h; } yolo_box;
+typedef struct {
+    float x, y, w, h;
+} yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

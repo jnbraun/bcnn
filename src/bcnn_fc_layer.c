@@ -57,6 +57,7 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
 
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = FULL_CONNECTED;
+    node.layer->gemm_ctx = net->gemm_ctx;
 
     int input_size = bcnn_tensor_size3d(&net->tensors[node.src[0]]);
 
@@ -142,9 +143,9 @@ int bcnn_forward_fullc_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                 src_size, 1.0f, dst_tensor->data, dst_size);
 #else
     // Original
-    bcnn_gemm(0, 1, batch_size, dst_size, src_size, 1.0f, src_tensor->data,
-              src_size, weights->data, src_size, 1.0f, dst_tensor->data,
-              dst_size);
+    bcnn_gemm(layer->gemm_ctx, 0, 1, batch_size, dst_size, src_size, 1.0f,
+              src_tensor->data, src_size, weights->data, src_size, 1.0f,
+              dst_tensor->data, dst_size);
 #endif
 
     for (i = 0; i < batch_size; ++i)
@@ -177,9 +178,9 @@ int bcnn_backward_fullc_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                 src_tensor->data, src_size, 1.0f, weights->grad_data, src_size);
 #else
     // Original
-    bcnn_gemm(1, 0, dst_size, src_size, batch_size, 1.0f, dst_tensor->grad_data,
-              dst_size, src_tensor->data, src_size, 1.0f, weights->grad_data,
-              src_size);
+    bcnn_gemm(layer->gemm_ctx, 1, 0, dst_size, src_size, batch_size, 1.0f,
+              dst_tensor->grad_data, dst_size, src_tensor->data, src_size, 1.0f,
+              weights->grad_data, src_size);
 #endif
 
     if (src_tensor->grad_data) {
@@ -190,7 +191,7 @@ int bcnn_backward_fullc_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                     src_size);
 #else
         // Original
-        bcnn_gemm(0, 0, batch_size, src_size, dst_size, 1.0f,
+        bcnn_gemm(layer->gemm_ctx, 0, 0, batch_size, src_size, dst_size, 1.0f,
                   dst_tensor->grad_data, dst_size, weights->data, src_size,
                   1.0f, src_tensor->grad_data, src_size);
 #endif

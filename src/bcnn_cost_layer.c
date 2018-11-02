@@ -55,6 +55,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
     node.layer->scale = scale;
     node.layer->loss_metric = loss_metric;
     node.layer->loss = loss;
+    node.layer->gemm_ctx = net->gemm_ctx;
     // Setup label node
     bcnn_tensor_set_shape(&net->tensors[1], net->tensors[node.src[0]].n,
                           net->tensors[node.src[0]].c,

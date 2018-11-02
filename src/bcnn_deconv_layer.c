@@ -67,6 +67,7 @@ bcnn_status bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size,
     node.layer->stride = stride;
     node.layer->size = size;
     node.layer->pad = pad;
+    node.layer->gemm_ctx = net->gemm_ctx;
     // Create weights tensor
     bcnn_tensor weights = {0};
     char weights_name[256];
@@ -154,7 +155,7 @@ int bcnn_forward_deconv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     n = src_tensor->w * src_tensor->h;
     sz = src_tensor->c * src_tensor->h * src_tensor->w;
     for (i = 0; i < batch_size; ++i) {
-        bcnn_gemm(1, 0, m, n, k, 1.0f, weights->data, m,
+        bcnn_gemm(layer->gemm_ctx, 1, 0, m, n, k, 1.0f, weights->data, m,
                   src_tensor->data + i * sz, n, 0.0f, layer->conv_workspace, n);
         bcnn_col2im(
             layer->conv_workspace, layer->num, dst_tensor->h, dst_tensor->w,
@@ -195,14 +196,14 @@ int bcnn_backward_deconv_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                i * layer->num * dst_tensor->w * dst_tensor->h;
         bcnn_im2col(pdst, dst_tensor->c, dst_tensor->h, dst_tensor->w,
                     layer->size, 0, layer->stride, layer->conv_workspace);
-        bcnn_gemm(0, 1, m, n, k, alpha,
+        bcnn_gemm(layer->gemm_ctx, 0, 1, m, n, k, alpha,
                   src_tensor->data +
                       i * src_tensor->c * src_tensor->h * src_tensor->w,
                   k, layer->conv_workspace, k, 1.0f, weights->grad_data, n);
 
         if (src_tensor->grad_data) {
-            bcnn_gemm(0, 0, src_tensor->c, k, n, 1.0f, weights->data, n,
-                      layer->conv_workspace, k, 0.0f,
+            bcnn_gemm(layer->gemm_ctx, 0, 0, src_tensor->c, k, n, 1.0f,
+                      weights->data, n, layer->conv_workspace, k, 0.0f,
                       src_tensor->grad_data + i * sz, k);
         }
     }

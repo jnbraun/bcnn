@@ -37,27 +37,18 @@
 /*********************************************************************/
 
 #include "openblas_sgemm.h"
+#include "openblas_internal.h"
+
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "openblas_internal.h"
 
-#define GEMM_P 128
-#define GEMM_Q 240
-#define GEMM_R 12288
-#define GEMM_UNROLL_M 4
-#define GEMM_UNROLL_N 4
-
-#define GEMM_ALIGN 0x03fffUL
-#define BUFFER_SIZE \
-    (((GEMM_P + GEMM_R) * GEMM_Q * sizeof(float) + GEMM_ALIGN) & ~GEMM_ALIGN)
+#include "bcnn_mat.h"
 
 #define sgemm_itcopy sgemm_tcopy_4
 #define sgemm_incopy sgemm_ncopy_4
 #define sgemm_oncopy sgemm_ncopy_4
 #define sgemm_otcopy sgemm_tcopy_4
-
-float sas[BUFFER_SIZE] __attribute__((aligned(32)));
 
 #define ICOPY_OPERATION(M, N, A, LDA, X, Y, BUFFER) \
     sgemm_itcopy(M, N, (float *)(A) + ((Y) + (X) * (LDA)), LDA, BUFFER)
@@ -173,18 +164,18 @@ static int sgemm_beta(long m, long n, long dummy1, float beta, float *dummy2,
     return 0;
 }
 
-int openblas_sgemm(int transa, int transb, long m, long n, long k, float alpha,
-                   float *a, long lda, float *b, long ldb, float beta, float *c,
-                   long ldc) {
+int openblas_sgemm(bcnn_gemm_context *ctx, int transa, int transb, long m,
+                   long n, long k, float alpha, float *a, long lda, float *b,
+                   long ldb, float beta, float *c, long ldc) {
     long m_from, m_to, n_from, n_to;
 
     long ls, is, js;
     long min_l, min_i, min_j;
     long jjs, min_jj;
-    float *sa = sas;
-    float *sb = (float *)((char *)sas +
-                          ((GEMM_P * GEMM_Q * sizeof(float) + GEMM_ALIGN) &
-                           ~GEMM_ALIGN));
+    float *sa = ctx->buffer_a;
+    float *sb = (float *)((char *)ctx->buffer_a +
+                          ((ctx->mc * ctx->kc * sizeof(float) + ctx->align) &
+                           ~ctx->align));
     long l1stride, gemm_p, l2size;
 
     m_from = 0;
@@ -198,36 +189,34 @@ int openblas_sgemm(int transa, int transb, long m, long n, long k, float alpha,
     if ((k == 0) || (alpha == 0)) {
         return 0;
     }
-    l2size = GEMM_P * GEMM_Q;
+    l2size = ctx->mc * ctx->kc;
 
-    for (js = n_from; js < n_to; js += GEMM_R) {
+    for (js = n_from; js < n_to; js += ctx->nc) {
         min_j = n_to - js;
-        if (min_j > GEMM_R) {
-            min_j = GEMM_R;
+        if (min_j > ctx->nc) {
+            min_j = ctx->nc;
         }
         for (ls = 0; ls < k; ls += min_l) {
             min_l = k - ls;
-            if (min_l >= GEMM_Q * 2) {
-                gemm_p = GEMM_P;
-                min_l = GEMM_Q;
+            if (min_l >= ctx->kc * 2) {
+                gemm_p = ctx->mc;
+                min_l = ctx->kc;
             } else {
-                if (min_l > GEMM_Q) {
-                    min_l =
-                        (min_l / 2 + GEMM_UNROLL_M - 1) & ~(GEMM_UNROLL_M - 1);
+                if (min_l > ctx->kc) {
+                    min_l = (min_l / 2 + ctx->mr - 1) & ~(ctx->mr - 1);
                 }
-                gemm_p = ((l2size / min_l + GEMM_UNROLL_M - 1) &
-                          ~(GEMM_UNROLL_M - 1));
+                gemm_p = ((l2size / min_l + ctx->mr - 1) & ~(ctx->mr - 1));
                 while (gemm_p * min_l > l2size) {
-                    gemm_p -= GEMM_UNROLL_M;
+                    gemm_p -= ctx->mr;
                 }
             }
             /* First, we have to move data A to L2 cache */
             min_i = m_to - m_from;
             l1stride = 1;
-            if (min_i >= GEMM_P * 2) {
-                min_i = GEMM_P;
-            } else if (min_i > GEMM_P) {
-                min_i = (min_i / 2 + GEMM_UNROLL_M - 1) & ~(GEMM_UNROLL_M - 1);
+            if (min_i >= ctx->mc * 2) {
+                min_i = ctx->mc;
+            } else if (min_i > ctx->mc) {
+                min_i = (min_i / 2 + ctx->mr - 1) & ~(ctx->mr - 1);
             } else {
                 l1stride = 0;
             }
@@ -240,10 +229,10 @@ int openblas_sgemm(int transa, int transb, long m, long n, long k, float alpha,
 
             for (jjs = js; jjs < js + min_j; jjs += min_jj) {
                 min_jj = min_j + js - jjs;
-                if (min_jj >= 3 * GEMM_UNROLL_N) {
-                    min_jj = 3 * GEMM_UNROLL_N;
-                } else if (min_jj > GEMM_UNROLL_N) {
-                    min_jj = GEMM_UNROLL_N;
+                if (min_jj >= 3 * ctx->nr) {
+                    min_jj = 3 * ctx->nr;
+                } else if (min_jj > ctx->nr) {
+                    min_jj = ctx->nr;
                 }
                 if (transb) {
                     OCOPYT_OPERATION(min_l, min_jj, b, ldb, ls, jjs,
@@ -258,11 +247,10 @@ int openblas_sgemm(int transa, int transb, long m, long n, long k, float alpha,
             }
             for (is = m_from + min_i; is < m_to; is += min_i) {
                 min_i = m_to - is;
-                if (min_i >= GEMM_P * 2) {
-                    min_i = GEMM_P;
-                } else if (min_i > GEMM_P) {
-                    min_i =
-                        (min_i / 2 + GEMM_UNROLL_M - 1) & ~(GEMM_UNROLL_M - 1);
+                if (min_i >= ctx->mc * 2) {
+                    min_i = ctx->mc;
+                } else if (min_i > ctx->mc) {
+                    min_i = (min_i / 2 + ctx->mr - 1) & ~(ctx->mr - 1);
                 }
                 if (transa) {
                     ICOPYT_OPERATION(min_l, min_i, a, lda, ls, is, sa);

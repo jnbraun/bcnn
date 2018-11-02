@@ -55,8 +55,8 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
     // dot =-2 XX_transpose
     float *dot_ =
         (float *)bh_align_calloc(M_ * M_ * sizeof(float), align_offset);
-    bcnn_gemm(0, 1, M_, N_, K_, -2.0, src_tensor->data, K_, src_tensor->data,
-              K_, 0, dot_, N_);
+    bcnn_gemm(layer->gemm_ctx, 0, 1, M_, N_, K_, -2.0, src_tensor->data, K_,
+              src_tensor->data, K_, 0, dot_, N_);
 
     // one array
     float *one =

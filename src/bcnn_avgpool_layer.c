@@ -24,8 +24,7 @@
 #include <bh/bh_string.h>
 #include "bcnn_utils.h"
 
-bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, int size, int stride,
-                                   char *src_id, char *dst_id) {
+bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, char *src_id, char *dst_id) {
     int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};

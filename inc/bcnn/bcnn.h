@@ -612,10 +612,13 @@ bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
 /* Softmax layer */
 bcnn_status bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id);
 
-/* Pooling layer */
+/* Max-Pooling layer */
 bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
                                    bcnn_padding padding, char *src_id,
                                    char *dst_id);
+
+/* Average pooling layer */
+bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, char *src_id, char *dst_id);
 
 /* Concat layer */
 bcnn_status bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
@@ -650,9 +653,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
 /* TODO: move to private header */
 bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter);
 
-typedef struct {
-    float x, y, w, h;
-} yolo_box;
+typedef struct { float x, y, w, h; } yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

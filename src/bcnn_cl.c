@@ -162,10 +162,29 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                             "correctly setup?");
                         bcnn_add_maxpool_layer(net, size, stride, padding_type,
                                                src_id, dst_id);
+                    } else if (strcmp(curr_layer, "{avgpool}") == 0) {
+                        BCNN_CHECK_AND_LOG(
+                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            "Invalid output node name. "
+                            "Hint: Are you sure that 'dst' field is "
+                            "correctly setup?");
+                        bcnn_add_avgpool_layer(net, src_id, dst_id);
                     } else if (strcmp(curr_layer, "{dropout}") == 0) {
                         bcnn_add_dropout_layer(net, rate, src_id);
                     } else if (strcmp(curr_layer, "{concat}") == 0) {
+                        BCNN_CHECK_AND_LOG(
+                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            "Invalid output node name. "
+                            "Hint: Are you sure that 'dst' field is "
+                            "correctly setup?");
                         bcnn_add_concat_layer(net, src_id, src_id2, dst_id);
+                    } else if (strcmp(curr_layer, "{eltwise}") == 0) {
+                        BCNN_CHECK_AND_LOG(
+                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            "Invalid output node name. "
+                            "Hint: Are you sure that 'dst' field is "
+                            "correctly setup?");
+                        bcnn_add_eltwise_layer(net, a, src_id, src_id2, dst_id);
                     } else if (strcmp(curr_layer, "{yolo}") == 0) {
                         BCNN_CHECK_AND_LOG(
                             net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,

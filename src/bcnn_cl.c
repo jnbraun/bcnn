@@ -493,7 +493,7 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
             if (param->eval_test) bcnn_compile_net(net, "train");
         }
         if (i % param->save_model == 0 && i > 0) {
-            sprintf(chk_pt_path, "%s_iter%d.dat", param->output_model, i);
+            sprintf(chk_pt_path, "%s_iter%d.bcnnmodel", param->output_model, i);
             bcnn_write_model(net, chk_pt_path);
         }
     }

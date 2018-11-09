@@ -220,11 +220,12 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
                 (1 + layer->classes) * src_tensor->w * src_tensor->h, LOGISTIC);
         }
     }
-
-    memset(dst_tensor->grad_data, 0,
-           bcnn_tensor_size(dst_tensor) * sizeof(float));
-    if (/*!layer->net_state*/ net->task == PREDICT) {  // state != train
+    if (layer->net_state == 0 || net->task == PREDICT) {  // state != train
         return;
+    }
+    if (dst_tensor->grad_data) {
+        memset(dst_tensor->grad_data, 0,
+               bcnn_tensor_size(dst_tensor) * sizeof(float));
     }
     // This part is for training
     float avg_iou = 0;

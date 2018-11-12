@@ -77,7 +77,7 @@ bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
     sprintf(weights_name, "%s_w", src_id);
     bcnn_tensor_create(&weights, 1, 1, 1,
                        net->tensors[node.src[0]].c * size * size, 1,
-                       weights_name);
+                       weights_name, net->state);
     bcnn_tensor_filler w_filler = {
         .range = (size * size * net->tensors[node.src[0]].c), .type = init};
     bcnn_tensor_fill(&weights, w_filler);
@@ -88,7 +88,7 @@ bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
     char biases_name[256];
     sprintf(biases_name, "%s_b", src_id);
     bcnn_tensor_create(&biases, 1, 1, 1, net->tensors[node.src[0]].c, 1,
-                       biases_name);
+                       biases_name, net->state);
     bcnn_net_add_tensor(net, biases);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
 
@@ -107,7 +107,7 @@ bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
                 node.layer->stride +
             1,
         1);
-    bcnn_tensor_allocate(&dst_tensor);
+    bcnn_tensor_allocate(&dst_tensor, net->state);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);

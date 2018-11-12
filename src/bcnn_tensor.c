@@ -28,9 +28,9 @@
 #include "bcnn_utils.h"
 
 void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
-                        int has_grad, char *name) {
+                        int has_grad, char *name, int net_state) {
     bcnn_tensor_set_shape(t, n, c, h, w, has_grad);
-    bcnn_tensor_allocate(t);
+    bcnn_tensor_allocate(t, net_state);
     bh_strfill(&t->name, name);
 }
 
@@ -90,14 +90,14 @@ int bcnn_tensor_size3d(bcnn_tensor *t) { return t->w * t->h * t->c; }
 
 int bcnn_tensor_size2d(bcnn_tensor *t) { return t->w * t->h; }
 
-void bcnn_tensor_allocate(bcnn_tensor *t) {
+void bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
     int size = t->n * t->c * t->h * t->w;
 
     bcnn_tensor_free(t);
     if (size <= 0) return;
     t->data = (float *)bh_align_calloc(size * sizeof(float), align_offset_);
 #ifndef BCNN_DEPLOY_ONLY
-    if (t->has_grad) {
+    if (t->has_grad && net_state == TRAIN) {
         t->grad_data =
             (float *)bh_align_calloc(size * sizeof(float), align_offset_);
     }
@@ -105,7 +105,7 @@ void bcnn_tensor_allocate(bcnn_tensor *t) {
 #ifdef BCNN_USE_CUDA
     t->data_gpu = bcnn_cuda_memcpy_f32(t->data, size);
 #ifndef BCNN_DEPLOY_ONLY
-    if (t->has_grad) {
+    if (t->has_grad && net_state == TRAIN) {
         t->grad_data_gpu = bcnn_cuda_memcpy_f32(t->grad_data, size);
     }
 #endif
@@ -115,7 +115,6 @@ void bcnn_tensor_allocate(bcnn_tensor *t) {
 void bcnn_tensor_free(bcnn_tensor *t) {
     bh_align_free(t->data);
     t->data = NULL;
-    bh_free(t->name);
 #ifndef BCNN_DEPLOY_ONLY
     if (t->has_grad) {
         bh_align_free(t->grad_data);

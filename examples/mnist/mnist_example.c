@@ -65,6 +65,8 @@ int create_network(bcnn_net *net) {
     // Target
     net->prediction_type = CLASSIFICATION;
 
+    bcnn_compile_net(net);
+
     return 0;
 }
 
@@ -79,6 +81,7 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
     int output_size =
         bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
 
+    net->state = VALID;
     bcnn_iterator_initialize(net, &data_mnist, test_img, test_label, "mnist");
 
     f = fopen(pred_out, "wt");
@@ -86,8 +89,6 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
         fprintf(stderr, "[ERROR] Could not open file %s", pred_out);
         return -1;
     }
-
-    bcnn_compile_net(net, "predict");
 
     n = nb_pred / net->batch_size;
     for (i = 0; i < n; ++i) {
@@ -127,11 +128,10 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
     bh_timer t = {0}, tp = {0};
     bcnn_iterator data_mnist = {0};
 
+    net->state = TRAIN;
     if (bcnn_iterator_initialize(net, &data_mnist, train_img, train_label,
                                  "mnist") != 0)
         return -1;
-
-    bcnn_compile_net(net, "train");
 
     bh_timer_start(&t);
     for (i = 0; i < nb_iter; ++i) {
@@ -154,7 +154,7 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
             bh_timer_start(&t);
             sum_error = 0;
             // Reschedule net for training
-            bcnn_compile_net(net, "train");
+            net->state = TRAIN;
         }
     }
 
@@ -169,6 +169,7 @@ int run(char *train_img, char *train_label, char *test_img, char *test_label) {
     bcnn_net *net = NULL;
 
     bcnn_init_net(&net);
+    net->state = TRAIN;
     BCNN_INFO(net->log_ctx, "Create Network...");
     create_network(net);
 
@@ -179,6 +180,7 @@ int run(char *train_img, char *train_label, char *test_img, char *test_label) {
     }
 
     BCNN_INFO(net->log_ctx, "Start prediction...");
+    net->state = VALID;
     predict_mnist(net, test_img, test_label, &error_test, 10000,
                   "pred_mnist.txt");
     BCNN_INFO(net->log_ctx, "Prediction ended successfully");

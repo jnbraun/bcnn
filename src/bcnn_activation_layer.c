@@ -54,7 +54,7 @@ bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
         sprintf(weights_name, "%s_w_prelu", src_id);
         bcnn_tensor weights = {0};
         bcnn_tensor_create(&weights, 1, 1, 1, net->tensors[node.src[0]].c, 1,
-                           weights_name);
+                           weights_name, net->state);
         bcnn_net_add_tensor(net, weights);
         bcnn_node_add_input(net, &node, net->num_tensors - 1);
     }

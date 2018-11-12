@@ -49,7 +49,7 @@ bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id,
     bcnn_tensor_set_shape(
         &dst_tensor, net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
         net->tensors[node.src[0]].h, net->tensors[node.src[0]].w, 1);
-    bcnn_tensor_allocate(&dst_tensor);
+    bcnn_tensor_allocate(&dst_tensor, net->state);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
@@ -70,27 +70,27 @@ bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id,
     sprintf(scales_name, "%s_scales", src_id);
     sprintf(biases_name, "%s_b", src_id);
     bcnn_tensor_create(&node.layer->saved_mean, 1, 1, 1, channels, 1,
-                       saved_mean_name);
+                       saved_mean_name, net->state);
     bcnn_tensor_create(&node.layer->saved_variance, 1, 1, 1, channels, 1,
-                       saved_var_name);
+                       saved_var_name, net->state);
     bcnn_tensor running_mean = {0};
-    bcnn_tensor_create(&running_mean, 1, 1, 1, channels, 0,
-                       running_mean_name);  // no gradients
+    bcnn_tensor_create(&running_mean, 1, 1, 1, channels, 0, running_mean_name,
+                       net->state);  // no gradients
     bcnn_net_add_tensor(net, running_mean);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
     bcnn_tensor running_var = {0};
-    bcnn_tensor_create(&running_var, 1, 1, 1, channels, 0,
-                       running_var_name);  // no gradients
+    bcnn_tensor_create(&running_var, 1, 1, 1, channels, 0, running_var_name,
+                       net->state);  // no gradients
     bcnn_net_add_tensor(net, running_var);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
     bcnn_tensor scales = {0};
-    bcnn_tensor_create(&scales, 1, 1, 1, channels, 1, scales_name);
+    bcnn_tensor_create(&scales, 1, 1, 1, channels, 1, scales_name, net->state);
     bcnn_tensor_filler filler = {.value = 1.0f, .type = FIXED};
     bcnn_tensor_fill(&scales, filler);
     bcnn_net_add_tensor(net, scales);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
     bcnn_tensor biases = {0};
-    bcnn_tensor_create(&biases, 1, 1, 1, channels, 1, biases_name);
+    bcnn_tensor_create(&biases, 1, 1, 1, channels, 1, biases_name, net->state);
     bcnn_net_add_tensor(net, biases);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
     // Internal data
@@ -168,7 +168,7 @@ int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                      bcnn_tensor *dst_tensor,
                                      bcnn_tensor *bn_mean, bcnn_tensor *bn_var,
                                      bcnn_tensor *bn_scales,
-                                     bcnn_tensor *biases) {
+                                     bcnn_tensor *biases, bcnn_state state) {
     int batch_size = src_tensor->n;
     int sz = dst_tensor->w * dst_tensor->h * dst_tensor->c;
 
@@ -177,7 +177,7 @@ int bcnn_forward_batchnorm_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     }
     bcnn_copy_f32(sz * batch_size, dst_tensor->data, layer->workspace);
 
-    if (layer->net_state) {
+    if (state == TRAIN) {
         _mean_variance_forward(dst_tensor->data, batch_size, dst_tensor->c,
                                dst_tensor->h * dst_tensor->w,
                                layer->saved_mean.data,
@@ -244,16 +244,14 @@ static void _normalize_backward(float *x, float *mean, float *var,
     }
 }
 
-int bcnn_backward_batchnorm_layer_cpu(bcnn_layer *layer,
-                                      bcnn_tensor *src_tensor,
-                                      bcnn_tensor *dst_tensor,
-                                      bcnn_tensor *bn_mean, bcnn_tensor *bn_var,
-                                      bcnn_tensor *bn_scales,
-                                      bcnn_tensor *bn_biases) {
+int bcnn_backward_batchnorm_layer_cpu(
+    bcnn_layer *layer, bcnn_tensor *src_tensor, bcnn_tensor *dst_tensor,
+    bcnn_tensor *bn_mean, bcnn_tensor *bn_var, bcnn_tensor *bn_scales,
+    bcnn_tensor *bn_biases, bcnn_state state) {
     int batch_size = src_tensor->n;
     int sz = dst_tensor->w * dst_tensor->h * dst_tensor->c;
 
-    if (!layer->net_state) {
+    if (state != TRAIN) {
         layer->saved_mean.data = bn_mean->data;
         layer->saved_variance.data = bn_var->data;
     }
@@ -290,11 +288,11 @@ int bcnn_forward_batchnorm_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *bn_scales = &net->tensors[node->src[3]];
     bcnn_tensor *bn_bias = &net->tensors[node->src[4]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_batchnorm_layer_gpu(node->layer, src, dst, bn_mean,
-                                            bn_var, bn_scales, bn_bias);
+    return bcnn_forward_batchnorm_layer_gpu(
+        node->layer, src, dst, bn_mean, bn_var, bn_scales, bn_bias, net->state);
 #else
-    return bcnn_forward_batchnorm_layer_cpu(node->layer, src, dst, bn_mean,
-                                            bn_var, bn_scales, bn_bias);
+    return bcnn_forward_batchnorm_layer_cpu(
+        node->layer, src, dst, bn_mean, bn_var, bn_scales, bn_bias, net->state);
 #endif
 }
 
@@ -306,10 +304,10 @@ int bcnn_backward_batchnorm_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *bn_scales = &net->tensors[node->src[3]];
     bcnn_tensor *bn_bias = &net->tensors[node->src[4]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_batchnorm_layer_gpu(node->layer, src, dst, bn_mean,
-                                             bn_var, bn_scales, bn_bias);
+    return bcnn_backward_batchnorm_layer_gpu(
+        node->layer, src, dst, bn_mean, bn_var, bn_scales, bn_bias, net->state);
 #else
-    return bcnn_backward_batchnorm_layer_cpu(node->layer, src, dst, bn_mean,
-                                             bn_var, bn_scales, bn_bias);
+    return bcnn_backward_batchnorm_layer_cpu(
+        node->layer, src, dst, bn_mean, bn_var, bn_scales, bn_bias, net->state);
 #endif
 }

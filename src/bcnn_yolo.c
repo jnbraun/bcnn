@@ -46,7 +46,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                           net->tensors[node.src[0]].h,  // height
                           net->tensors[node.src[0]].w,  // width
                           1);
-    bcnn_tensor_allocate(&dst_tensor);
+    bcnn_tensor_allocate(&dst_tensor, net->state);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);
@@ -59,7 +59,8 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     // Setup layer biases
     char biases_name[256];
     sprintf(biases_name, "%s_b", src_id);
-    bcnn_tensor_create(&node.layer->biases, 1, 1, 1, total * 2, 1, biases_name);
+    bcnn_tensor_create(&node.layer->biases, 1, 1, 1, total * 2, 0, biases_name,
+                       net->state);
     bcnn_tensor_filler w_filler = {.value = 0.5f, .type = FIXED};
     bcnn_tensor_fill(&node.layer->biases, w_filler);
     if (anchors != NULL) {
@@ -220,13 +221,17 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
                 (1 + layer->classes) * src_tensor->w * src_tensor->h, LOGISTIC);
         }
     }
-    if (layer->net_state == 0 || net->task == PREDICT) {  // state != train
+    if (net->state != TRAIN) {
         return;
     }
+    fprintf(stderr, "t0\n");
     if (dst_tensor->grad_data) {
+        fprintf(stderr, "t0 %p\n", dst_tensor->grad_data);
         memset(dst_tensor->grad_data, 0,
                bcnn_tensor_size(dst_tensor) * sizeof(float));
+        fprintf(stderr, "t1 %p\n", dst_tensor->grad_data);
     }
+    fprintf(stderr, "label %p\n", label->data);
     // This part is for training
     float avg_iou = 0;
     float recall = 0;
@@ -393,7 +398,7 @@ void bcnn_forward_yolo_layer_gpu(bcnn_net *net, bcnn_layer *layer,
     int sz = bcnn_tensor_size(src_tensor);
     bcnn_cuda_memcpy_dev2host(src_tensor->data_gpu, src_tensor->data, sz);
     bcnn_forward_yolo_layer_cpu(net, layer, src_tensor, label, dst_tensor);
-    if (layer->net_state) {  // state == train
+    if (net->state == TRAIN) {
         sz = bcnn_tensor_size(dst_tensor);
         bcnn_cuda_memcpy_host2dev(dst_tensor->grad_data_gpu,
                                   dst_tensor->grad_data, sz);

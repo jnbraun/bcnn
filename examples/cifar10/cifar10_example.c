@@ -63,6 +63,8 @@ int create_network(bcnn_net *net) {
     bcnn_add_cost_layer(net, EUCLIDEAN_LOSS, COST_ERROR, 1.0f, "softmax",
                         "label", "cost");
 
+    bcnn_compile_net(net);
+
     // Data augmentation
     net->data_aug.range_shift_x = 10;
     net->data_aug.range_shift_y = 10;
@@ -90,6 +92,7 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
     int output_size =
         bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
 
+    net->state = VALID;
     if (bcnn_iterator_initialize(net, &data_iter, test_img, NULL, "cifar10") !=
         0) {
         return -1;
@@ -100,8 +103,6 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
         fprintf(stderr, "[ERROR] Could not open file %s", pred_out);
         return -1;
     }
-
-    bcnn_compile_net(net, "predict");
 
     n = nb_pred / net->batch_size;
     for (i = 0; i < n; ++i) {
@@ -140,12 +141,11 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
     bh_timer t = {0}, tp = {0};
     bcnn_iterator data_iter = {0};
 
+    net->state = TRAIN;
     if (bcnn_iterator_initialize(net, &data_iter, train_img, NULL, "cifar10") !=
         0) {
         return -1;
     }
-
-    bcnn_compile_net(net, "train");
 
     bh_timer_start(&t);
     for (i = 0; i < nb_iter; ++i) {
@@ -168,7 +168,7 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
             bh_timer_start(&t);
             sum_error = 0;
             // Reschedule net for training
-            bcnn_compile_net(net, "train");
+            net->state = TRAIN;
         }
     }
 
@@ -183,6 +183,7 @@ int run(char *train_data, char *test_data) {
     bcnn_net *net = NULL;
 
     bcnn_init_net(&net);
+    net->state = TRAIN;
     BCNN_INFO(net->log_ctx, "Create Network...");
     create_network(net);
 
@@ -193,6 +194,7 @@ int run(char *train_data, char *test_data) {
     }
 
     BCNN_INFO(net->log_ctx, "Start prediction...");
+    net->state = VALID;
     predict_cifar10(net, test_data, &error_test, 10000,
                     "predictions_cifar10.txt");
     BCNN_INFO(net->log_ctx, "Prediction ended successfully");

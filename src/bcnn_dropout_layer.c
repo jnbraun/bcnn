@@ -66,12 +66,13 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
 }
 
 int bcnn_forward_dropout_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                   bcnn_tensor *dst_tensor) {
+                                   bcnn_tensor *dst_tensor, bcnn_state state) {
     int i, sz = bcnn_tensor_size(src_tensor);
     float r;
 
-    if (!layer->net_state)  // state != train
+    if (state != TRAIN) {
         return BCNN_SUCCESS;
+    }
 
     for (i = 0; i < sz; ++i) {
         r = (float)rand() / RAND_MAX;
@@ -89,9 +90,9 @@ int bcnn_forward_dropout_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_dropout_layer_gpu(node->layer, src, dst);
+    return bcnn_forward_dropout_layer_gpu(node->layer, src, dst, net->state);
 #else
-    return bcnn_forward_dropout_layer_cpu(node->layer, src, dst);
+    return bcnn_forward_dropout_layer_cpu(node->layer, src, dst, net->state);
 #endif
 }
 

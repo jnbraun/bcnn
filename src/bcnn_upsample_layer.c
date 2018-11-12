@@ -54,7 +54,7 @@ bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, char *src_id,
                           net->tensors[node.src[0]].h * size,  // height
                           net->tensors[node.src[0]].w * size,  // width
                           1);
-    bcnn_tensor_allocate(&dst_tensor);
+    bcnn_tensor_allocate(&dst_tensor, net->state);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);

@@ -65,6 +65,11 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
         bh_strstrip(line);
         switch (line[0]) {
             case '{':
+                BCNN_CHECK_AND_LOG(
+                    net->log_ctx, (net->state != UNKNOWN),
+                    BCNN_INVALID_PARAMETER,
+                    "Unknown value for 'task' field, available parameters: "
+                    "TRAIN, PREDICT");
                 if (nb_layers > 0) {
                     if (nb_layers == 1) {
                         BCNN_CHECK_AND_LOG(
@@ -221,10 +226,9 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                                    "Wrong format option in config file");
                 if (strcmp(tok[0], "task") == 0) {
                     if (strcmp(tok[1], "train") == 0)
-                        param->task = TRAIN;
+                        net->state = TRAIN;
                     else if (strcmp(tok[1], "predict") == 0) {
-                        param->task = PREDICT;
-                        net->task = PREDICT;
+                        net->state = PREDICT;
                     } else
                         BCNN_ERROR(
                             net->log_ctx, BCNN_INVALID_PARAMETER,
@@ -465,8 +469,6 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
         return -1;  // TODO: proper error return
     }
 
-    bcnn_compile_net(net, "train");
-
     bh_timer_start(&t);
     for (i = 0; i < nb_iter; ++i) {
         bcnn_train_on_batch(net, &iter_data, &error_batch);
@@ -490,7 +492,6 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
             fflush(stderr);
             bh_timer_start(&t);
             sum_error = 0;
-            if (param->eval_test) bcnn_compile_net(net, "train");
         }
         if (i % param->save_model == 0 && i > 0) {
             sprintf(chk_pt_path, "%s_iter%d.bcnnmodel", param->output_model, i);
@@ -536,8 +537,6 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
             }
         }
     }
-
-    bcnn_compile_net(net, "predict");
 
     n = param->nb_pred / batch_size;
     for (i = 0; i < n; ++i) {
@@ -782,7 +781,7 @@ int run(char *config_file) {
     // Initialize network from config file
     BCNN_CHECK_STATUS(bcnncl_init_from_config(net, config_file, &param));
 
-    if (param.task == TRAIN) {
+    if (net->state == TRAIN) {
         if (param.input_model != NULL) {
             fprintf(stderr, "[INFO] Loading pre-trained model %s\n",
                     param.input_model);
@@ -791,13 +790,15 @@ int run(char *config_file) {
         BCNN_INFO(net->log_ctx, "Start training...");
         BCNN_CHECK_STATUS(bcnncl_train(net, &param, &error_train));
         if (param.pred_out != NULL) {
+            net->state = VALID;
             BCNN_CHECK_STATUS(bcnncl_predict(net, &param, &error_valid, 1));
+            net->state = TRAIN;
         }
         if (param.output_model != NULL) {
             bcnn_write_model(net, param.output_model);
         }
         BCNN_INFO(net->log_ctx, "Training ended successfully");
-    } else if (param.task == PREDICT) {
+    } else if (net->state == PREDICT) {
         if (param.input_model != NULL)
             bcnn_load_model(net, param.input_model);
         else {

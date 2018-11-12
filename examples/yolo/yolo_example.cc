@@ -241,7 +241,7 @@ void setup_yolov3_tiny_net(bcnn_net *net, int input_width, int input_height,
     float anchors2[12] = {10, 14, 23, 27, 37, 58, 81, 82, 135, 169, 344, 319};
     bcnn_add_yolo_layer(net, boxes_per_cell, num_classes, 4, 6, mask2, anchors2,
                         (char *)"conv14", (char *)"yolo2");
-    bcnn_compile_net(net, (char *)"predict");
+    bcnn_compile_net(net);
     // Load yolo parameters
     load_yolo_weights(net, model);
 }
@@ -482,7 +482,7 @@ void setup_yolov3_net(bcnn_net *net, int input_width, int input_height,
     bcnn_add_yolo_layer(net, boxes_per_cell, num_classes, 4, 9, mask3, anchors,
                         (char *)"conv29", (char *)"yolo3");
 
-    bcnn_compile_net(net, (char *)"predict");
+    bcnn_compile_net(net);
     // Load yolo parameters
     load_yolo_weights(net, model);
 }
@@ -732,6 +732,8 @@ int run(int argc, char **argv) {
     // Init net
     bcnn_net *net = NULL;
     bcnn_init_net(&net);
+    net->state = PREDICT;
+    net->prediction_type = DETECTION;
     // Setup net and weights
     char **toks = NULL;
     int ntoks = bh_strsplit(argv[3], '/', &toks);

@@ -79,7 +79,7 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
         &dst_tensor, net->tensors[node.src[0]].n,
         net->tensors[node.src[0]].c + net->tensors[node.src[1]].c,
         net->tensors[node.src[0]].h, net->tensors[node.src[0]].w, 1);
-    bcnn_tensor_allocate(&dst_tensor);
+    bcnn_tensor_allocate(&dst_tensor, net->state);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);

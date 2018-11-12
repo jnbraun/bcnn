@@ -48,7 +48,7 @@ void add_reshape_node(bcnn_net* net, int dst_n, int dst_c, int dst_h, int dst_w,
         bcnn_node_add_input(net, &node, 0);
     }
     bcnn_tensor_set_shape(&dst_tensor, dst_n, dst_c, dst_h, dst_w, 1);
-    bcnn_tensor_allocate(&dst_tensor);
+    bcnn_tensor_allocate(&dst_tensor, net->state);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
@@ -616,10 +616,9 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
                                    "Wrong format option in config file");
                 if (strcmp(tok[0], "task") == 0) {
                     if (strcmp(tok[1], "train") == 0)
-                        param->task = TRAIN;
+                        net->state = TRAIN;
                     else if (strcmp(tok[1], "predict") == 0) {
-                        param->task = PREDICT;
-                        net->task = PREDICT;
+                        net->state = PREDICT;
                     } else
                         BCNN_ERROR(
                             net->log_ctx, BCNN_INVALID_PARAMETER,

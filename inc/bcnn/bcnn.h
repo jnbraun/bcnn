@@ -139,10 +139,7 @@ typedef enum {
 /**
  * \brief Enum of available tasks.
  */
-typedef enum {
-    TRAIN,
-    PREDICT,
-} bcnn_task;
+typedef enum { UNKNOWN, PREDICT, TRAIN, VALID } bcnn_state;
 
 typedef enum {
     CLASSIFICATION,
@@ -388,7 +385,7 @@ typedef struct tensor_filler {
 } bcnn_tensor_filler;
 
 void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
-                        int has_grad, char *name);
+                        int has_grad, char *name, int net_state);
 
 void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler);
 
@@ -397,7 +394,7 @@ void bcnn_tensor_destroy(bcnn_tensor *t);
 void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w,
                            int has_grad);
 
-void bcnn_tensor_allocate(bcnn_tensor *t);
+void bcnn_tensor_allocate(bcnn_tensor *t, int net_state);
 
 void bcnn_tensor_free(bcnn_tensor *t);
 
@@ -416,7 +413,6 @@ typedef struct bcnn_layer {
     int stride;
     int pad;
     int quantize;
-    int net_state;
     bcnn_layer_type type;
     bcnn_activation activation;
     bcnn_loss loss;
@@ -484,7 +480,6 @@ typedef struct bcnn_layer {
 } bcnn_layer;
 
 typedef struct {
-    int state;
     int num_src;
     int *src;  // 'num_src' tensors indexes (net->tensors array)
     int num_dst;
@@ -508,8 +503,7 @@ typedef struct {
     bcnn_tensor *tensors; /**< Array of tensors hold in the network */
     bcnn_target prediction_type;
     bcnn_data_augment data_aug; /**< Parameters for online data augmentation */
-    bcnn_task task;
-    int state;
+    bcnn_state state;
     int nb_finetune;
     char **finetune_id;
     unsigned char *input_buffer;
@@ -541,7 +535,7 @@ bcnn_status bcnn_net_add_input(bcnn_net *net, int w, int h, int c, char *name);
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node);
 bcnn_status bcnn_free_node(bcnn_node *node);
 void bcnn_net_free_nodes(bcnn_net *net);
-void bcnn_net_free_tensors(bcnn_net *net);
+void bcnn_net_destroy_tensors(bcnn_net *net);
 
 bcnn_status bcnn_node_add_input(bcnn_net *net, bcnn_node *node, int index);
 bcnn_status bcnn_node_add_output(bcnn_net *net, bcnn_node *node, int index);
@@ -553,7 +547,7 @@ bcnn_status bcnn_end_net(bcnn_net **net);
 
 int bcnn_set_param(bcnn_net *net, char *name, char *val);
 
-bcnn_status bcnn_compile_net(bcnn_net *net, char *phase);
+bcnn_status bcnn_compile_net(bcnn_net *net);
 
 int bcnn_iterator_initialize(bcnn_net *net, bcnn_iterator *iter,
                              char *path_input, char *path_label, char *type);
@@ -653,7 +647,9 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
 /* TODO: move to private header */
 bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter);
 
-typedef struct { float x, y, w, h; } yolo_box;
+typedef struct {
+    float x, y, w, h;
+} yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;
@@ -698,11 +694,10 @@ bcnn_status bcnn_free_net(bcnn_net *cnn);
 int bcnn_load_image_from_csv(bcnn_net *net, char *str, int w, int h, int c,
                              unsigned char **img);
 int bcnn_load_image_from_path(bcnn_net *net, char *path, int w, int h, int c,
-                              unsigned char *img, int state, int *x_shift,
-                              int *y_shift);
+                              unsigned char *img, int *x_shift, int *y_shift);
 int bcnn_load_image_from_memory(bcnn_net *net, unsigned char *buffer,
                                 int buffer_size, int w, int h, int c,
-                                unsigned char **img, int state, int *x_shift,
+                                unsigned char **img, int *x_shift,
                                 int *y_shift);
 int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
                            bcnn_data_augment *param, unsigned char *buffer);

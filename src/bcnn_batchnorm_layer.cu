@@ -188,7 +188,7 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                                      bcnn_tensor *dst_tensor,
                                      bcnn_tensor *bn_mean, bcnn_tensor *bn_var,
                                      bcnn_tensor *bn_scales,
-                                     bcnn_tensor *bn_biases) {
+                                     bcnn_tensor *bn_biases, bcnn_state state) {
     int batch_size = src_tensor->n;
     int sz = dst_tensor->w * dst_tensor->h * dst_tensor->c;
 #ifdef BCNN_USE_CUDNN
@@ -203,7 +203,7 @@ int bcnn_forward_batchnorm_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
     bcnn_cuda_copy_f32(sz * batch_size, dst_tensor->data_gpu, 1,
                        layer->bn_workspace_gpu, 1);
 
-    if (layer->net_state) {
+    if (state == TRAIN) {
 #ifdef BCNN_USE_CUDNN
         bcnn_cudnn_check(cudnnBatchNormalizationForwardTraining(
             bcnn_cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &alpha, &beta,
@@ -272,14 +272,14 @@ int bcnn_backward_batchnorm_layer_gpu(bcnn_layer *layer,
                                       bcnn_tensor *dst_tensor,
                                       bcnn_tensor *bn_mean, bcnn_tensor *bn_var,
                                       bcnn_tensor *bn_scales,
-                                      bcnn_tensor *bn_biases) {
+                                      bcnn_tensor *bn_biases, bcnn_state state) {
     int batch_size = src_tensor->n;
     int sz = dst_tensor->w * dst_tensor->h * dst_tensor->c;
 #ifdef BCNN_USE_CUDNN
     float a_data = 1.0f, a_param = 1.0f;
     float b_data = 0.0f, b_param = 1.0f;
 #endif
-    if (!layer->net_state) {
+    if (state != TRAIN) {
         layer->saved_mean.data_gpu = bn_mean->data_gpu;
         layer->saved_variance.data_gpu = bn_var->data_gpu;
     }

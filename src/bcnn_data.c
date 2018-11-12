@@ -19,10 +19,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include "bcnn/bcnn.h"
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
-#include "bcnn/bcnn.h"
 
 /* include bip image processing lib */
 #include <bip/bip.h>
@@ -130,8 +130,7 @@ int bcnn_load_image_from_csv(bcnn_net *net, char *str, int w, int h, int c,
 /* Load image from disk, performs crop to fit the required size if needed and
  * copy in pre-allocated memory */
 int bcnn_load_image_from_path(bcnn_net *net, char *path, int w, int h, int c,
-                              unsigned char *img, int state, int *x_shift,
-                              int *y_shift) {
+                              unsigned char *img, int *x_shift, int *y_shift) {
     int w_img, h_img, c_img, x_ul = 0, y_ul = 0;
     unsigned char *buf = NULL, *pimg = NULL;
 
@@ -146,7 +145,8 @@ int bcnn_load_image_from_path(bcnn_net *net, char *path, int w, int h, int c,
     }
 
     if (w_img != w || h_img != h) {
-        if (state == 0) {  // state predict, always center crop
+        if (net->state == PREDICT ||
+            net->state == VALID) {  // state predict, always center crop
             x_ul = (w_img - w) / 2;
             y_ul = (h_img - h) / 2;
         } else {  // state train, random crop
@@ -170,7 +170,7 @@ int bcnn_load_image_from_path(bcnn_net *net, char *path, int w, int h, int c,
 
 int bcnn_load_image_from_memory(bcnn_net *net, unsigned char *buffer,
                                 int buffer_size, int w, int h, int c,
-                                unsigned char **img, int state, int *x_shift,
+                                unsigned char **img, int *x_shift,
                                 int *y_shift) {
     int w_img, h_img, c_img, x_ul = 0, y_ul = 0;
     unsigned char *tmp = NULL, *pimg = NULL;
@@ -187,7 +187,8 @@ int bcnn_load_image_from_memory(bcnn_net *net, unsigned char *buffer,
     }
 
     if (w_img != w || h_img != h) {
-        if (state == 0) {  // state predict, always center crop
+        if (net->state == PREDICT ||
+            net->state == VALID) {  // state predict, always center crop
             x_ul = (w_img - w) / 2;
             y_ul = (h_img - h) / 2;
         } else {  // state train, random crop
@@ -250,11 +251,10 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            n_img, n_labels);
-        BCNN_CHECK_AND_LOG(net->log_ctx,
-                           (net->input_height == iter->input_height &&
-                            net->input_width == iter->input_width),
-                           BCNN_INVALID_DATA,
-                           "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, (net->input_height == iter->input_height &&
+                           net->input_width == iter->input_width),
+            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
         iter->n_samples = n_img;
     }
 
@@ -347,8 +347,8 @@ static int bcnn_bin_iter(bcnn_net *net, bcnn_iterator *iter) {
     nr = fread(buf, 1, buf_sz, iter->f_input);
     bcnn_load_image_from_memory(net, buf, buf_sz, net->input_width,
                                 net->input_height, net->input_channels,
-                                &iter->input_uchar, net->state,
-                                &net->data_aug.shift_x, &net->data_aug.shift_y);
+                                &iter->input_uchar, &net->data_aug.shift_x,
+                                &net->data_aug.shift_y);
     bh_free(buf);
 
     // Read label
@@ -550,7 +550,7 @@ bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter) {
     bip_resize_bilinear(pimg, w_img, h_img, w_img * c_img, buf, nw, nh,
                         nw * c_img, c_img);
     int dx, dy;  // Canvas offsets
-    if (net->task == TRAIN && net->state) {
+    if (net->state == TRAIN) {
         dx = (int)bcnn_rand_between(0.f, (float)(net->input_width - nw));
         dy = (int)bcnn_rand_between(0.f, (float)(net->input_height - nh));
     } else {
@@ -563,7 +563,7 @@ bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter) {
                    net->input_width, net->input_height,
                    net->input_width * net->input_channels, net->input_channels);
     bh_free(buf);
-    if (net->task == TRAIN && net->state) {
+    if (net->state == TRAIN) {
         // TODO: only brightness / contrast / flip is currently supported for
         // detection
         net->data_aug.apply_fliph = 0;
@@ -576,7 +576,7 @@ bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter) {
     }
     memcpy(iter->input_uchar, net->input_buffer,
            net->input_channels * net->input_width * net->input_height);
-    if (net->task != PREDICT) {
+    if (net->state != PREDICT) {
         // Fill labels
         memset(iter->label_float, 0, iter->label_width * sizeof(float));
         int num_boxes = (n_tok - 1) / 5;
@@ -634,15 +634,15 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter) {
         line = bh_fgetline(iter->f_input);
     }
     n_tok = bh_strsplit(line, ' ', &tok);
-    if (net->task != PREDICT && net->prediction_type == CLASSIFICATION) {
+    if (net->state != PREDICT && net->prediction_type == CLASSIFICATION) {
         BCNN_CHECK_AND_LOG(net->log_ctx, n_tok == 2, BCNN_INVALID_DATA,
                            "Wrong data format for classification");
     }
     if (iter->type == ITER_LIST) {
-        bcnn_load_image_from_path(
-            net, tok[0], net->input_width, net->input_height,
-            net->input_channels, iter->input_uchar, net->state,
-            &net->data_aug.shift_x, &net->data_aug.shift_y);
+        bcnn_load_image_from_path(net, tok[0], net->input_width,
+                                  net->input_height, net->input_channels,
+                                  iter->input_uchar, &net->data_aug.shift_x,
+                                  &net->data_aug.shift_y);
     } else {
         bcnn_load_image_from_csv(net, tok[0], net->input_width,
                                  net->input_height, net->input_channels,
@@ -660,7 +660,7 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter) {
         for (i = 0; i < iter->label_width; ++i) {
             if (iter->type == ITER_LIST) {
                 bcnn_load_image_from_path(net, tok[i], out_w, out_h, out_c, img,
-                                          net->state, &tmp_x, &tmp_y);
+                                          &tmp_x, &tmp_y);
             } else {
                 bcnn_load_image_from_csv(net, tok[i], out_w, out_h, out_c,
                                          &img);
@@ -913,31 +913,24 @@ static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
         line = bh_fgetline(iter->f_input);
     }
     n_tok = bh_strsplit(line, ' ', &tok);
-    // fprintf(stderr, "ntok %d iter->label_width %d\n", n_tok,
-    // iter->label_width);
-    /*if (net->task != PREDICT && net->prediction_type == CLASSIFICATION) {
-        BCNN_CHECK_AND_LOG(net->log_ctx, n_tok == 2, BCNN_INVALID_DATA,
-                           "Wrong data format for classification");
-    }*/
 
     bcnn_load_image_from_path(net, tok[0], net->input_width, net->input_height,
                               net->input_channels, iter->input_uchar,
-                              net->state, &net->data_aug.shift_x,
-                              &net->data_aug.shift_y);
+                              &net->data_aug.shift_x, &net->data_aug.shift_y);
 #if defined(USE_HPONLY)
     iter->input_float[0] = atof(tok[1]);
     iter->input_float[1] = atof(tok[2]);
     iter->input_float[2] = atof(tok[3]);
 #elif defined(USE_2EYES)
     bcnn_load_image_from_path(net, tok[1], net->tensors[2].w, net->tensors[2].h,
-                              net->tensors[2].c, iter->input_uchar2, net->state,
+                              net->tensors[2].c, iter->input_uchar2,
                               &net->data_aug.shift_x, &net->data_aug.shift_y);
 #else
     bcnn_load_image_from_path(net, tok[1], net->tensors[2].w, net->tensors[2].h,
-                              net->tensors[2].c, iter->input_uchar2, net->state,
+                              net->tensors[2].c, iter->input_uchar2,
                               &net->data_aug.shift_x, &net->data_aug.shift_y);
     bcnn_load_image_from_path(net, tok[2], net->tensors[3].w, net->tensors[3].h,
-                              net->tensors[3].c, iter->input_uchar3, net->state,
+                              net->tensors[3].c, iter->input_uchar3,
                               &net->data_aug.shift_x, &net->data_aug.shift_y);
 #if defined(USE_GRID)
     iter->input_float[0] = atof(tok[3]);
@@ -945,14 +938,14 @@ static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
     iter->input_float[2] = atof(tok[5]);
 #elif defined(USE_FACECROP)
     bcnn_load_image_from_path(net, tok[3], net->tensors[4].w, net->tensors[4].h,
-                              net->tensors[4].c, iter->input_uchar4, net->state,
+                              net->tensors[4].c, iter->input_uchar4,
                               &net->data_aug.shift_x, &net->data_aug.shift_y);
     iter->input_float[0] = atof(tok[4]);
     iter->input_float[1] = atof(tok[5]);
     iter->input_float[2] = atof(tok[6]);
 #elif defined(USE_MASKHP)
     bcnn_load_image_from_path(net, tok[3], net->tensors[4].w, net->tensors[4].h,
-                              net->tensors[4].c, iter->input_uchar4, net->state,
+                              net->tensors[4].c, iter->input_uchar4,
                               &net->data_aug.shift_x, &net->data_aug.shift_y);
 #endif
 #endif  // USE_HPONLY
@@ -993,10 +986,10 @@ static int bcnn_multi_iter(bcnn_net *net, bcnn_iterator *iter) {
     } else {
         BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == 1 + 4), BCNN_INVALID_DATA,
                            "Unexpected label format");
-        bcnn_load_image_from_path(
-            net, tok[4], net->tensors[1].w, net->tensors[1].h,
-            net->tensors[1].c, iter->label_uchar, net->state,
-            &net->data_aug.shift_x, &net->data_aug.shift_y);
+        bcnn_load_image_from_path(net, tok[4], net->tensors[1].w,
+                                  net->tensors[1].h, net->tensors[1].c,
+                                  iter->label_uchar, &net->data_aug.shift_x,
+                                  &net->data_aug.shift_y);
     }
 
     bh_free(line);

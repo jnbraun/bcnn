@@ -61,7 +61,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                           net->tensors[node.src[0]].c,
                           net->tensors[node.src[0]].h,
                           net->tensors[node.src[0]].w, 0);
-    bcnn_tensor_allocate(&net->tensors[1]);
+    bcnn_tensor_allocate(&net->tensors[1], net->state);
     // Add pointer to label node to connection
     bcnn_node_add_input(net, &node, 1 /* LABEL_NODE_ID */);
 
@@ -69,7 +69,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
     bcnn_tensor_set_shape(
         &dst_tensor, net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
         net->tensors[node.src[0]].h, net->tensors[node.src[0]].w, 1);
-    bcnn_tensor_allocate(&dst_tensor);
+    bcnn_tensor_allocate(&dst_tensor, net->state);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);

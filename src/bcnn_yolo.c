@@ -224,14 +224,10 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
     if (net->state != TRAIN) {
         return;
     }
-    fprintf(stderr, "t0\n");
     if (dst_tensor->grad_data) {
-        fprintf(stderr, "t0 %p\n", dst_tensor->grad_data);
         memset(dst_tensor->grad_data, 0,
                bcnn_tensor_size(dst_tensor) * sizeof(float));
-        fprintf(stderr, "t1 %p\n", dst_tensor->grad_data);
     }
-    fprintf(stderr, "label %p\n", label->data);
     // This part is for training
     float avg_iou = 0;
     float recall = 0;

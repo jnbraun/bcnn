@@ -780,7 +780,7 @@ int run(char *config_file) {
     bcnn_init_net(&net);
     // Initialize network from config file
     BCNN_CHECK_STATUS(bcnncl_init_from_config(net, config_file, &param));
-
+    BCNN_CHECK_STATUS(bcnn_compile_net(net));
     if (net->state == TRAIN) {
         if (param.input_model != NULL) {
             fprintf(stderr, "[INFO] Loading pre-trained model %s\n",

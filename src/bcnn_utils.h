@@ -46,6 +46,10 @@ typedef struct {
 
 float bcnn_rng_gaussian(bcnn_gauss_gen *g);
 
+void bcnn_draw_color_box(unsigned char *img, int w_img, int h_img, float cx_box,
+                         float cy_box, float w_box, float h_box,
+                         unsigned char color[3]);
+
 #ifdef BCNN_USE_CUDA
 
 cublasHandle_t bcnn_cublas_handle();

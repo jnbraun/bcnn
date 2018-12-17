@@ -63,6 +63,40 @@ float bcnn_rng_gaussian(bcnn_gauss_gen *g) {
     }
 }
 
+void bcnn_draw_color_box(unsigned char *img, int w_img, int h_img, float cx_box,
+                         float cy_box, float w_box, float h_box,
+                         unsigned char color[3]) {
+    int x_tl = (cx_box - w_box / 2) * w_img;
+    int y_tl = (cy_box - h_box / 2) * h_img;
+    int wbox = w_box * w_img;
+    int hbox = h_box * h_img;
+    for (int p = x_tl; p < x_tl + wbox; ++p) {
+        if (p > 0 && p < w_img && y_tl > 0 && y_tl < h_img) {
+            img[3 * (y_tl * w_img + p)] = color[0];
+            img[3 * (y_tl * w_img + p) + 1] = color[1];
+            img[3 * (y_tl * w_img + p) + 2] = color[2];
+        }
+        if (p > 0 && p < w_img && y_tl + hbox > 0 && y_tl + hbox < h_img) {
+            img[3 * ((y_tl + hbox) * w_img + p)] = color[0];
+            img[3 * ((y_tl + hbox) * w_img + p) + 1] = color[1];
+            img[3 * ((y_tl + hbox) * w_img + p) + 2] = color[2];
+        }
+    }
+    // Vertical
+    for (int p = y_tl; p < y_tl + hbox; ++p) {
+        if (p > 0 && p < h_img && x_tl > 0 && x_tl < w_img) {
+            img[3 * (p * w_img + x_tl)] = color[0];
+            img[3 * (p * w_img + x_tl) + 1] = color[1];
+            img[3 * (p * w_img + x_tl) + 2] = color[2];
+        }
+        if (x_tl + wbox > 0 && x_tl + wbox < w_img && p > 0 && p < h_img) {
+            img[3 * (p * w_img + (x_tl + wbox))] = color[0];
+            img[3 * (p * w_img + (x_tl + wbox)) + 1] = color[1];
+            img[3 * (p * w_img + (x_tl + wbox)) + 2] = color[2];
+        }
+    }
+}
+
 #ifdef BCNN_USE_CUDA
 #ifdef BCNN_USE_CUDNN
 cudnnHandle_t bcnn_cudnn_handle() {

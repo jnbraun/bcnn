@@ -324,6 +324,10 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     if (num_srcids > 1) {
                         bh_strfill(&src_id2, srcids[1]);
                     }
+                    for (int i = 0; i < num_srcids; ++i) {
+                        bh_free(srcids[i]);
+                    }
+                    bh_free(srcids);
                 } else if (strcmp(tok[0], "dst") == 0)
                     bh_strfill(&dst_id, tok[1]);
                 else if (strcmp(tok[0], "output") == 0)

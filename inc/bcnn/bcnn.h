@@ -479,15 +479,26 @@ typedef struct bcnn_layer {
     bcnn_gemm_context *gemm_ctx;
 } bcnn_layer;
 
-typedef struct {
+struct bcnn_net;
+typedef struct bcnn_net bcnn_net;
+
+struct bcnn_node;
+typedef struct bcnn_node bcnn_node;
+
+struct bcnn_node {
     int num_src;
     int *src;  // 'num_src' tensors indexes (net->tensors array)
     int num_dst;
     int *dst;  // 'num_dst' tensors indexes (net->tensors array)
     bcnn_layer *layer;
-} bcnn_node;
+    size_t param_size;
+    bcnn_layer_type op_type;
+    void *param;
+    void (*forward)(struct bcnn_net *net, struct bcnn_node *node);
+    void (*backward)(struct bcnn_net *net, struct bcnn_node *node);
+};
 
-typedef struct {
+struct bcnn_net {
     int input_width;
     int input_height;
     int input_channels;
@@ -514,7 +525,7 @@ typedef struct {
 #endif
     bcnn_log_context log_ctx;
     bcnn_gemm_context *gemm_ctx;
-} bcnn_net;
+};
 
 /* Logging */
 void bcnn_log(bcnn_log_context ctx, bcnn_log_level level, const char *fmt, ...);
@@ -647,9 +658,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
 /* TODO: move to private header */
 bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter);
 
-typedef struct {
-    float x, y, w, h;
-} yolo_box;
+typedef struct { float x, y, w, h; } yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

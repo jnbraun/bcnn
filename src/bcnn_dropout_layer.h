@@ -29,14 +29,21 @@
 extern "C" {
 #endif
 
-int bcnn_forward_dropout_layer(bcnn_net *net, bcnn_node *node);
-int bcnn_backward_dropout_layer(bcnn_net *net, bcnn_node *node);
+typedef struct dropout_param {
+    float dropout_rate;
+    float scale;
+    float *rand;
+#ifdef BCNN_USE_CUDA
+    int *rand_gpu;
+#endif
+} dropout_param;
+
+void bcnn_forward_dropout_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_dropout_layer(bcnn_net *net, bcnn_node *node);
 
 #ifdef BCNN_USE_CUDA
-int bcnn_forward_dropout_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                   bcnn_tensor *dst_tensor, bcnn_state state);
-int bcnn_backward_dropout_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor);
+void bcnn_forward_dropout_layer_gpu(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_dropout_layer_gpu(bcnn_net *net, bcnn_node *node);
 #endif
 
 #ifdef __cplusplus

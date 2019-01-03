@@ -55,6 +55,19 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
     node.layer->rand_gpu = bcnn_cuda_memcpy_f32(node.layer->rand, sz);
 #endif
 
+    node.op_type = DROPOUT;
+    node.param_size = sizeof(dropout_param);
+    node.param = (dropout_param *)calloc(1, node.param_size);
+    dropout_param *param = (dropout_param *)node.param;
+    param->dropout_rate = rate;
+    param->rand = (float *)calloc(sz, sizeof(float));
+    param->scale = 1.0f / (1.0f - rate);
+#ifdef BCNN_USE_CUDA
+    param->rand_gpu = bcnn_cuda_memcpy_f32(param->rand, sz);
+#endif
+    node.forward = bcnn_forward_dropout_layer;
+    node.backward = bcnn_backward_dropout_layer;
+
     bcnn_net_add_node(net, node);
 
     BCNN_INFO(net->log_ctx,
@@ -65,63 +78,59 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
     return 0;
 }
 
-int bcnn_forward_dropout_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                   bcnn_tensor *dst_tensor, bcnn_state state) {
-    int i, sz = bcnn_tensor_size(src_tensor);
-    float r;
+void bcnn_forward_dropout_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    dropout_param *param = (dropout_param *)node->param;
+    int sz = bcnn_tensor_size(src_tensor);
 
-    if (state != TRAIN) {
-        return BCNN_SUCCESS;
+    if (net->state != TRAIN) {
+        return;
     }
-
-    for (i = 0; i < sz; ++i) {
-        r = (float)rand() / RAND_MAX;
-        layer->rand[i] = r;
-        if (r < layer->dropout_rate) {
+    for (int i = 0; i < sz; ++i) {
+        float r = (float)rand() / RAND_MAX;
+        param->rand[i] = r;
+        if (r < param->dropout_rate) {
             src_tensor->data[i] = 0;
         } else {
-            src_tensor->data[i] *= layer->scale;
+            src_tensor->data[i] *= param->scale;
         }
     }
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_forward_dropout_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
+void bcnn_forward_dropout_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_dropout_layer_gpu(node->layer, src, dst, net->state);
+    return bcnn_forward_dropout_layer_gpu(net, node);
 #else
-    return bcnn_forward_dropout_layer_cpu(node->layer, src, dst, net->state);
+    return bcnn_forward_dropout_layer_cpu(net, node);
 #endif
 }
 
-int bcnn_backward_dropout_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor) {
-    int i, sz = bcnn_tensor_size(src_tensor);
-    float r;
+void bcnn_backward_dropout_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    dropout_param *param = (dropout_param *)node->param;
+    int sz = bcnn_tensor_size(src_tensor);
 
     if (!src_tensor->grad_data) {
-        return BCNN_SUCCESS;
+        return;
     }
-
-    for (i = 0; i < sz; ++i) {
-        r = layer->rand[i];
-        if (r < layer->dropout_rate) {
+    for (int i = 0; i < sz; ++i) {
+        float r = param->rand[i];
+        if (r < param->dropout_rate) {
             src_tensor->grad_data[i] = 0;
         } else {
-            src_tensor->grad_data[i] *= layer->scale;
+            src_tensor->grad_data[i] *= param->scale;
         }
     }
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_backward_dropout_layer(bcnn_net *net, bcnn_node *node) {
+void bcnn_backward_dropout_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_dropout_layer_gpu(node->layer, src, dst);
+    return bcnn_backward_dropout_layer_gpu(net, node);
 #else
-    return bcnn_backward_dropout_layer_cpu(node->layer, src, dst);
+    return bcnn_backward_dropout_layer_cpu(net, node);
 #endif
 }

@@ -52,7 +52,7 @@ int bcnn_forward_dropout_layer_gpu(bcnn_net *net, bcnn_node *node)
 int bcnn_backward_dropout_layer_gpu(bcnn_net *net, bcnn_node *node)
 {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
-    dropout_param *param = (dropout_param *)node->param;
+    bcnn_dropout_param *param = (bcnn_dropout_param *)node->param;
     int size = bcnn_tensor_size(src_tensor);
 
     if (!src_tensor->grad_data_gpu) {

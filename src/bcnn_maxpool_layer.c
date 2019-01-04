@@ -116,10 +116,10 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
 #endif
 #endif
 
-    node.op_type = MAXPOOL;
-    node.param_size = sizeof(maxpool_param);
-    node.param = (maxpool_param *)calloc(1, node.param_size);
-    maxpool_param *param = (maxpool_param *)node.param;
+    node.type = MAXPOOL;
+    node.param_size = sizeof(bcnn_maxpool_param);
+    node.param = (bcnn_maxpool_param *)calloc(1, node.param_size);
+    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node.param;
     param->size = size;
     param->stride = stride;
     param->indexes = (int *)calloc(sz, sizeof(int));
@@ -208,7 +208,7 @@ void bcnn_forward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 void bcnn_forward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
-    maxpool_param *param = (maxpool_param *)node->param;
+    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node->param;
     int size = param->size;
     int stride = param->stride;
     int *indexes = param->indexes;
@@ -340,7 +340,7 @@ void bcnn_backward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 void bcnn_backward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
-    maxpool_param *param = (maxpool_param *)node->param;
+    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node->param;
     int *indexes = param->indexes;
     int i, index;
 

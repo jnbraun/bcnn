@@ -66,6 +66,10 @@ bcnn_status bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {
     node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
     node.layer->type = SOFTMAX;
 
+    node.type = SOFTMAX;
+    node.forward = bcnn_forward_softmax_layer;
+    node.backward = bcnn_backward_softmax_layer;
+
     bcnn_net_add_node(net, node);
 
     BCNN_INFO(net->log_ctx,
@@ -77,8 +81,9 @@ bcnn_status bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {
     return BCNN_SUCCESS;
 }
 
-int bcnn_forward_softmax_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                   bcnn_tensor *dst_tensor) {
+void bcnn_forward_softmax_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     int b, i, batch_size = src_tensor->n;
     int src_size = bcnn_tensor_size3d(src_tensor);
     float vmax = -FLT_MAX;
@@ -142,35 +147,32 @@ int bcnn_forward_softmax_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             }
         }
     }
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_backward_softmax_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor) {
-    int i;
+void bcnn_backward_softmax_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     int sz = bcnn_tensor_size(src_tensor);
 
-    for (i = 0; i < sz; ++i)
+    for (int i = 0; i < sz; ++i) {
         src_tensor->grad_data[i] += dst_tensor->grad_data[i];
-    return BCNN_SUCCESS;
+    }
+    return;
 }
 
-int bcnn_forward_softmax_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
+void bcnn_forward_softmax_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_softmax_layer_gpu(node->layer, src, dst);
+    return bcnn_forward_softmax_layer_gpu(net, node);
 #else
-    return bcnn_forward_softmax_layer_cpu(node->layer, src, dst);
+    return bcnn_forward_softmax_layer_cpu(net, node);
 #endif
 }
 
-int bcnn_backward_softmax_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
+void bcnn_backward_softmax_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_softmax_layer_gpu(node->layer, src, dst);
+    return bcnn_backward_softmax_layer_gpu(net, node);
 #else
-    return bcnn_backward_softmax_layer_cpu(node->layer, src, dst);
+    return bcnn_backward_softmax_layer_cpu(net, node);
 #endif
 }

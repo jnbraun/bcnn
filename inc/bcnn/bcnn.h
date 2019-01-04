@@ -492,7 +492,7 @@ struct bcnn_node {
     int *dst;  // 'num_dst' tensors indexes (net->tensors array)
     bcnn_layer *layer;
     size_t param_size;
-    bcnn_layer_type op_type;
+    bcnn_layer_type type;
     void *param;
     void (*forward)(struct bcnn_net *net, struct bcnn_node *node);
     void (*backward)(struct bcnn_net *net, struct bcnn_node *node);
@@ -658,7 +658,9 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
 /* TODO: move to private header */
 bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter);
 
-typedef struct { float x, y, w, h; } yolo_box;
+typedef struct {
+    float x, y, w, h;
+} yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

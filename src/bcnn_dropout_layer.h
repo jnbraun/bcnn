@@ -29,14 +29,14 @@
 extern "C" {
 #endif
 
-typedef struct dropout_param {
+typedef struct bcnn_dropout_param {
     float dropout_rate;
     float scale;
     float *rand;
 #ifdef BCNN_USE_CUDA
     int *rand_gpu;
 #endif
-} dropout_param;
+} bcnn_dropout_param;
 
 void bcnn_forward_dropout_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_dropout_layer(bcnn_net *net, bcnn_node *node);

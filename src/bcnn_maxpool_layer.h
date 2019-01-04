@@ -29,7 +29,7 @@
 extern "C" {
 #endif
 
-typedef struct maxpool_param {
+typedef struct bcnn_maxpool_param {
     int size;
     int stride;
     int *indexes;
@@ -41,7 +41,7 @@ typedef struct maxpool_param {
     cudnnPoolingDescriptor_t pooling_desc;
 #endif
 #endif
-} maxpool_param;
+} bcnn_maxpool_param;
 
 void bcnn_forward_maxpool_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_maxpool_layer(bcnn_net *net, bcnn_node *node);

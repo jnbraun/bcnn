@@ -34,7 +34,7 @@ typedef struct bcnn_dropout_param {
     float scale;
     float *rand;
 #ifdef BCNN_USE_CUDA
-    int *rand_gpu;
+    float *rand_gpu;
 #endif
 } bcnn_dropout_param;
 

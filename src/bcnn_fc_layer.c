@@ -113,6 +113,25 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
 #endif
     node.layer->activation = activation;
 
+    node.type = FULL_CONNECTED;
+    node.param_size = sizeof(bcnn_fullc_param);
+    node.param = (bcnn_fullc_param *)calloc(1, node.param_size);
+    bcnn_fullc_param *param = (bcnn_fullc_param *)node.param;
+    if (net->learner.optimizer == ADAM) {
+        int weights_size = bcnn_tensor_size(&weights);
+        param->adam_m = (float *)calloc(weights_size, sizeof(float));
+        param->adam_v = (float *)calloc(weights_size, sizeof(float));
+    }
+#ifdef BCNN_USE_CUDA
+    if (net->learner.optimizer == ADAM) {
+        int weights_size = bcnn_tensor_size(&weights);
+        param->adam_m_gpu = bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
+        param->adam_v_gpu = bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
+    }
+#endif
+    node.forward = bcnn_forward_fullc_layer;
+    node.backward = bcnn_backward_fullc_layer;
+
     bcnn_net_add_node(net, node);
 
     BCNN_INFO(net->log_ctx,
@@ -121,13 +140,16 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
               net->tensors[node.src[0]].c, net->tensors[node.dst[0]].w,
               net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);
 
-    return 0;
+    return BCNN_SUCCESS;
 }
 
-int bcnn_forward_fullc_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                 bcnn_tensor *dst_tensor, bcnn_tensor *weights,
-                                 bcnn_tensor *biases) {
-    int i, batch_size = dst_tensor->n;
+void bcnn_forward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_tensor *weights = &net->tensors[node->src[1]];
+    bcnn_tensor *biases = &net->tensors[node->src[2]];
+    bcnn_fullc_param *param = (bcnn_fullc_param *)node->param;
+    int batch_size = dst_tensor->n;
     int src_size = bcnn_tensor_size3d(src_tensor);
     int dst_size = bcnn_tensor_size3d(dst_tensor);
     int sz = bcnn_tensor_size(dst_tensor);
@@ -140,31 +162,35 @@ int bcnn_forward_fullc_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                 src_size, 1.0f, dst_tensor->data, dst_size);
 #else
     // Original
-    bcnn_gemm(layer->gemm_ctx, 0, 1, batch_size, dst_size, src_size, 1.0f,
+    bcnn_gemm(net->gemm_ctx, 0, 1, batch_size, dst_size, src_size, 1.0f,
               src_tensor->data, src_size, weights->data, src_size, 1.0f,
               dst_tensor->data, dst_size);
 #endif
 
-    for (i = 0; i < batch_size; ++i)
+    for (int i = 0; i < batch_size; ++i) {
         bcnn_axpy(dst_size, 1, biases->data, dst_tensor->data + i * dst_size);
+    }
 
-    bcnn_forward_activation_cpu(dst_tensor->data, sz, layer->activation);
+    bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
 
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_backward_fullc_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                  bcnn_tensor *dst_tensor, bcnn_tensor *weights,
-                                  bcnn_tensor *biases) {
-    int i, batch_size = dst_tensor->n;
+void bcnn_backward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_tensor *weights = &net->tensors[node->src[1]];
+    bcnn_tensor *biases = &net->tensors[node->src[2]];
+    bcnn_fullc_param *param = (bcnn_fullc_param *)node->param;
+    int batch_size = dst_tensor->n;
     int src_size = bcnn_tensor_size3d(src_tensor);
     int dst_size = bcnn_tensor_size3d(dst_tensor);
     int sz = bcnn_tensor_size(dst_tensor);
 
     bcnn_backward_activation_cpu(dst_tensor->data, dst_tensor->grad_data, sz,
-                                 layer->activation);
+                                 param->activation);
 
-    for (i = 0; i < batch_size; ++i) {
+    for (int i = 0; i < batch_size; ++i) {
         bcnn_axpy(dst_size, 1, dst_tensor->grad_data + i * dst_size,
                   biases->grad_data);
     }
@@ -175,7 +201,7 @@ int bcnn_backward_fullc_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                 src_tensor->data, src_size, 1.0f, weights->grad_data, src_size);
 #else
     // Original
-    bcnn_gemm(layer->gemm_ctx, 1, 0, dst_size, src_size, batch_size, 1.0f,
+    bcnn_gemm(net->gemm_ctx, 1, 0, dst_size, src_size, batch_size, 1.0f,
               dst_tensor->grad_data, dst_size, src_tensor->data, src_size, 1.0f,
               weights->grad_data, src_size);
 #endif
@@ -188,20 +214,23 @@ int bcnn_backward_fullc_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                     src_size);
 #else
         // Original
-        bcnn_gemm(layer->gemm_ctx, 0, 0, batch_size, src_size, dst_size, 1.0f,
+        bcnn_gemm(net->gemm_ctx, 0, 0, batch_size, src_size, dst_size, 1.0f,
                   dst_tensor->grad_data, dst_size, weights->data, src_size,
                   1.0f, src_tensor->grad_data, src_size);
 #endif
     }
 
-    return BCNN_SUCCESS;
+    return;
 }
 
 #ifdef BCNN_USE_CUDA
-int bcnn_forward_fullc_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                 bcnn_tensor *dst_tensor, bcnn_tensor *weights,
-                                 bcnn_tensor *biases) {
-    int i, batch_size = dst_tensor->n;
+void bcnn_forward_fullc_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_tensor *weights = &net->tensors[node->src[1]];
+    bcnn_tensor *biases = &net->tensors[node->src[2]];
+    bcnn_fullc_param *param = (bcnn_fullc_param *)node->param;
+    int batch_size = dst_tensor->n;
     int src_size = bcnn_tensor_size3d(src_tensor);
     int dst_size = bcnn_tensor_size3d(dst_tensor);
     int sz = bcnn_tensor_size(dst_tensor);
@@ -212,27 +241,30 @@ int bcnn_forward_fullc_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                    src_tensor->data_gpu, src_size, weights->data_gpu, src_size,
                    1, dst_tensor->data_gpu, dst_size);
 
-    for (i = 0; i < batch_size; ++i) {
+    for (int i = 0; i < batch_size; ++i) {
         bcnn_cuda_axpy(dst_size, 1, biases->data_gpu, 1,
                        dst_tensor->data_gpu + i * dst_size, 1);
     }
-    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, layer->activation);
+    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, param->activation);
 
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_backward_fullc_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                  bcnn_tensor *dst_tensor, bcnn_tensor *weights,
-                                  bcnn_tensor *biases) {
-    int i, batch_size = dst_tensor->n;
+void bcnn_backward_fullc_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_tensor *weights = &net->tensors[node->src[1]];
+    bcnn_tensor *biases = &net->tensors[node->src[2]];
+    bcnn_fullc_param *param = (bcnn_fullc_param *)node->param;
+    int batch_size = dst_tensor->n;
     int src_size = bcnn_tensor_size3d(src_tensor);
     int dst_size = bcnn_tensor_size3d(dst_tensor);
     int sz = bcnn_tensor_size(dst_tensor);
 
     bcnn_backward_activation_gpu(
-        dst_tensor->data_gpu, dst_tensor->grad_data_gpu, sz, layer->activation);
+        dst_tensor->data_gpu, dst_tensor->grad_data_gpu, sz, param->activation);
 
-    for (i = 0; i < batch_size; ++i) {
+    for (int i = 0; i < batch_size; ++i) {
         bcnn_cuda_axpy(dst_size, 1, dst_tensor->grad_data_gpu + i * dst_size, 1,
                        biases->grad_data_gpu, 1);
     }
@@ -246,32 +278,22 @@ int bcnn_backward_fullc_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
                        src_size, 1, src_tensor->grad_data_gpu, src_size);
     }
 
-    return BCNN_SUCCESS;
+    return;
 }
 #endif
 
-int bcnn_forward_fullc_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
-    bcnn_tensor *weights = &net->tensors[node->src[1]];
-    bcnn_tensor *biases = &net->tensors[node->src[2]];
+void bcnn_forward_fullc_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_fullc_layer_gpu(node->layer, src, dst, weights, biases);
+    return bcnn_forward_fullc_layer_gpu(net, node);
 #else
-    return bcnn_forward_fullc_layer_cpu(node->layer, src, dst, weights, biases);
+    return bcnn_forward_fullc_layer_cpu(net, node);
 #endif
 }
 
-int bcnn_backward_fullc_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
-    bcnn_tensor *weights = &net->tensors[node->src[1]];
-    bcnn_tensor *biases = &net->tensors[node->src[2]];
+void bcnn_backward_fullc_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_fullc_layer_gpu(node->layer, src, dst, weights,
-                                         biases);
+    return bcnn_backward_fullc_layer_gpu(net, node);
 #else
-    return bcnn_backward_fullc_layer_cpu(node->layer, src, dst, weights,
-                                         biases);
+    return bcnn_backward_fullc_layer_cpu(net, node);
 #endif
 }

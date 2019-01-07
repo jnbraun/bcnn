@@ -170,13 +170,12 @@ int main(int argc, char** argv) {
             fprintf(f_conf, "\n{conv}\n");
             fprintf(f_conf, "filters=%d\n", convolution_param.num_output());
             fprintf(f_conf, "size=%d\n", convolution_param.kernel_size(0));
-            fprintf(f_conf, "stride=%d\n",
-                    convolution_param.stride_size() != 0
-                        ? convolution_param.stride(0)
-                        : 1);
-            fprintf(f_conf, "pad=%d\n",
-                    convolution_param.pad_size() != 0 ? convolution_param.pad(0)
-                                                      : 0);
+            fprintf(f_conf, "stride=%d\n", convolution_param.stride_size() != 0
+                                               ? convolution_param.stride(0)
+                                               : 1);
+            fprintf(f_conf, "pad=%d\n", convolution_param.pad_size() != 0
+                                            ? convolution_param.pad(0)
+                                            : 0);
             fprintf(f_conf, "num_groups=%d\n", convolution_param.group());
             // Write bias
             if (convolution_param.bias_term()) {
@@ -192,10 +191,10 @@ int main(int argc, char** argv) {
             fwrite(weights_blob.data().data(), sizeof(float),
                    weights_blob.data_size(), f_dat);
         } else if (layer.type() == "Dropout") {
-            const caffe::DropoutParameter& dropout_param =
-                layer.dropout_param();
+            const caffe::DropoutParameter& bcnn_dropout_param =
+                layer.bcnn_dropout_param();
             fprintf(f_conf, "\n{dropout}\n");
-            float scale = 1.0f - dropout_param.dropout_ratio();
+            float scale = 1.0f - bcnn_dropout_param.dropout_ratio();
             fprintf(f_conf, " rate=%f\n", scale);
 
         } else if (layer.type() == "InnerProduct") {

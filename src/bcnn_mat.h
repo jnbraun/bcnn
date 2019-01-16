@@ -78,8 +78,8 @@ extern "C" {
 typedef struct bcnn_gemm_context {
 #if !defined(BCNN_USE_BLAS) && !defined(BCNN_USE_CUDA)
 #if (defined(__aarch64__))  // use sgemm_openblas
-    float buffer_a[(((MC + NC) * KC * sizeof(float) + GEMM_ALIGN) &
-                    ~(GEMM_ALIGN))] __attribute__((aligned(32)));
+    float buffer_a[(((MC + NC) * KC + GEMM_ALIGN) & ~(GEMM_ALIGN))]
+        __attribute__((aligned(32)));
     float *buffer_b;
     float *buffer_c;
     float *buffer_ab;

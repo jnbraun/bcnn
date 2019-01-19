@@ -61,9 +61,13 @@ bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, char *src_id,
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = UPSAMPLE;
-    node.layer->size = size;
+    node.type = UPSAMPLE;
+    node.param_size = sizeof(bcnn_upsample_param);
+    node.param = (bcnn_upsample_param *)calloc(1, node.param_size);
+    bcnn_upsample_param *param = (bcnn_upsample_param *)node.param;
+    param->size = size;
+    node.forward = bcnn_forward_upsample_layer;
+    node.backward = bcnn_backward_upsample_layer;
 
     sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
 
@@ -78,72 +82,71 @@ bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, char *src_id,
     return 0;
 }
 
-int bcnn_forward_upsample_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor) {
+void bcnn_forward_upsample_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_upsample_param *param = (bcnn_upsample_param *)node->param;
     int dst_sz = bcnn_tensor_size(dst_tensor);
     memset(dst_tensor->data, 0, sizeof(float));
     for (int b = 0; b < src_tensor->n; ++b) {
         for (int k = 0; k < src_tensor->c; ++k) {
-            for (int j = 0; j < src_tensor->h * layer->size; ++j) {
-                for (int i = 0; i < src_tensor->w * layer->size; ++i) {
+            for (int j = 0; j < src_tensor->h * param->size; ++j) {
+                for (int i = 0; i < src_tensor->w * param->size; ++i) {
                     int src_id =
                         b * src_tensor->w * src_tensor->h * src_tensor->c +
                         k * src_tensor->w * src_tensor->h +
-                        (j / layer->size) * src_tensor->w + i / layer->size;
+                        (j / param->size) * src_tensor->w + i / param->size;
                     int dst_id = b * src_tensor->w * src_tensor->h *
-                                     src_tensor->c * layer->size * layer->size +
+                                     src_tensor->c * param->size * param->size +
                                  k * src_tensor->w * src_tensor->h *
-                                     layer->size * layer->size +
-                                 j * src_tensor->w * layer->size + i;
+                                     param->size * param->size +
+                                 j * src_tensor->w * param->size + i;
                     dst_tensor->data[dst_id] = src_tensor->data[src_id];
                 }
             }
         }
     }
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_forward_upsample_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
+void bcnn_forward_upsample_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_upsample_layer_gpu(node->layer, src, dst);
+    return bcnn_forward_upsample_layer_gpu(net, node);
 #else
-    return bcnn_forward_upsample_layer_cpu(node->layer, src, dst);
+    return bcnn_forward_upsample_layer_cpu(net, node);
 #endif
 }
 
-int bcnn_backward_upsample_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                     bcnn_tensor *dst_tensor) {
+void bcnn_backward_upsample_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_upsample_param *param = (bcnn_upsample_param *)node->param;
     for (int b = 0; b < src_tensor->n; ++b) {
         for (int k = 0; k < src_tensor->c; ++k) {
-            for (int j = 0; j < src_tensor->h * layer->size; ++j) {
-                for (int i = 0; i < src_tensor->w * layer->size; ++i) {
+            for (int j = 0; j < src_tensor->h * param->size; ++j) {
+                for (int i = 0; i < src_tensor->w * param->size; ++i) {
                     int src_id =
                         b * src_tensor->w * src_tensor->h * src_tensor->c +
                         k * src_tensor->w * src_tensor->h +
-                        (j / layer->size) * src_tensor->w + i / layer->size;
+                        (j / param->size) * src_tensor->w + i / param->size;
                     int dst_id = b * src_tensor->w * src_tensor->h *
-                                     src_tensor->c * layer->size * layer->size +
+                                     src_tensor->c * param->size * param->size +
                                  k * src_tensor->w * src_tensor->h *
-                                     layer->size * layer->size +
-                                 j * src_tensor->w * layer->size + i;
+                                     param->size * param->size +
+                                 j * src_tensor->w * param->size + i;
                     src_tensor->grad_data[src_id] +=
                         dst_tensor->grad_data[dst_id];
                 }
             }
         }
     }
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_backward_upsample_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
+void bcnn_backward_upsample_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_upsample_layer_gpu(node->layer, src, dst);
+    return bcnn_backward_upsample_layer_gpu(net, node);
 #else
-    return bcnn_backward_upsample_layer_cpu(node->layer, src, dst);
+    return bcnn_backward_upsample_layer_cpu(net, node);
 #endif
-    return 0;
 }

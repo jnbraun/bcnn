@@ -64,13 +64,19 @@ bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
         bcnn_node_add_input(net, &node, 0);
     }
 
-    // Create layer
-    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = DEPTHWISE_CONV;
-    node.layer->num = net->tensors[node.src[0]].c;
-    node.layer->stride = stride;
-    node.layer->size = size;
-    node.layer->pad = pad;
+    // Fill nodes param
+    node.type = DEPTHWISE_CONV;
+    node.param_size = sizeof(bcnn_depthwise_conv_param);
+    node.param = (bcnn_depthwise_conv_param *)calloc(1, node.param_size);
+    bcnn_depthwise_conv_param *param = (bcnn_depthwise_conv_param *)node.param;
+    param->activation = activation;
+    param->pad = pad;
+    param->num = net->tensors[node.src[0]].c;
+    param->size = size;
+    param->stride = stride;
+    node.forward = bcnn_forward_depthwise_sep_conv_layer;
+    node.backward = bcnn_backward_depthwise_sep_conv_layer;
+
     // Create weights tensor
     bcnn_tensor weights = {0};
     char weights_name[256];
@@ -94,17 +100,24 @@ bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
 
     if (net->learner.optimizer == ADAM) {
         int weights_size = bcnn_tensor_size(&weights);
-        node.layer->adam_m = (float *)calloc(weights_size, sizeof(float));
-        node.layer->adam_v = (float *)calloc(weights_size, sizeof(float));
+        param->adam_m = (float *)calloc(weights_size, sizeof(float));
+        param->adam_v = (float *)calloc(weights_size, sizeof(float));
     }
+#ifdef BCNN_USE_CUDA
+    if (net->learner.optimizer == ADAM) {
+        int weights_size = bcnn_tensor_size(&weights);
+        param->adam_m_gpu = bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
+        param->adam_v_gpu = bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
+    }
+#endif
 
     bcnn_tensor_set_shape(
         &dst_tensor, net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
-        (net->tensors[node.src[0]].h + 2 * node.layer->pad - node.layer->size) /
-                node.layer->stride +
+        (net->tensors[node.src[0]].h + 2 * param->pad - param->size) /
+                param->stride +
             1,
-        (net->tensors[node.src[0]].w + 2 * node.layer->pad - node.layer->size) /
-                node.layer->stride +
+        (net->tensors[node.src[0]].w + 2 * param->pad - param->size) /
+                param->stride +
             1,
         1);
     bcnn_tensor_allocate(&dst_tensor, net->state);
@@ -116,22 +129,16 @@ bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
 
     sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
          net->tensors[node.src[0]].c * size * size;
-    node.layer->conv_workspace = (float *)calloc(sz, sizeof(float));
 
 #ifdef BCNN_USE_CUDA
     if (net->learner.optimizer == ADAM) {
         int weights_size = bcnn_tensor_size(&weights);
-        node.layer->adam_m_gpu =
-            bcnn_cuda_memcpy_f32(node.layer->adam_m, weights_size);
-        node.layer->adam_v_gpu =
-            bcnn_cuda_memcpy_f32(node.layer->adam_v, weights_size);
+        param->adam_m_gpu = bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
+        param->adam_v_gpu = bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
     }
     sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
          net->tensors[node.src[0]].c * size * size;
-    node.layer->conv_workspace_gpu =
-        bcnn_cuda_memcpy_f32(node.layer->conv_workspace, sz);
 #endif
-    node.layer->activation = activation;
 
     bcnn_net_add_node(net, node);
 
@@ -146,11 +153,12 @@ bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
     return 0;
 }
 
-int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
-                                              bcnn_tensor *src_tensor,
-                                              bcnn_tensor *dst_tensor,
-                                              bcnn_tensor *weights,
-                                              bcnn_tensor *biases) {
+void bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_tensor *weights = &net->tensors[node->src[1]];
+    bcnn_tensor *biases = &net->tensors[node->src[2]];
+    bcnn_depthwise_conv_param *param = (bcnn_depthwise_conv_param *)node->param;
     int n, sz, c, h, w, kh, kw, h_in, w_in, offset;
 
     int batch_size = src_tensor->n;
@@ -169,20 +177,20 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
     for (n = 0; n < batch_size; ++n) {
         for (c = 0; c < dst_tensor->c; ++c) {
             for (h = 0; h < dst_tensor->h; ++h) {
-                if (h * layer->stride - layer->pad >= 0 &&
-                    (h * layer->stride - layer->pad + layer->size) <
+                if (h * param->stride - param->pad >= 0 &&
+                    (h * param->stride - param->pad + param->size) <
                         src_tensor->h) {
                     for (w = 0; w < dst_tensor->w; ++w) {
                         weight_data =
-                            weights->data + c * layer->size * layer->size;
+                            weights->data + c * param->size * param->size;
                         val = 0;
-                        if (w * layer->stride - layer->pad >= 0 &&
-                            (w * layer->stride - layer->pad + layer->size) <
+                        if (w * param->stride - param->pad >= 0 &&
+                            (w * param->stride - param->pad + param->size) <
                                 src_tensor->w) {
-                            for (kh = 0; kh < layer->size; ++kh) {
-                                for (kw = 0; kw < layer->size; ++kw) {
-                                    h_in = -layer->pad + h * layer->stride + kh;
-                                    w_in = -layer->pad + w * layer->stride + kw;
+                            for (kh = 0; kh < param->size; ++kh) {
+                                for (kw = 0; kw < param->size; ++kw) {
+                                    h_in = -param->pad + h * param->stride + kh;
+                                    w_in = -param->pad + w * param->stride + kw;
                                     offset = ((n * dst_tensor->c + c) *
                                                   src_tensor->h +
                                               h_in) *
@@ -194,10 +202,10 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                                 }
                             }
                         } else {
-                            for (kh = 0; kh < layer->size; ++kh) {
-                                for (kw = 0; kw < layer->size; ++kw) {
-                                    h_in = -layer->pad + h * layer->stride + kh;
-                                    w_in = -layer->pad + w * layer->stride + kw;
+                            for (kh = 0; kh < param->size; ++kh) {
+                                for (kw = 0; kw < param->size; ++kw) {
+                                    h_in = -param->pad + h * param->stride + kh;
+                                    w_in = -param->pad + w * param->stride + kw;
                                     if ((w_in >= 0) && (w_in < src_tensor->w)) {
                                         offset = ((n * dst_tensor->c + c) *
                                                       src_tensor->h +
@@ -216,15 +224,15 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                 } else {
                     for (w = 0; w < dst_tensor->w; ++w) {
                         weight_data =
-                            weights->data + c * layer->size * layer->size;
+                            weights->data + c * param->size * param->size;
                         val = 0;
-                        if (w * layer->stride - layer->pad >= 0 &&
-                            (w * layer->stride - layer->pad + layer->size) <
+                        if (w * param->stride - param->pad >= 0 &&
+                            (w * param->stride - param->pad + param->size) <
                                 src_tensor->w) {
-                            for (kh = 0; kh < layer->size; ++kh) {
-                                for (kw = 0; kw < layer->size; ++kw) {
-                                    h_in = -layer->pad + h * layer->stride + kh;
-                                    w_in = -layer->pad + w * layer->stride + kw;
+                            for (kh = 0; kh < param->size; ++kh) {
+                                for (kw = 0; kw < param->size; ++kw) {
+                                    h_in = -param->pad + h * param->stride + kh;
+                                    w_in = -param->pad + w * param->stride + kw;
                                     if ((h_in >= 0) && (h_in < src_tensor->h)) {
                                         offset = ((n * dst_tensor->c + c) *
                                                       src_tensor->h +
@@ -238,10 +246,10 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                                 }
                             }
                         } else {
-                            for (kh = 0; kh < layer->size; ++kh) {
-                                for (kw = 0; kw < layer->size; ++kw) {
-                                    h_in = -layer->pad + h * layer->stride + kh;
-                                    w_in = -layer->pad + w * layer->stride + kw;
+                            for (kh = 0; kh < param->size; ++kh) {
+                                for (kw = 0; kw < param->size; ++kw) {
+                                    h_in = -param->pad + h * param->stride + kh;
+                                    w_in = -param->pad + w * param->stride + kw;
                                     if ((h_in >= 0) && (h_in < src_tensor->h) &&
                                         (w_in >= 0) && (w_in < src_tensor->w)) {
                                         offset = ((n * dst_tensor->c + c) *
@@ -267,18 +275,19 @@ int bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                   dst_tensor->w * dst_tensor->h);
 
     sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
-    bcnn_forward_activation_cpu(dst_tensor->data, sz, layer->activation);
+    bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
 
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
-                                               bcnn_tensor *src_tensor,
-                                               bcnn_tensor *dst_tensor,
-                                               bcnn_tensor *weights,
-                                               bcnn_tensor *biases) {
+void bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_net *net,
+                                                bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_tensor *weights = &net->tensors[node->src[1]];
+    bcnn_tensor *biases = &net->tensors[node->src[2]];
+    bcnn_depthwise_conv_param *param = (bcnn_depthwise_conv_param *)node->param;
     int sz, n, c, h, w, kh, kw, w_in, h_in, offset;
-
     int batch_size = src_tensor->n;
     float *dst_grad_data = NULL;
     float *weight_diff_base = NULL, *weight_diff = NULL;
@@ -292,7 +301,7 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
     bcnn_backward_activation_cpu(
         dst_tensor->data, dst_tensor->grad_data,
         dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size,
-        layer->activation);
+        param->activation);
 
     bcnn_grad_bias(biases->grad_data, dst_tensor->grad_data, batch_size,
                    dst_tensor->c, dst_tensor->w * dst_tensor->h);
@@ -303,20 +312,20 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
         for (n = 0; n < batch_size; ++n) {
             for (c = 0; c < dst_tensor->c; ++c) {
                 for (h = 0; h < dst_tensor->h; ++h) {
-                    if (h * layer->stride - layer->pad >= 0 &&
-                        (h * layer->stride - layer->pad + layer->size) <
+                    if (h * param->stride - param->pad >= 0 &&
+                        (h * param->stride - param->pad + param->size) <
                             src_tensor->h) {
                         for (w = 0; w < dst_tensor->w; ++w) {
                             weight_diff = weight_diff_base +
-                                          c * layer->size * layer->size;
-                            if (w * layer->stride - layer->pad >= 0 &&
-                                (w * layer->stride - layer->pad + layer->size) <
+                                          c * param->size * param->size;
+                            if (w * param->stride - param->pad >= 0 &&
+                                (w * param->stride - param->pad + param->size) <
                                     src_tensor->w) {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
+                                for (kh = 0; kh < param->size; ++kh) {
+                                    for (kw = 0; kw < param->size; ++kw) {
+                                        h_in = -param->pad + h * param->stride +
                                                kh;
-                                        w_in = -layer->pad + w * layer->stride +
+                                        w_in = -param->pad + w * param->stride +
                                                kw;
                                         offset = ((n * dst_tensor->c + c) *
                                                       src_tensor->h +
@@ -330,11 +339,11 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                                     }
                                 }
                             } else {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
+                                for (kh = 0; kh < param->size; ++kh) {
+                                    for (kw = 0; kw < param->size; ++kw) {
+                                        h_in = -param->pad + h * param->stride +
                                                kh;
-                                        w_in = -layer->pad + w * layer->stride +
+                                        w_in = -param->pad + w * param->stride +
                                                kw;
                                         if ((w_in >= 0) &&
                                             (w_in < src_tensor->w)) {
@@ -356,15 +365,15 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                     } else {
                         for (w = 0; w < dst_tensor->w; ++w) {
                             weight_diff = weight_diff_base +
-                                          c * layer->size * layer->size;
-                            if (w * layer->stride - layer->pad >= 0 &&
-                                (w * layer->stride - layer->pad + layer->size) <
+                                          c * param->size * param->size;
+                            if (w * param->stride - param->pad >= 0 &&
+                                (w * param->stride - param->pad + param->size) <
                                     src_tensor->w) {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
+                                for (kh = 0; kh < param->size; ++kh) {
+                                    for (kw = 0; kw < param->size; ++kw) {
+                                        h_in = -param->pad + h * param->stride +
                                                kh;
-                                        w_in = -layer->pad + w * layer->stride +
+                                        w_in = -param->pad + w * param->stride +
                                                kw;
                                         if ((h_in >= 0) &&
                                             (h_in < src_tensor->h)) {
@@ -381,11 +390,11 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                                     }
                                 }
                             } else {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
+                                for (kh = 0; kh < param->size; ++kh) {
+                                    for (kw = 0; kw < param->size; ++kw) {
+                                        h_in = -param->pad + h * param->stride +
                                                kh;
-                                        w_in = -layer->pad + w * layer->stride +
+                                        w_in = -param->pad + w * param->stride +
                                                kw;
                                         if ((h_in >= 0) &&
                                             (h_in < src_tensor->h) &&
@@ -417,20 +426,20 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
         for (n = 0; n < batch_size; ++n) {
             for (c = 0; c < dst_tensor->c; ++c) {
                 for (h = 0; h < dst_tensor->h; ++h) {
-                    if (h * layer->stride - layer->pad >= 0 &&
-                        (h * layer->stride - layer->pad + layer->size) <
+                    if (h * param->stride - param->pad >= 0 &&
+                        (h * param->stride - param->pad + param->size) <
                             src_tensor->h) {
                         for (w = 0; w < dst_tensor->w; ++w) {
                             weight_data = weight_data_base +
-                                          c * layer->size * layer->size;
-                            if (w * layer->stride - layer->pad >= 0 &&
-                                (w * layer->stride - layer->pad + layer->size) <
+                                          c * param->size * param->size;
+                            if (w * param->stride - param->pad >= 0 &&
+                                (w * param->stride - param->pad + param->size) <
                                     src_tensor->w) {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
+                                for (kh = 0; kh < param->size; ++kh) {
+                                    for (kw = 0; kw < param->size; ++kw) {
+                                        h_in = -param->pad + h * param->stride +
                                                kh;
-                                        w_in = -layer->pad + w * layer->stride +
+                                        w_in = -param->pad + w * param->stride +
                                                kw;
                                         offset = ((n * dst_tensor->c + c) *
                                                       src_tensor->h +
@@ -443,11 +452,11 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                                     }
                                 }
                             } else {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
+                                for (kh = 0; kh < param->size; ++kh) {
+                                    for (kw = 0; kw < param->size; ++kw) {
+                                        h_in = -param->pad + h * param->stride +
                                                kh;
-                                        w_in = -layer->pad + w * layer->stride +
+                                        w_in = -param->pad + w * param->stride +
                                                kw;
                                         if ((w_in >= 0) &&
                                             (w_in < src_tensor->w)) {
@@ -469,15 +478,15 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                     } else {
                         for (w = 0; w < dst_tensor->w; ++w) {
                             weight_data = weight_data_base +
-                                          c * layer->size * layer->size;
-                            if (w * layer->stride - layer->pad >= 0 &&
-                                (w * layer->stride - layer->pad + layer->size) <
+                                          c * param->size * param->size;
+                            if (w * param->stride - param->pad >= 0 &&
+                                (w * param->stride - param->pad + param->size) <
                                     src_tensor->w) {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
+                                for (kh = 0; kh < param->size; ++kh) {
+                                    for (kw = 0; kw < param->size; ++kw) {
+                                        h_in = -param->pad + h * param->stride +
                                                kh;
-                                        w_in = -layer->pad + w * layer->stride +
+                                        w_in = -param->pad + w * param->stride +
                                                kw;
                                         if ((h_in >= 0) &&
                                             (h_in < src_tensor->h)) {
@@ -494,11 +503,11 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
                                     }
                                 }
                             } else {
-                                for (kh = 0; kh < layer->size; ++kh) {
-                                    for (kw = 0; kw < layer->size; ++kw) {
-                                        h_in = -layer->pad + h * layer->stride +
+                                for (kh = 0; kh < param->size; ++kh) {
+                                    for (kw = 0; kw < param->size; ++kw) {
+                                        h_in = -param->pad + h * param->stride +
                                                kh;
-                                        w_in = -layer->pad + w * layer->stride +
+                                        w_in = -param->pad + w * param->stride +
                                                kw;
                                         if ((h_in >= 0) &&
                                             (h_in < src_tensor->h) &&
@@ -525,33 +534,21 @@ int bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_layer *layer,
         }
     }
 
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_forward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
-    bcnn_tensor *weights = &net->tensors[node->src[1]];
-    bcnn_tensor *biases = &net->tensors[node->src[2]];
+void bcnn_forward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_depthwise_sep_conv_layer_gpu(node->layer, src, dst,
-                                                     weights, biases);
+    return bcnn_forward_depthwise_sep_conv_layer_gpu(net, node);
 #else
-    return bcnn_forward_depthwise_sep_conv_layer_cpu(node->layer, src, dst,
-                                                     weights, biases);
+    return bcnn_forward_depthwise_sep_conv_layer_cpu(net, node);
 #endif
 }
 
-int bcnn_backward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
-    bcnn_tensor *weights = &net->tensors[node->src[1]];
-    bcnn_tensor *biases = &net->tensors[node->src[2]];
+void bcnn_backward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_depthwise_sep_conv_layer_gpu(node->layer, src, dst,
-                                                      weights, biases);
+    return bcnn_backward_depthwise_sep_conv_layer_gpu(net, node);
 #else
-    return bcnn_backward_depthwise_sep_conv_layer_cpu(node->layer, src, dst,
-                                                      weights, biases);
+    return bcnn_backward_depthwise_sep_conv_layer_cpu(net, node);
 #endif
 }

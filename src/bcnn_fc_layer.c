@@ -55,10 +55,6 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
         bcnn_node_add_input(net, &node, 0);
     }
 
-    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = FULL_CONNECTED;
-    node.layer->gemm_ctx = net->gemm_ctx;
-
     int input_size = bcnn_tensor_size3d(&net->tensors[node.src[0]]);
 
     // Setup weights and biases
@@ -96,27 +92,11 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    if (net->learner.optimizer == ADAM) {
-        int weights_size = bcnn_tensor_size(&weights);
-        node.layer->adam_m = (float *)calloc(weights_size, sizeof(float));
-        node.layer->adam_v = (float *)calloc(weights_size, sizeof(float));
-    }
-
-#ifdef BCNN_USE_CUDA
-    if (net->learner.optimizer == ADAM) {
-        int weights_size = bcnn_tensor_size(&weights);
-        node.layer->adam_m_gpu =
-            bcnn_cuda_memcpy_f32(node.layer->adam_m, weights_size);
-        node.layer->adam_v_gpu =
-            bcnn_cuda_memcpy_f32(node.layer->adam_v, weights_size);
-    }
-#endif
-    node.layer->activation = activation;
-
     node.type = FULL_CONNECTED;
     node.param_size = sizeof(bcnn_fullc_param);
     node.param = (bcnn_fullc_param *)calloc(1, node.param_size);
     bcnn_fullc_param *param = (bcnn_fullc_param *)node.param;
+    param->activation = activation;
     if (net->learner.optimizer == ADAM) {
         int weights_size = bcnn_tensor_size(&weights);
         param->adam_m = (float *)calloc(weights_size, sizeof(float));

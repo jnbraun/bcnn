@@ -29,8 +29,24 @@
 extern "C" {
 #endif
 
-int bcnn_forward_deconv_layer(bcnn_net *net, bcnn_node *node);
-int bcnn_backward_deconv_layer(bcnn_net *net, bcnn_node *node);
+typedef struct bcnn_deconv_param {
+    int num;
+    int size;
+    int stride;
+    int pad;
+    bcnn_activation activation;
+    float *conv_workspace;
+    float *adam_m;
+    float *adam_v;
+#ifdef BCNN_USE_CUDA
+    float *conv_workspace_gpu;
+    float *adam_m_gpu;
+    float *adam_v_gpu;
+#endif
+} bcnn_deconv_param;
+
+void bcnn_forward_deconv_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_deconv_layer(bcnn_net *net, bcnn_node *node);
 
 #ifdef __cplusplus
 }

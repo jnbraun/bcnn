@@ -26,7 +26,6 @@
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
-    int sz = 0, i;
     bcnn_node node = {0};
 
     BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,
@@ -34,7 +33,7 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
                        "Dropout layer can't be the first layer of the network");
 
     int is_src_node_found = 0;
-    for (i = net->num_tensors - 1; i >= 0; --i) {
+    for (int i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id) == 0) {
             bcnn_node_add_input(net, &node, i);
             bcnn_node_add_output(net, &node, i);
@@ -45,21 +44,12 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
                        "Dropout layer: invalid input node name %s", src_id);
 
-    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = DROPOUT;
-    node.layer->dropout_rate = rate;
-    sz = bcnn_tensor_size(&net->tensors[node.src[0]]);
-    node.layer->rand = (float *)calloc(sz, sizeof(float));
-    node.layer->scale = 1.0f / (1.0f - rate);
-#ifdef BCNN_USE_CUDA
-    node.layer->rand_gpu = bcnn_cuda_memcpy_f32(node.layer->rand, sz);
-#endif
-
-    node.type = DROPOUT;
+        node.type = DROPOUT;
     node.param_size = sizeof(bcnn_dropout_param);
     node.param = (bcnn_dropout_param *)calloc(1, node.param_size);
     bcnn_dropout_param *param = (bcnn_dropout_param *)node.param;
     param->dropout_rate = rate;
+    int sz = bcnn_tensor_size(&net->tensors[node.src[0]]);
     param->rand = (float *)calloc(sz, sizeof(float));
     param->scale = 1.0f / (1.0f - rate);
 #ifdef BCNN_USE_CUDA

@@ -29,19 +29,27 @@
 extern "C" {
 #endif
 
-int bcnn_forward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node);
-int bcnn_backward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node);
+typedef struct bcnn_depthwise_conv_param {
+    int num;
+    int size;
+    int stride;
+    int pad;
+    bcnn_activation activation;
+    float *adam_m;
+    float *adam_v;
+#ifdef BCNN_USE_CUDA
+    float *adam_m_gpu;
+    float *adam_v_gpu;
+#endif
+} bcnn_depthwise_conv_param;
 
-int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
-                                              bcnn_tensor *src_tensor,
-                                              bcnn_tensor *dst_tensor,
-                                              bcnn_tensor *weights,
-                                              bcnn_tensor *biases);
-int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
-                                               bcnn_tensor *src_tensor,
-                                               bcnn_tensor *dst_tensor,
-                                               bcnn_tensor *weights,
-                                               bcnn_tensor *biases);
+void bcnn_forward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node);
+
+#ifdef BCNN_USE_CUDA
+void bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_net *net, bcnn_node *node);
+#endif
 
 #ifdef __cplusplus
 }

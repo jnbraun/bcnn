@@ -29,8 +29,45 @@
 extern "C" {
 #endif
 
-int bcnn_forward_conv_layer(bcnn_net *net, bcnn_node *node);
-int bcnn_backward_conv_layer(bcnn_net *net, bcnn_node *node);
+typedef struct bcnn_conv_param {
+    int num;
+    int size;
+    int stride;
+    int pad;
+    int num_groups;
+    int batch_norm;
+    size_t workspace_size;
+    bcnn_activation activation;
+    bcnn_tensor saved_mean;
+    bcnn_tensor saved_variance;
+    bcnn_tensor running_mean;
+    bcnn_tensor running_variance;
+    float *conv_workspace;
+    float *workspace;  // embedded batchnorm
+    float *x_norm;
+    float *adam_m;
+    float *adam_v;
+#ifdef BCNN_USE_CUDA
+    float *conv_workspace_gpu;
+    float *bn_workspace_gpu;
+    float *x_norm_gpu;
+    float *adam_m_gpu;
+    float *adam_v_gpu;
+#ifdef BCNN_USE_CUDNN
+    cudnnTensorDescriptor_t src_tensor_desc;
+    cudnnTensorDescriptor_t dst_tensor_desc;
+    cudnnFilterDescriptor_t filter_desc;
+    cudnnTensorDescriptor_t bias_desc;
+    cudnnConvolutionDescriptor_t conv_desc;
+    cudnnConvolutionFwdAlgo_t fwd_algo;
+    cudnnConvolutionBwdDataAlgo_t bwd_data_algo;
+    cudnnConvolutionBwdFilterAlgo_t bwd_filter_algo;
+#endif
+#endif
+} bcnn_conv_param;
+
+void bcnn_forward_conv_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_conv_layer(bcnn_net *net, bcnn_node *node);
 
 #ifdef __cplusplus
 }

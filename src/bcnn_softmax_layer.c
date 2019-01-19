@@ -63,9 +63,6 @@ bcnn_status bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = SOFTMAX;
-
     node.type = SOFTMAX;
     node.forward = bcnn_forward_softmax_layer;
     node.backward = bcnn_backward_softmax_layer;

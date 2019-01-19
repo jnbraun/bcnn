@@ -29,13 +29,13 @@
 extern "C" {
 #endif
 
-int bcnn_forward_upsample_layer(bcnn_net *net, bcnn_node *node);
-int bcnn_backward_upsample_layer(bcnn_net *net, bcnn_node *node);
+typedef struct bcnn_upsample_param { int size; } bcnn_upsample_param;
+
+void bcnn_forward_upsample_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_upsample_layer(bcnn_net *net, bcnn_node *node);
 #ifdef BCNN_USE_CUDA
-int bcnn_forward_upsample_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor);
-int bcnn_backward_upsample_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                     bcnn_tensor *dst_tensor);
+void bcnn_forward_upsample_layer_gpu(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_upsample_layer_gpu(bcnn_net *net, bcnn_node *node);
 #endif
 
 #ifdef __cplusplus

@@ -62,18 +62,6 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = LRN;
-    int sz = bcnn_tensor_size(&net->tensors[node.src[0]]);
-    // x_norm stores the intermediate sum results
-    node.layer->x_norm = (float *)calloc(sz, sizeof(float));
-    // workspace stores the intermediate square results
-    node.layer->workspace = (float *)calloc(sz, sizeof(float));
-    node.layer->alpha = alpha;
-    node.layer->beta = beta;
-    node.layer->k = k;
-    node.layer->size = local_size;
-
     node.type = LRN;
     node.param_size = sizeof(bcnn_lrn_param);
     node.param = (bcnn_lrn_param *)calloc(1, node.param_size);
@@ -81,6 +69,7 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
     param->local_size = local_size;
     param->alpha = alpha;
     param->beta = beta;
+    int sz = bcnn_tensor_size(&net->tensors[node.src[0]]);
     param->tmp_sum = (float *)calloc(sz, sizeof(float));
     param->tmp_squared = (float *)calloc(sz, sizeof(float));
     node.forward = bcnn_forward_lrn_layer;

@@ -42,7 +42,7 @@ __global__ void _bcnn_forward_avgpool_layer_kernel(int sz, int c, int h, int w,
     dst[idx] /= w * h;
 }
 
-int bcnn_forward_avgpool_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+void bcnn_forward_avgpool_layer_gpu(bcnn_tensor *src_tensor,
                                    bcnn_tensor *dst_tensor) {
     int sz = bcnn_tensor_size(dst_tensor);
 
@@ -52,7 +52,7 @@ int bcnn_forward_avgpool_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
         dst_tensor->data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
 
-    return BCNN_SUCCESS;
+    return;
 }
 
 __global__ void _bcnn_backward_avgpool_layer_kernel(int sz, int c, int h, int w,
@@ -72,7 +72,7 @@ __global__ void _bcnn_backward_avgpool_layer_kernel(int sz, int c, int h, int w,
     }
 }
 
-int bcnn_backward_avgpool_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+void bcnn_backward_avgpool_layer_gpu(bcnn_tensor *src_tensor,
                                     bcnn_tensor *dst_tensor) {
     int sz = bcnn_tensor_size(dst_tensor);
 
@@ -82,7 +82,7 @@ int bcnn_backward_avgpool_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
         src_tensor->grad_data_gpu, dst_tensor->grad_data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
 
-    return BCNN_SUCCESS;
+    return;
 }
 
 #endif

@@ -29,8 +29,18 @@
 extern "C" {
 #endif
 
-int bcnn_forward_cost_layer(bcnn_net *net, bcnn_node *node);
-int bcnn_backward_cost_layer(bcnn_net *net, bcnn_node *node);
+typedef struct bcnn_cost_param {
+    float num_constraints;
+    float scale;
+    bcnn_loss_metric loss_metric;
+    bcnn_loss loss;
+} bcnn_cost_param;
+
+void bcnn_forward_cost_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_cost_layer(bcnn_net *net, bcnn_node *node);
+
+void bcnn_lifted_struct_loss_backward(bcnn_net *net, bcnn_node *node);
+void bcnn_lifted_struct_loss_forward(bcnn_net *net, bcnn_node *node);
 
 #ifdef __cplusplus
 }

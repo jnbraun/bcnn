@@ -58,8 +58,10 @@ bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, char *src_id, char *dst_id) {
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = AVGPOOL;
+    node.type = AVGPOOL;
+    node.forward = bcnn_forward_avgpool_layer;
+    node.backward = bcnn_backward_avgpool_layer;
+
     sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
 
     bcnn_net_add_node(net, node);
@@ -73,8 +75,8 @@ bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, char *src_id, char *dst_id) {
     return 0;
 }
 
-int bcnn_forward_avgpool_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                   bcnn_tensor *dst_tensor) {
+void bcnn_forward_avgpool_layer_cpu(bcnn_tensor *src_tensor,
+                                    bcnn_tensor *dst_tensor) {
     for (int b = 0; b < src_tensor->n; ++b) {
         for (int k = 0; k < src_tensor->c; ++k) {
             int idx = k + b * src_tensor->c;
@@ -87,21 +89,21 @@ int bcnn_forward_avgpool_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             dst_tensor->data[idx] /= src_tensor->h * src_tensor->w;
         }
     }
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_forward_avgpool_layer(bcnn_net *net, bcnn_node *node) {
+void bcnn_forward_avgpool_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_avgpool_layer_gpu(node->layer, src, dst);
+    return bcnn_forward_avgpool_layer_gpu(src, dst);
 #else
-    return bcnn_forward_avgpool_layer_cpu(node->layer, src, dst);
+    return bcnn_forward_avgpool_layer_cpu(src, dst);
 #endif
 }
 
-int bcnn_backward_avgpool_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor) {
+void bcnn_backward_avgpool_layer_cpu(bcnn_tensor *src_tensor,
+                                     bcnn_tensor *dst_tensor) {
     for (int b = 0; b < src_tensor->n; ++b) {
         for (int k = 0; k < src_tensor->c; ++k) {
             int idx = k + b * src_tensor->c;
@@ -114,16 +116,15 @@ int bcnn_backward_avgpool_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
             }
         }
     }
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_backward_avgpool_layer(bcnn_net *net, bcnn_node *node) {
+void bcnn_backward_avgpool_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_avgpool_layer_gpu(node->layer, src, dst);
+    return bcnn_backward_avgpool_layer_gpu(src, dst);
 #else
-    return bcnn_backward_avgpool_layer_cpu(node->layer, src, dst);
+    return bcnn_backward_avgpool_layer_cpu(src, dst);
 #endif
-    return 0;
 }

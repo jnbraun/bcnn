@@ -46,12 +46,6 @@ __global__ void _bcnn_forward_depthwise_sep_conv_weight_kernel(
         w = i % dst_w;
         weight = weight_data + c * kernel_sz * kernel_sz;
         value = 0;
-        /*if (h * layer->stride - layer->pad >= 0 && (h * layer->stride -
-        layer->pad + layer->size) < src_tensor->h &&
-            w * layer->stride - layer->pad >= 0 && (w * layer->stride -
-        layer->pad + layer->size) < src_tensor->w) {
-
-        }*/
         for (kh = 0; kh < kernel_sz; ++kh) {
             for (kw = 0; kw < kernel_sz; ++kw) {
                 h_in = -pad + h * stride + kh;
@@ -68,26 +62,27 @@ __global__ void _bcnn_forward_depthwise_sep_conv_weight_kernel(
     }
 }
 
-int bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
-                                              bcnn_tensor *src_tensor,
-                                              bcnn_tensor *dst_tensor,
-                                              bcnn_tensor *weights,
-                                              bcnn_tensor *biases) {
+void bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_tensor *weights = &net->tensors[node->src[1]];
+    bcnn_tensor *biases = &net->tensors[node->src[2]];
+    bcnn_depthwise_conv_param *param = (bcnn_depthwise_conv_param *)node->param;
     int sz = bcnn_tensor_size(dst_tensor);
 
     _bcnn_forward_depthwise_sep_conv_weight_kernel<<<bcnn_cuda_blocks(sz),
                                                      BCNN_CUDA_THREADS>>>(
         sz, src_tensor->data_gpu, weights->data_gpu, dst_tensor->c,
-        dst_tensor->h, dst_tensor->w, src_tensor->h, src_tensor->w, layer->size,
-        layer->stride, layer->pad, dst_tensor->data_gpu);
+        dst_tensor->h, dst_tensor->w, src_tensor->h, src_tensor->w, param->size,
+        param->stride, param->pad, dst_tensor->data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
 
     bcnn_cuda_add_bias(dst_tensor->data_gpu, biases->data_gpu, dst_tensor->n,
                        src_tensor->c, dst_tensor->h * dst_tensor->w);
 
-    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, layer->activation);
+    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, param->activation);
 
-    return BCNN_SUCCESS;
+    return;
 }
 
 __global__ void _bcnn_backward_depthwise_sep_conv_weight_kernel(
@@ -161,11 +156,12 @@ __global__ void _bcnn_backward_depthwise_sep_conv_data_kernel(
     }
 }
 
-int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
-                                               bcnn_tensor *src_tensor,
-                                               bcnn_tensor *dst_tensor,
-                                               bcnn_tensor *weights,
-                                               bcnn_tensor *biases) {
+void bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_tensor *weights = &net->tensors[node->src[1]];
+    bcnn_tensor *biases = &net->tensors[node->src[2]];
+    bcnn_depthwise_conv_param *param = (bcnn_depthwise_conv_param *)node->param;
     int src_sz = bcnn_tensor_size(src_tensor);
     int dst_sz = bcnn_tensor_size(dst_tensor);
 
@@ -175,7 +171,7 @@ int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
     bcnn_backward_activation_gpu(
         dst_tensor->data_gpu, dst_tensor->grad_data_gpu,
         dst_tensor->w * dst_tensor->h * dst_tensor->c * dst_tensor->n,
-        layer->activation);
+        param->activation);
 
     bcnn_cuda_grad_bias(biases->grad_data_gpu, dst_tensor->grad_data_gpu,
                         src_tensor->n, src_tensor->c,
@@ -185,7 +181,7 @@ int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
                                                       BCNN_CUDA_THREADS>>>(
         src_sz, dst_tensor->grad_data_gpu, src_tensor->data_gpu, src_tensor->n,
         src_tensor->c, dst_tensor->h, dst_tensor->w, src_tensor->h,
-        src_tensor->w, layer->size, layer->stride, layer->pad,
+        src_tensor->w, param->size, param->stride, param->pad,
         weights->grad_data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
 
@@ -194,12 +190,12 @@ int bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_layer *layer,
             bcnn_cuda_blocks(src_sz), BCNN_CUDA_THREADS>>>(
             src_sz, dst_tensor->grad_data_gpu, weights->data_gpu, src_tensor->n,
             src_tensor->c, dst_tensor->h, dst_tensor->w, src_tensor->h,
-            src_tensor->w, layer->size, layer->stride, layer->pad,
+            src_tensor->w, param->size, param->stride, param->pad,
             src_tensor->grad_data_gpu);
         bcnn_cuda_check(cudaPeekAtLastError());
     }
 
-    return BCNN_SUCCESS;
+    return;
 }
 
 #endif

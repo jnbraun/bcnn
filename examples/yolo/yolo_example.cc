@@ -11,8 +11,10 @@
 #include <bip/bip.h>
 
 #include "bcnn/bcnn.h"
+#include "bcnn_conv_layer.h"
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
+#include "bcnn_yolo.h"
 
 static void transpose_matrix(float *a, int rows, int cols) {
     float *transpose = (float *)calloc(rows * cols, sizeof(float));
@@ -50,105 +52,66 @@ void load_yolo_weights(bcnn_net *net, char *model) {
     fprintf(stderr, "version %d.%d seen %d\n", major, minor, net->seen);
     int transpose = (major > 1000) || (minor > 1000);
     for (int i = 0; i < net->num_nodes; ++i) {
-        bcnn_layer *layer = net->nodes[i].layer;
-        if (layer->type == CONVOLUTIONAL) {
+        bcnn_node *node = &net->nodes[i];
+        if (node->type == CONVOLUTIONAL) {
             bcnn_tensor *weights = &net->tensors[net->nodes[i].src[1]];
             bcnn_tensor *biases = &net->tensors[net->nodes[i].src[2]];
             int weights_size = bcnn_tensor_size(weights);
             int biases_size = bcnn_tensor_size(biases);
             int nb_read = fread(biases->data, sizeof(float), biases_size, fp);
             BCNN_INFO(net->log_ctx,
-                      "layer= %d nbread_bias= %lu bias_size_expected= %d", i,
+                      "node_idx= %d nbread_bias= %lu bias_size_expected= %d", i,
                       (unsigned long)nb_read, biases_size);
-            if (layer->batch_norm == 1) {
-                bcnn_tensor *bn_mean = &net->tensors[net->nodes[i].src[3]];
-                bcnn_tensor *bn_var = &net->tensors[net->nodes[i].src[4]];
-                bcnn_tensor *bn_scales = &net->tensors[net->nodes[i].src[5]];
-                int bn_mean_size = bcnn_tensor_size(bn_mean);
-                int bn_var_size = bcnn_tensor_size(bn_var);
-                int sz = net->tensors[net->nodes[i].dst[0]].c;
-                int bn_scales_size = bcnn_tensor_size(bn_scales);
-                nb_read =
-                    fread(bn_scales->data, sizeof(float), bn_scales_size, fp);
-                BCNN_INFO(
-                    net->log_ctx,
-                    "layer= %d nbread_scales= %lu scales_size_expected= %d", i,
-                    (unsigned long)nb_read, bn_scales_size);
-                nb_read = fread(bn_mean->data, sizeof(float), sz, fp);
-                BCNN_INFO(net->log_ctx,
-                          "layer= %d nbread_mean= %lu mean_size_expected= "
-                          "%d",
-                          i, (unsigned long)nb_read, sz);
-                nb_read = fread(bn_var->data, sizeof(float), sz, fp);
-                BCNN_INFO(net->log_ctx,
-                          "layer= %d nbread_variance= %lu "
-                          "variance_size_expected= %d",
-                          i, (unsigned long)nb_read, sz);
+            if (node->type == CONVOLUTIONAL) {
+                bcnn_conv_param *param = (bcnn_conv_param *)node->param;
+                if (param->batch_norm == 1) {
+                    bcnn_tensor *bn_mean = &net->tensors[net->nodes[i].src[3]];
+                    bcnn_tensor *bn_var = &net->tensors[net->nodes[i].src[4]];
+                    bcnn_tensor *bn_scales =
+                        &net->tensors[net->nodes[i].src[5]];
+                    int bn_mean_size = bcnn_tensor_size(bn_mean);
+                    int bn_var_size = bcnn_tensor_size(bn_var);
+                    int sz = net->tensors[net->nodes[i].dst[0]].c;
+                    int bn_scales_size = bcnn_tensor_size(bn_scales);
+                    nb_read = fread(bn_scales->data, sizeof(float),
+                                    bn_scales_size, fp);
+                    BCNN_INFO(net->log_ctx,
+                              "node_idx= %d nbread_scales= %lu "
+                              "scales_size_expected= %d",
+                              i, (unsigned long)nb_read, bn_scales_size);
+                    nb_read = fread(bn_mean->data, sizeof(float), sz, fp);
+                    BCNN_INFO(
+                        net->log_ctx,
+                        "node_idx= %d nbread_mean= %lu mean_size_expected= "
+                        "%d",
+                        i, (unsigned long)nb_read, sz);
+                    nb_read = fread(bn_var->data, sizeof(float), sz, fp);
+                    BCNN_INFO(net->log_ctx,
+                              "node_idx= %d nbread_variance= %lu "
+                              "variance_size_expected= %d",
+                              i, (unsigned long)nb_read, sz);
 #ifdef BCNN_USE_CUDA
-                bcnn_cuda_memcpy_host2dev(bn_mean->data_gpu, bn_mean->data,
-                                          bn_mean_size);
-                bcnn_cuda_memcpy_host2dev(bn_var->data_gpu, bn_var->data,
-                                          bn_var_size);
-                bcnn_cuda_memcpy_host2dev(bn_scales->data_gpu, bn_scales->data,
-                                          bn_scales_size);
+                    bcnn_cuda_memcpy_host2dev(bn_mean->data_gpu, bn_mean->data,
+                                              bn_mean_size);
+                    bcnn_cuda_memcpy_host2dev(bn_var->data_gpu, bn_var->data,
+                                              bn_var_size);
+                    bcnn_cuda_memcpy_host2dev(bn_scales->data_gpu,
+                                              bn_scales->data, bn_scales_size);
 #endif
+                }
             }
             nb_read = fread(weights->data, sizeof(float), weights_size, fp);
-            BCNN_INFO(net->log_ctx,
-                      "layer= %d nbread_weight= %lu weight_size_expected= %d",
-                      i, (unsigned long)nb_read, weights_size);
+            BCNN_INFO(
+                net->log_ctx,
+                "node_idx= %d nbread_weight= %lu weight_size_expected= %d", i,
+                (unsigned long)nb_read, weights_size);
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(weights->data_gpu, weights->data,
                                       weights_size);
             bcnn_cuda_memcpy_host2dev(biases->data_gpu, biases->data,
                                       biases_size);
 #endif
-        } else if (layer->type == FULL_CONNECTED) {
-            bcnn_tensor *weights = &net->tensors[net->nodes[i].src[1]];
-            bcnn_tensor *biases = &net->tensors[net->nodes[i].src[2]];
-            int weights_size = bcnn_tensor_size(weights);
-            int biases_size = bcnn_tensor_size(biases);
-            int nb_read = fread(biases->data, sizeof(float), biases_size, fp);
-            BCNN_INFO(net->log_ctx,
-                      "layer= %d nbread_bias= %lu bias_size_expected= %d", i,
-                      (unsigned long)nb_read, biases_size);
-            nb_read = fread(weights->data, sizeof(float), weights_size, fp);
-            BCNN_INFO(net->log_ctx,
-                      "layer= %d nbread_weight= %lu weight_size_expected= %d",
-                      i, (unsigned long)nb_read, weights_size);
-            if (transpose) {
-                transpose_matrix(
-                    weights->data,
-                    bcnn_tensor_size3d(&net->tensors[net->nodes[i].src[0]]),
-                    bcnn_tensor_size3d(&net->tensors[net->nodes[i].dst[0]]));
-            }
-            if (layer->batch_norm == 1) {
-                bcnn_tensor *bn_mean = &net->tensors[net->nodes[i].src[3]];
-                bcnn_tensor *bn_var = &net->tensors[net->nodes[i].src[4]];
-                bcnn_tensor *bn_scales = &net->tensors[net->nodes[i].src[5]];
-                int bn_mean_size = bcnn_tensor_size(bn_mean);
-                int bn_var_size = bcnn_tensor_size(bn_var);
-                int bn_scales_size = bcnn_tensor_size(bn_scales);
-                nb_read =
-                    fread(bn_scales->data, sizeof(float), bn_scales_size, fp);
-                nb_read = fread(bn_mean->data, sizeof(float), bn_mean_size, fp);
-                nb_read = fread(bn_var->data, sizeof(float), bn_var_size, fp);
-#ifdef BCNN_USE_CUDA
-                bcnn_cuda_memcpy_host2dev(bn_mean->data_gpu, bn_mean->data,
-                                          bn_mean_size);
-                bcnn_cuda_memcpy_host2dev(bn_var->data_gpu, bn_var->data,
-                                          bn_var_size);
-                bcnn_cuda_memcpy_host2dev(bn_scales->data_gpu, bn_scales->data,
-                                          bn_scales_size);
-#endif
-            }
-#ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_host2dev(weights->data_gpu, weights->data,
-                                      weights_size);
-            bcnn_cuda_memcpy_host2dev(biases->data_gpu, biases->data,
-                                      biases_size);
-#endif
-        } else if (layer->type == BATCHNORM) {
+        } else if (node->type == BATCHNORM) {
             bcnn_tensor *bn_mean = &net->tensors[net->nodes[i].src[1]];
             bcnn_tensor *bn_var = &net->tensors[net->nodes[i].src[2]];
             bcnn_tensor *bn_scales = &net->tensors[net->nodes[i].src[3]];
@@ -156,13 +119,12 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             int sz = net->tensors[net->nodes[i].dst[0]].c;
             int nb_read = fread(bn_scales->data, sizeof(float), sz, fp);
             nb_read = fread(bn_mean->data, sizeof(float), sz, fp);
-            BCNN_INFO(
-                net->log_ctx,
-                "batchnorm layer= %d nbread_mean= %lu mean_size_expected= %d",
-                i, (unsigned long)nb_read, sz);
+            BCNN_INFO(net->log_ctx,
+                      "batchnorm= %d nbread_mean= %lu mean_size_expected= %d",
+                      i, (unsigned long)nb_read, sz);
             nb_read = fread(bn_var->data, sizeof(float), sz, fp);
             BCNN_INFO(net->log_ctx,
-                      "batchnorm layer= %d nbread_variance= %lu "
+                      "batchnorm= %d nbread_variance= %lu "
                       "variance_size_expected= %d",
                       i, (unsigned long)nb_read, sz);
 // nb_read = fread(bn_biases->data, sizeof(float), sz, fp);
@@ -629,7 +591,9 @@ yolo_detection *run_inference(int w_frame, int h_frame, bcnn_net *net,
         bcnn_yolo_get_detections(net, 0, w_frame, h_frame, net->input_width,
                                  net->input_height, 0.5, 1, &ndets);
     // Non max suppression
-    int num_classes = net->nodes[net->num_nodes - 1].layer->classes;
+    bcnn_yolo_param *param =
+        (bcnn_yolo_param *)net->nodes[net->num_nodes - 1].param;
+    int num_classes = param->classes;
     do_nms_obj(dets, ndets, num_classes, nms_tresh);
     *num_dets = ndets;
     return dets;

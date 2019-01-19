@@ -29,8 +29,8 @@
 extern "C" {
 #endif
 
-int bcnn_forward_concat_layer(bcnn_net *net, bcnn_node *node);
-int bcnn_backward_concat_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_forward_concat_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_concat_layer(bcnn_net *net, bcnn_node *node);
 
 #ifdef __cplusplus
 }

@@ -29,23 +29,24 @@
 extern "C" {
 #endif
 
-int bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a);
-int bcnn_forward_activation_layer(bcnn_net *net, bcnn_node *node);
-int bcnn_backward_activation_cpu(float *x, float *dx, int sz,
-                                 bcnn_activation a);
-int bcnn_backward_activation_layer(bcnn_net *net, bcnn_node *node);
+typedef struct bcnn_activation_param {
+    bcnn_activation activation;
+} bcnn_activation_param;
 
-int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a);
-int bcnn_forward_activation_layer_gpu(bcnn_layer *layer,
-                                      bcnn_tensor *src_tensor,
-                                      bcnn_tensor *dst_tensor,
-                                      bcnn_tensor *weights);
-int bcnn_backward_activation_gpu(float *x, float *dx, int sz,
-                                 bcnn_activation a);
-int bcnn_backward_activation_layer_gpu(bcnn_layer *layer,
-                                       bcnn_tensor *src_tensor,
-                                       bcnn_tensor *dst_tensor,
-                                       bcnn_tensor *weights);
+void bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a);
+void bcnn_forward_activation_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_activation_cpu(float *x, float *dx, int sz,
+                                  bcnn_activation a);
+void bcnn_backward_activation_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_update_activation_layer(bcnn_net *net, bcnn_node *node);
+
+#ifdef BCNN_USE_CUDA
+void bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a);
+void bcnn_forward_activation_layer_gpu(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_activation_gpu(float *x, float *dx, int sz,
+                                  bcnn_activation a);
+void bcnn_backward_activation_layer_gpu(bcnn_net *net, bcnn_node *node);
+#endif
 
 #ifdef __cplusplus
 }

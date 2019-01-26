@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Jean-Noel Braun.
+ * Copyright (c) 2016-present Jean-Noel Braun.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -492,10 +492,12 @@ struct bcnn_node {
     int *dst;  // 'num_dst' tensors indexes (net->tensors array)
     bcnn_layer *layer;
     size_t param_size;
-    bcnn_layer_type op_type;
+    bcnn_layer_type type;
     void *param;
     void (*forward)(struct bcnn_net *net, struct bcnn_node *node);
     void (*backward)(struct bcnn_net *net, struct bcnn_node *node);
+    void (*update)(struct bcnn_net *net, struct bcnn_node *node);
+    void (*free_param)(struct bcnn_node *node);
 };
 
 struct bcnn_net {
@@ -641,13 +643,6 @@ bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, char *src_id,
                                     char *dst_id);
 
 /* Cost layer */
-void bcnn_LiftedStructSimilaritySoftmax_loss_backward(bcnn_layer *layer,
-                                                      bcnn_tensor *src_tensor,
-                                                      bcnn_tensor *dst_tensor);
-void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
-                                                     bcnn_tensor *src_tensor,
-                                                     bcnn_tensor *label_node,
-                                                     bcnn_tensor *dst_tensor);
 bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 bcnn_loss_metric loss_metric, float scale,
                                 char *src_id, char *label_id, char *dst_id);
@@ -658,7 +653,9 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
 /* TODO: move to private header */
 bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter);
 
-typedef struct { float x, y, w, h; } yolo_box;
+typedef struct {
+    float x, y, w, h;
+} yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;

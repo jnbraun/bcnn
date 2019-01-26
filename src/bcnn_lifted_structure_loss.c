@@ -1,18 +1,20 @@
+#include "bcnn_cost_layer.h"
 
 #include "bcnn/bcnn.h"
-
-#include <bh/bh_mem.h>
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
+
+#include <bh/bh_mem.h>
 
 #ifdef BCNN_USE_BLAS
 #include "cblas.h"
 #endif
 
-void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
-                                                     bcnn_tensor *src_tensor,
-                                                     bcnn_tensor *label,
-                                                     bcnn_tensor *dst_tensor) {
+void bcnn_lifted_struct_loss_forward(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_tensor *label = &net->tensors[1];
+    bcnn_cost_param *param = (bcnn_cost_param *)node->param;
     /*
         1. D^2 = x1_transpose + 1x_transpose - 2XX_transpose
         2. Construct pairwise label matrix
@@ -64,7 +66,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, M_, N_, K_, -2.0,
                 src_tensor->data, K_, src_tensor->data, K_, 0, dot_, N_);
 #else
-    bcnn_gemm(layer->gemm_ctx, 0, 1, M_, N_, K_, -2.0, src_tensor->data, K_,
+    bcnn_gemm(net->gemm_ctx, 0, 1, M_, N_, K_, -2.0, src_tensor->data, K_,
               src_tensor->data, K_, 0, dot_, N_);
 #endif
 
@@ -122,7 +124,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
     **********************************/
     float loss = 0;
     float margin = 1.0;
-    layer->num_constraints = 0;
+    param->num_constraints = 0;
     float *bin = src_tensor->data;
     float *bout = src_tensor->grad_data;
     memset(bout, 0, sz);  // initialize grad_data
@@ -214,7 +216,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
 
                 // squared hinge
                 loss += this_loss * this_loss;
-                layer->num_constraints += 1.0;
+                param->num_constraints += 1.0;
 
                 /****************************
                     Step 4: Compute gradient
@@ -272,7 +274,7 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
             }
         }
     }
-    loss = loss / layer->num_constraints;
+    loss = loss / param->num_constraints;
     dst_tensor->data[0] = loss;
 
     bh_align_free(dist_sq);
@@ -292,12 +294,14 @@ void bcnn_LiftedStructSimilaritySoftmax_loss_forward(bcnn_layer *layer,
 #endif
 }
 
-void bcnn_LiftedStructSimilaritySoftmax_loss_backward(bcnn_layer *layer,
-                                                      bcnn_tensor *src_tensor,
-                                                      bcnn_tensor *dst_tensor) {
+void bcnn_lifted_struct_loss_backward(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_tensor *label = &net->tensors[1];
+    bcnn_cost_param *param = (bcnn_cost_param *)node->param;
     int batch_size = src_tensor->n;
     int channels = src_tensor->c;
-    float alpha = layer->scale / layer->num_constraints;
+    float alpha = param->scale / param->num_constraints;
 
 #ifdef BCNN_USE_CUDA
     float *bout = src_tensor->grad_data_gpu;

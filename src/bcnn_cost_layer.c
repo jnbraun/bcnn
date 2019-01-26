@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Jean-Noel Braun.
+ * Copyright (c) 2016-present Jean-Noel Braun.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -34,9 +34,17 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
     int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
-    // Create layer
-    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = COST;
+
+    // Fill nodes param
+    node.type = COST;
+    node.param_size = sizeof(bcnn_cost_param);
+    node.param = (bcnn_cost_param *)calloc(1, node.param_size);
+    bcnn_cost_param *param = (bcnn_cost_param *)node.param;
+    param->scale = scale;
+    param->loss = loss;
+    param->loss_metric = loss_metric;
+    node.forward = bcnn_forward_cost_layer;
+    node.backward = bcnn_backward_cost_layer;
 
     BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,
                        BCNN_INVALID_PARAMETER,
@@ -52,10 +60,6 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
                        "Cost layer: invalid input node name %s", src_id);
 
-    node.layer->scale = scale;
-    node.layer->loss_metric = loss_metric;
-    node.layer->loss = loss;
-    node.layer->gemm_ctx = net->gemm_ctx;
     // Setup label node
     bcnn_tensor_set_shape(&net->tensors[1], net->tensors[node.src[0]].n,
                           net->tensors[node.src[0]].c,
@@ -114,17 +118,17 @@ static void bcnn_euclidean_loss_forward(bcnn_tensor *src_tensor,
 
 static void bcnn_euclidean_loss_backward(bcnn_tensor *src_tensor,
                                          bcnn_tensor *dst_tensor,
-                                         bcnn_layer *layer) {
+                                         bcnn_cost_param *param) {
     int size = bcnn_tensor_size(src_tensor);
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_axpy(size, layer->scale, dst_tensor->grad_data_gpu, 1,
+    bcnn_cuda_axpy(size, param->scale, dst_tensor->grad_data_gpu, 1,
                    src_tensor->grad_data_gpu, 1);
 #else
-    bcnn_axpy(size, layer->scale, dst_tensor->grad_data, src_tensor->grad_data);
+    bcnn_axpy(size, param->scale, dst_tensor->grad_data, src_tensor->grad_data);
 #endif
 }
 
-void bcnn_compute_error(bcnn_layer *layer, bcnn_tensor *src_tensor,
+void bcnn_compute_error(bcnn_cost_param *param, bcnn_tensor *src_tensor,
                         bcnn_tensor *label, bcnn_tensor *dst_tensor) {
     int input_size = src_tensor->w * src_tensor->h * src_tensor->c;
     int batch_size = src_tensor->n;
@@ -134,7 +138,7 @@ void bcnn_compute_error(bcnn_layer *layer, bcnn_tensor *src_tensor,
                               sz);
 #endif
 
-    switch (layer->loss_metric) {
+    switch (param->loss_metric) {
         case COST_ERROR:
             *(dst_tensor->data) = 0.0f;
 #ifdef BCNN_USE_CUDA
@@ -228,43 +232,41 @@ void bcnn_compute_error(bcnn_layer *layer, bcnn_tensor *src_tensor,
     }
 }
 
-int bcnn_forward_cost_layer(bcnn_net *net, bcnn_node *node) {
+void bcnn_forward_cost_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     bcnn_tensor *label = &net->tensors[1];
-    bcnn_layer *layer = node->layer;
+    bcnn_cost_param *param = (bcnn_cost_param *)node->param;
     // If no truth available, do nothing
     if (!label->data) {
-        return BCNN_SUCCESS;
+        return;
     }
-    switch (layer->loss) {
+    switch (param->loss) {
         case EUCLIDEAN_LOSS:
             bcnn_euclidean_loss_forward(src_tensor, label, dst_tensor);
             break;
         case LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS:
-            bcnn_LiftedStructSimilaritySoftmax_loss_forward(layer, src_tensor,
-                                                            label, dst_tensor);
+            bcnn_lifted_struct_loss_forward(net, node);
             break;
     }
 
-    bcnn_compute_error(layer, src_tensor, label, dst_tensor);
+    bcnn_compute_error(param, src_tensor, label, dst_tensor);
 
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_backward_cost_layer(bcnn_net *net, bcnn_node *node) {
+void bcnn_backward_cost_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
-    bcnn_layer *layer = node->layer;
-    switch (layer->loss) {
+    bcnn_cost_param *param = (bcnn_cost_param *)node->param;
+    switch (param->loss) {
         case EUCLIDEAN_LOSS:
-            bcnn_euclidean_loss_backward(src_tensor, dst_tensor, layer);
+            bcnn_euclidean_loss_backward(src_tensor, dst_tensor, param);
             break;
         case LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS:
-            bcnn_LiftedStructSimilaritySoftmax_loss_backward(layer, src_tensor,
-                                                             dst_tensor);
+            bcnn_lifted_struct_loss_backward(net, node);
             break;
     }
 
-    return BCNN_SUCCESS;
+    return;
 }

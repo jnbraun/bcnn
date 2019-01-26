@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Jean-Noel Braun.
+ * Copyright (c) 2016-present Jean-Noel Braun.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,19 +29,24 @@
 extern "C" {
 #endif
 
-int bcnn_forward_lrn_layer(bcnn_net *net, bcnn_node *node);
-int bcnn_backward_lrn_layer(bcnn_net *net, bcnn_node *node);
+typedef struct bcnn_lrn_param {
+    int local_size;
+    float alpha;
+    float beta;
+    float k;
+    float *tmp_sum;      // tmp_sum stores the intermediate sum results
+    float *tmp_squared;  // workspace stores the intermediate squared results
+} bcnn_lrn_param;
 
-int bcnn_forward_lrn_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                               bcnn_tensor *dst_tensor);
-int bcnn_backward_lrn_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                bcnn_tensor *dst_tensor);
+void bcnn_forward_lrn_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_lrn_layer(bcnn_net *net, bcnn_node *node);
+
+void bcnn_forward_lrn_layer_cpu(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_lrn_layer_cpu(bcnn_net *net, bcnn_node *node);
 
 #ifdef BCNN_USE_CUDA
-int bcnn_forward_lrn_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                               bcnn_tensor *dst_tensor);
-int bcnn_backward_lrn_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                bcnn_tensor *dst_tensor);
+void bcnn_forward_lrn_layer_gpu(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_lrn_layer_gpu(bcnn_net *net, bcnn_node *node);
 #endif
 
 #ifdef __cplusplus

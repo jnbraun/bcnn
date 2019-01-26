@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Jean-Noel Braun.
+ * Copyright (c) 2016-present Jean-Noel Braun.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,14 +29,21 @@
 extern "C" {
 #endif
 
-int bcnn_forward_dropout_layer(bcnn_net *net, bcnn_node *node);
-int bcnn_backward_dropout_layer(bcnn_net *net, bcnn_node *node);
+typedef struct bcnn_dropout_param {
+    float dropout_rate;
+    float scale;
+    float *rand;
+#ifdef BCNN_USE_CUDA
+    float *rand_gpu;
+#endif
+} bcnn_dropout_param;
+
+void bcnn_forward_dropout_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_dropout_layer(bcnn_net *net, bcnn_node *node);
 
 #ifdef BCNN_USE_CUDA
-int bcnn_forward_dropout_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                   bcnn_tensor *dst_tensor, bcnn_state state);
-int bcnn_backward_dropout_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor);
+void bcnn_forward_dropout_layer_gpu(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_dropout_layer_gpu(bcnn_net *net, bcnn_node *node);
 #endif
 
 #ifdef __cplusplus

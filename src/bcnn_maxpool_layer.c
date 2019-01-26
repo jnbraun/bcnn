@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Jean-Noel Braun.
+ * Copyright (c) 2016-present Jean-Noel Braun.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -88,38 +88,11 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = MAXPOOL;
-    node.layer->size = size;
-    node.layer->stride = stride;
-
     sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
-    node.layer->indexes = (int *)calloc(sz, sizeof(int));
-#ifdef BCNN_USE_CUDA
-    node.layer->indexes_gpu = bcnn_cuda_malloc_i32(sz);
-#ifdef BCNN_USE_CUDNN
-    bcnn_cudnn_check(cudnnCreateTensorDescriptor(&node.layer->src_tensor_desc));
-    bcnn_cudnn_check(cudnnCreateTensorDescriptor(&node.layer->dst_tensor_desc));
-    bcnn_cudnn_check(cudnnCreatePoolingDescriptor(&node.layer->pooling_desc));
-    bcnn_cudnn_check(cudnnSetPooling2dDescriptor(
-        node.layer->pooling_desc, CUDNN_POOLING_MAX, CUDNN_NOT_PROPAGATE_NAN,
-        node.layer->size, node.layer->size, 0, 0, node.layer->stride,
-        node.layer->stride));
-    bcnn_cudnn_check(cudnnSetTensor4dDescriptor(
-        node.layer->src_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-        net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
-        net->tensors[node.src[0]].h, net->tensors[node.src[0]].w));
-    bcnn_cudnn_check(cudnnSetTensor4dDescriptor(
-        node.layer->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-        net->tensors[node.dst[0]].n, net->tensors[node.dst[0]].c,
-        net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].w));
-#endif
-#endif
-
-    node.op_type = MAXPOOL;
-    node.param_size = sizeof(maxpool_param);
-    node.param = (maxpool_param *)calloc(1, node.param_size);
-    maxpool_param *param = (maxpool_param *)node.param;
+    node.type = MAXPOOL;
+    node.param_size = sizeof(bcnn_maxpool_param);
+    node.param = (bcnn_maxpool_param *)calloc(1, node.param_size);
+    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node.param;
     param->size = size;
     param->stride = stride;
     param->indexes = (int *)calloc(sz, sizeof(int));
@@ -157,58 +130,10 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
     return 0;
 }
 
-#if 0
-void bcnn_forward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor) {
-    int b, i, j, k, m, n, dst_index, valid, src_index, cur_w, cur_h, max_i;
-    float max_f = -FLT_MAX, val;
-
-    int batch_size = dst_tensor->n;
-    int offset0, offset1, offset2;
-
-    for (b = 0; b < batch_size; ++b) {  // batch_size
-        offset0 = dst_tensor->c * b;
-        for (k = 0; k < dst_tensor->c; ++k) {  // depth
-            offset1 = dst_tensor->h * (k + offset0);
-            for (i = 0; i < dst_tensor->h; ++i) {  // height
-                offset2 = dst_tensor->w * (offset1 + i);
-                for (j = 0; j < dst_tensor->w; ++j) {  // width
-                    dst_index = j + offset2;
-                    max_f = -FLT_MAX;
-                    max_i = -1;
-                    for (n = 0; n < layer->size; ++n) {  // pooling window
-                        for (m = 0; m < layer->size; ++m) {
-                            cur_h = i * layer->stride + n;
-                            cur_w = j * layer->stride + m;
-                            src_index =
-                                cur_w +
-                                src_tensor->w *
-                                    (cur_h +
-                                     src_tensor->h * (k + b * src_tensor->c));
-                            valid = (cur_h >= 0 && cur_h < src_tensor->h &&
-                                     cur_w >= 0 && cur_w < src_tensor->w);
-                            val = (valid != 0) ? src_tensor->data[src_index]
-                                               : -FLT_MAX;
-                            if (val > max_f) {
-                                max_f = val;
-                                max_i = src_index;
-                            }
-                        }
-                    }
-                    dst_tensor->data[dst_index] = max_f;
-                    layer->indexes[dst_index] = max_i;
-                }
-            }
-        }
-    }
-    return;
-}
-#endif
-
 void bcnn_forward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
-    maxpool_param *param = (maxpool_param *)node->param;
+    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node->param;
     int size = param->size;
     int stride = param->stride;
     int *indexes = param->indexes;
@@ -257,9 +182,10 @@ void bcnn_forward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
 }
 
 #ifdef BCNN_USE_NEON
-void bcnn_forward_maxpool_layer_cpu_neon(bcnn_layer *layer,
-                                         bcnn_tensor *src_tensor,
-                                         bcnn_tensor *dst_tensor) {
+void bcnn_forward_maxpool_layer_cpu_neon_2x2(bcnn_tensor *src_tensor,
+                                             bcnn_tensor *dst_tensor) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     const int tail = src_tensor->w + (src_tensor->w - 2 * dst_tensor->w);
     for (int b = 0; b < dst_tensor->n; ++b) {  // batch_size
         int offset0 = dst_tensor->c * b;
@@ -306,41 +232,26 @@ void bcnn_forward_maxpool_layer_cpu_neon(bcnn_layer *layer,
 void bcnn_forward_maxpool_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
+    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node->param;
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_maxpool_layer_gpu(node->layer, src, dst);
+    return bcnn_forward_maxpool_layer_gpu(net, node);
 #else
 #ifdef BCNN_USE_NEON
-    if (node->layer->size == 2 && node->layer->stride == 2) {
-        return bcnn_forward_maxpool_layer_cpu_neon(node->layer, src, dst);
+    if (param->size == 2 && param->stride == 2) {
+        return bcnn_forward_maxpool_layer_cpu_neon_2x2(src, dst);
     } else {
-        return bcnn_forward_maxpool_layer_cpu(node->layer, src, dst);
+        return bcnn_forward_maxpool_layer_cpu(net, node);
     }
 #else
-    // return bcnn_forward_maxpool_layer_cpu(node->layer, src, dst);
     return bcnn_forward_maxpool_layer_cpu(net, node);
 #endif
 #endif
 }
 
-#if 0
-void bcnn_backward_maxpool_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                     bcnn_tensor *dst_tensor) {
-    int i, index;
-
-    int sz = bcnn_tensor_size(dst_tensor);
-
-    for (i = 0; i < sz; ++i) {
-        index = layer->indexes[i];
-        src_tensor->grad_data[index] += dst_tensor->grad_data[i];
-    }
-
-    return;
-}
-#endif
 void bcnn_backward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
-    maxpool_param *param = (maxpool_param *)node->param;
+    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node->param;
     int *indexes = param->indexes;
     int i, index;
 
@@ -358,9 +269,8 @@ void bcnn_backward_maxpool_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_maxpool_layer_gpu(node->layer, src, dst);
+    return bcnn_backward_maxpool_layer_gpu(net, node);
 #else
-    // return bcnn_backward_maxpool_layer_cpu(node->layer, src, dst);
     return bcnn_backward_maxpool_layer_cpu(net, node);
 #endif
     return;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Jean-Noel Braun.
+ * Copyright (c) 2016-present Jean-Noel Braun.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +29,7 @@
 extern "C" {
 #endif
 
-typedef struct maxpool_param {
+typedef struct bcnn_maxpool_param {
     int size;
     int stride;
     int *indexes;
@@ -41,15 +41,13 @@ typedef struct maxpool_param {
     cudnnPoolingDescriptor_t pooling_desc;
 #endif
 #endif
-} maxpool_param;
+} bcnn_maxpool_param;
 
 void bcnn_forward_maxpool_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_maxpool_layer(bcnn_net *net, bcnn_node *node);
 #ifdef BCNN_USE_CUDA
-void bcnn_forward_maxpool_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor);
-void bcnn_backward_maxpool_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                     bcnn_tensor *dst_tensor);
+void bcnn_forward_maxpool_layer_gpu(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_maxpool_layer_gpu(bcnn_net *net, bcnn_node *node);
 #endif
 
 #ifdef __cplusplus

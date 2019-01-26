@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
+* Copyright (c) 2016-present Jean-Noel Braun.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a copy
 * of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +28,7 @@
 
 #include "bcnn_utils.h"
 
-__global__ void _bcnn_forward_activation_layer_kernel(float *x, int sz,
+__global__ void bcnn_forward_activation_layer_kernel(float *x, int sz,
                                                       bcnn_activation a) {
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
     if (i < sz) {
@@ -60,26 +60,26 @@ __global__ void _bcnn_forward_activation_layer_kernel(float *x, int sz,
     return;
 }
 
-int bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a) {
-    _bcnn_forward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz),
+void bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a) {
+    bcnn_forward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz),
                                             BCNN_CUDA_THREADS>>>(x, sz, a);
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_forward_activation_layer_gpu(bcnn_layer *layer,
-                                      bcnn_tensor *src_tensor,
-                                      bcnn_tensor *dst_tensor,
-                                      bcnn_tensor *weights) {
+void bcnn_forward_activation_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_activation_param *param = (bcnn_activation_param *)node->param;
     int sz = bcnn_tensor_size(dst_tensor);
 
     dst_tensor->data_gpu = src_tensor->data_gpu;
-    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, layer->activation);
+    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, param->activation);
     bcnn_cuda_check(cudaPeekAtLastError());
 
-    return BCNN_SUCCESS;
+    return;
 }
 
-__global__ void _bcnn_backward_activation_layer_kernel(float *x, float *dx,
+__global__ void bcnn_backward_activation_layer_kernel(float *x, float *dx,
                                                        int sz,
                                                        bcnn_activation a) {
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
@@ -111,25 +111,25 @@ __global__ void _bcnn_backward_activation_layer_kernel(float *x, float *dx,
     }
 }
 
-int bcnn_backward_activation_gpu(float *x, float *dx, int sz,
+void bcnn_backward_activation_gpu(float *x, float *dx, int sz,
                                  bcnn_activation a) {
-    _bcnn_backward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz),
+    bcnn_backward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz),
                                              BCNN_CUDA_THREADS>>>(x, dx, sz, a);
-    return BCNN_SUCCESS;
+    return;
 }
 
-int bcnn_backward_activation_layer_gpu(bcnn_layer *layer,
-                                       bcnn_tensor *src_tensor,
-                                       bcnn_tensor *dst_tensor,
-                                       bcnn_tensor *weights) {
+void bcnn_backward_activation_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_activation_param *param = (bcnn_activation_param *)node->param;
     int sz = bcnn_tensor_size(dst_tensor);
 
     bcnn_backward_activation_gpu(
-        dst_tensor->data_gpu, dst_tensor->grad_data_gpu, sz, layer->activation);
+        dst_tensor->data_gpu, dst_tensor->grad_data_gpu, sz, param->activation);
     bcnn_cuda_check(cudaPeekAtLastError());
     src_tensor->grad_data_gpu = dst_tensor->grad_data_gpu;
 
-    return BCNN_SUCCESS;
+    return;
 }
 
 #endif

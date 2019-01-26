@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Jean-Noel Braun.
+ * Copyright (c) 2016-present Jean-Noel Braun.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -34,9 +34,13 @@ bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
     bcnn_tensor dst_tensor = {0};
     int is_src_node1_found = 0, is_src_node2_found = 0;
 
-    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = ELTWISE;
-    node.layer->activation = activation;
+    node.type = ELTWISE;
+    node.param_size = sizeof(bcnn_eltwise_param);
+    node.param = (bcnn_eltwise_param *)calloc(1, sizeof(node.param_size));
+    bcnn_eltwise_param *param = (bcnn_eltwise_param *)node.param;
+    param->activation = activation;
+    node.forward = bcnn_forward_eltwise_layer;
+    node.backward = bcnn_backward_eltwise_layer;
     for (int i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id1) == 0) {
             bcnn_node_add_input(net, &node, i);
@@ -75,6 +79,7 @@ bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
     // Add node to net
     bcnn_net_add_node(net, node);
+
     BCNN_INFO(
         net->log_ctx,
         "[EltWise] input1_shape= %dx%dx%d input2_shape= %dx%dx%d output_shape= "
@@ -87,78 +92,80 @@ bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
     return BCNN_SUCCESS;
 }
 
-int bcnn_forward_eltwise_layer_cpu(bcnn_layer *layer, bcnn_tensor *src0_tensor,
-                                   bcnn_tensor *src1_tensor,
-                                   bcnn_tensor *dst_tensor) {
+void bcnn_forward_eltwise_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src0_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *src1_tensor = &net->tensors[node->src[1]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_eltwise_param *param = (bcnn_eltwise_param *)node->param;
     int sz = bcnn_tensor_size(dst_tensor);
+
     bcnn_copy_f32(sz, src0_tensor->data, dst_tensor->data);
     bcnn_axpy(sz, 1.0f, src1_tensor->data, dst_tensor->data);
-    bcnn_forward_activation_cpu(dst_tensor->data, sz, layer->activation);
-    return BCNN_SUCCESS;
+    bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
+
+    return;
 }
 
-int bcnn_backward_eltwise_layer_cpu(bcnn_layer *layer, bcnn_tensor *src0_tensor,
-                                    bcnn_tensor *src1_tensor,
-                                    bcnn_tensor *dst_tensor) {
+void bcnn_backward_eltwise_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src0_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *src1_tensor = &net->tensors[node->src[1]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_eltwise_param *param = (bcnn_eltwise_param *)node->param;
     int sz = bcnn_tensor_size(dst_tensor);
+
     bcnn_backward_activation_cpu(dst_tensor->data, dst_tensor->grad_data, sz,
-                                 layer->activation);
+                                 param->activation);
     bcnn_axpy(sz, 1.0f, dst_tensor->grad_data, src0_tensor->grad_data);
     bcnn_axpy(sz, 1.0f, dst_tensor->grad_data, src1_tensor->grad_data);
-    return BCNN_SUCCESS;
+
+    return;
 }
 
 #ifdef BCNN_USE_CUDA
-int bcnn_forward_eltwise_layer_gpu(bcnn_layer *layer, bcnn_tensor *src0_tensor,
-                                   bcnn_tensor *src1_tensor,
-                                   bcnn_tensor *dst_tensor) {
+void bcnn_forward_eltwise_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src0_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *src1_tensor = &net->tensors[node->src[1]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_eltwise_param *param = (bcnn_eltwise_param *)node->param;
     int sz = bcnn_tensor_size(dst_tensor);
+
     bcnn_cuda_copy_f32(sz, src0_tensor->data_gpu, 1, dst_tensor->data_gpu, 1);
     bcnn_cuda_axpy(sz, 1.0f, src1_tensor->data_gpu, 1, dst_tensor->data_gpu, 1);
-    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, layer->activation);
-    return BCNN_SUCCESS;
+    bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, param->activation);
+
+    return;
 }
 
-int bcnn_backward_eltwise_layer_gpu(bcnn_layer *layer, bcnn_tensor *src0_tensor,
-                                    bcnn_tensor *src1_tensor,
-                                    bcnn_tensor *dst_tensor) {
+void bcnn_backward_eltwise_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src0_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *src1_tensor = &net->tensors[node->src[1]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_eltwise_param *param = (bcnn_eltwise_param *)node->param;
     int sz = bcnn_tensor_size(dst_tensor);
+
     bcnn_backward_activation_gpu(
-        dst_tensor->data_gpu, dst_tensor->grad_data_gpu, sz, layer->activation);
+        dst_tensor->data_gpu, dst_tensor->grad_data_gpu, sz, param->activation);
     bcnn_cuda_axpy(sz, 1.0f, dst_tensor->grad_data_gpu, 1,
                    src0_tensor->grad_data_gpu, 1);
     bcnn_cuda_axpy(sz, 1.0f, dst_tensor->grad_data_gpu, 1,
                    src1_tensor->grad_data_gpu, 1);
-    return BCNN_SUCCESS;
+
+    return;
 }
 #endif
 
-int bcnn_forward_eltwise_layer(bcnn_net *net, bcnn_node *node) {
-    BCNN_CHECK_AND_LOG(net->log_ctx, node->num_src == 2, BCNN_INVALID_PARAMETER,
-                       "Eltwise layer: invalid setup");
-    bcnn_tensor *src0_tensor = &net->tensors[node->src[0]];
-    bcnn_tensor *src1_tensor = &net->tensors[node->src[1]];
-    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+void bcnn_forward_eltwise_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_eltwise_layer_gpu(node->layer, src0_tensor, src1_tensor,
-                                          dst_tensor);
+    return bcnn_forward_eltwise_layer_gpu(net, node);
 #else
-    return bcnn_forward_eltwise_layer_cpu(node->layer, src0_tensor, src1_tensor,
-                                          dst_tensor);
+    return bcnn_forward_eltwise_layer_cpu(net, node);
 #endif
 }
 
-int bcnn_backward_eltwise_layer(bcnn_net *net, bcnn_node *node) {
-    BCNN_CHECK_AND_LOG(net->log_ctx, node->num_src == 2, BCNN_INVALID_PARAMETER,
-                       "Eltwise layer: invalid setup");
-    bcnn_tensor *src0_tensor = &net->tensors[node->src[0]];
-    bcnn_tensor *src1_tensor = &net->tensors[node->src[1]];
-    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+void bcnn_backward_eltwise_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_eltwise_layer_gpu(node->layer, src0_tensor,
-                                           src1_tensor, dst_tensor);
+    return bcnn_backward_eltwise_layer_gpu(net, node);
 #else
-    return bcnn_backward_eltwise_layer_cpu(node->layer, src0_tensor,
-                                           src1_tensor, dst_tensor);
+    return bcnn_backward_eltwise_layer_cpu(net, node);
 #endif
 }

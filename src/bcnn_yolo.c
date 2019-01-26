@@ -10,7 +10,6 @@
 bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                                 int classes, int coords, int total, int *mask,
                                 float *anchors, char *src_id, char *dst_id) {
-    // layer l = {0};
     bcnn_node node = {0};
 
     BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,
@@ -32,12 +31,32 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                        BCNN_INVALID_PARAMETER,
                        "Yolo layer: inconsistent number of channels %d",
                        num_boxes_per_cell * (classes + coords + 1));
-    node.layer = (bcnn_layer *)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = YOLO;
-    node.layer->num = num_boxes_per_cell;  // num bboxes per cell
-    node.layer->total = total;
-    node.layer->mask = (int *)calloc(num_boxes_per_cell, sizeof(int));
-    memcpy(node.layer->mask, mask, num_boxes_per_cell * sizeof(int));
+
+    node.type = YOLO;
+    node.param_size = sizeof(bcnn_yolo_param);
+    node.param = (bcnn_yolo_param *)calloc(1, node.param_size);
+    bcnn_yolo_param *param = (bcnn_yolo_param *)node.param;
+    param->num = num_boxes_per_cell;
+    param->total = total;
+    param->mask = (int *)calloc(num_boxes_per_cell, sizeof(int));
+    memcpy(param->mask, mask, num_boxes_per_cell * sizeof(int));
+    param->classes = classes;
+    param->coords = coords;
+    param->cost = (float *)calloc(1, sizeof(float));
+    param->max_boxes = BCNN_DETECTION_MAX_BOXES;
+    param->truths = param->max_boxes * (coords + 1);
+    // Setup layer biases
+    char biases_name[256];
+    sprintf(biases_name, "%s_b", src_id);
+    bcnn_tensor_create(&param->biases, 1, 1, 1, total * 2, 0, biases_name,
+                       net->state);
+    bcnn_tensor_filler w_filler = {.value = 0.5f, .type = FIXED};
+    bcnn_tensor_fill(&param->biases, w_filler);
+    if (anchors != NULL) {
+        memcpy(param->biases.data, anchors, total * 2 * sizeof(float));
+    }
+    node.forward = bcnn_forward_yolo_layer;
+    node.backward = bcnn_backward_yolo_layer;
     // Setup output tensor
     bcnn_tensor dst_tensor = {0};
     bcnn_tensor_set_shape(&dst_tensor,
@@ -52,22 +71,6 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
-
-    node.layer->classes = classes;
-    node.layer->coords = coords;
-    node.layer->cost = (float *)calloc(1, sizeof(float));
-    // Setup layer biases
-    char biases_name[256];
-    sprintf(biases_name, "%s_b", src_id);
-    bcnn_tensor_create(&node.layer->biases, 1, 1, 1, total * 2, 0, biases_name,
-                       net->state);
-    bcnn_tensor_filler w_filler = {.value = 0.5f, .type = FIXED};
-    bcnn_tensor_fill(&node.layer->biases, w_filler);
-    if (anchors != NULL) {
-        memcpy(node.layer->biases.data, anchors, total * 2 * sizeof(float));
-    }
-    node.layer->max_boxes = BCNN_DETECTION_MAX_BOXES;
-    node.layer->truths = node.layer->max_boxes * (coords + 1);
 
     // Add connection to net
     bcnn_net_add_node(net, node);
@@ -181,13 +184,13 @@ void delta_yolo_class(float *output, float *delta, int index, int class,
     }
 }
 
-int entry_index(bcnn_layer *layer, bcnn_tensor *dst_tensor, int batch,
+int entry_index(bcnn_yolo_param *param, bcnn_tensor *dst_tensor, int batch,
                 int location, int entry) {
     int n = location / (dst_tensor->w * dst_tensor->h);
     int loc = location % (dst_tensor->w * dst_tensor->h);
     return batch * bcnn_tensor_size3d(dst_tensor) +
            n * (dst_tensor->w * dst_tensor->h) *
-               (layer->coords + layer->classes + 1) +
+               (param->coords + param->classes + 1) +
            entry * (dst_tensor->w * dst_tensor->h) + loc;
 }
 
@@ -200,25 +203,25 @@ static yolo_box float_to_box(float *f, int stride) {
     return b;
 }
 
-void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
+void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_yolo_param *param,
                                  bcnn_tensor *src_tensor, bcnn_tensor *label,
                                  bcnn_tensor *dst_tensor) {
     int i, j, b, t, n;
     memcpy(dst_tensor->data, src_tensor->data,
            bcnn_tensor_size(dst_tensor) * sizeof(float));
     for (b = 0; b < dst_tensor->n; ++b) {
-        for (n = 0; n < layer->num; ++n) {
-            int index = entry_index(layer, dst_tensor, b,
+        for (n = 0; n < param->num; ++n) {
+            int index = entry_index(param, dst_tensor, b,
                                     n * src_tensor->w * src_tensor->h, 0);
             bcnn_forward_activation_cpu(dst_tensor->data + index,
                                         2 * src_tensor->w * src_tensor->h,
                                         LOGISTIC);
             index =
-                entry_index(layer, dst_tensor, b,
-                            n * src_tensor->w * src_tensor->h, layer->coords);
+                entry_index(param, dst_tensor, b,
+                            n * src_tensor->w * src_tensor->h, param->coords);
             bcnn_forward_activation_cpu(
                 dst_tensor->data + index,
-                (1 + layer->classes) * src_tensor->w * src_tensor->h, LOGISTIC);
+                (1 + param->classes) * src_tensor->w * src_tensor->h, LOGISTIC);
         }
     }
     if (net->state != TRAIN) {
@@ -237,27 +240,27 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
     float avg_anyobj = 0;
     int count = 0;
     int class_count = 0;
-    *(layer->cost) = 0;
+    *(param->cost) = 0;
     for (b = 0; b < dst_tensor->n; ++b) {
         for (j = 0; j < src_tensor->h; ++j) {
             for (i = 0; i < src_tensor->w; ++i) {
-                for (n = 0; n < layer->num; ++n) {
+                for (n = 0; n < param->num; ++n) {
                     int box_index =
-                        entry_index(layer, dst_tensor, b,
+                        entry_index(param, dst_tensor, b,
                                     n * src_tensor->w * src_tensor->h +
                                         j * src_tensor->w + i,
                                     0);
                     yolo_box pred = get_yolo_box(
-                        dst_tensor->data, layer->biases.data, layer->mask[n],
+                        dst_tensor->data, param->biases.data, param->mask[n],
                         box_index, i, j, src_tensor->w, src_tensor->h,
                         net->input_width, net->input_height,
                         src_tensor->w * src_tensor->h);
                     float best_iou = 0;
                     int best_box = 0;
-                    for (t = 0; t < layer->max_boxes; ++t) {
+                    for (t = 0; t < param->max_boxes; ++t) {
                         yolo_box truth =
-                            float_to_box(label->data + t * (layer->coords + 1) +
-                                             b * layer->truths,
+                            float_to_box(label->data + t * (param->coords + 1) +
+                                             b * param->truths,
                                          1);
                         if (!truth.x) {
                             break;
@@ -273,10 +276,10 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
                     /*fprintf(stderr, "best_box %d best_iou %f\n", best_box,
                             best_iou);*/
                     int obj_index =
-                        entry_index(layer, dst_tensor, b,
+                        entry_index(param, dst_tensor, b,
                                     n * src_tensor->w * src_tensor->h +
                                         j * src_tensor->w + i,
-                                    layer->coords);
+                                    param->coords);
                     dst_tensor->grad_data[obj_index] =
                         (dst_tensor->data[obj_index] - 0);
                     /*dst_tensor->grad_data[obj_index] =
@@ -291,10 +294,12 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
                 }
             }
         }
-        for (t = 0; t < layer->max_boxes; ++t) {
+        for (t = 0; t < param->max_boxes; ++t) {
             yolo_box truth = float_to_box(
-                label->data + t * (layer->coords + 1) + b * layer->truths, 1);
-            if (!truth.x) break;
+                label->data + t * (param->coords + 1) + b * param->truths, 1);
+            if (!truth.x) {
+                break;
+            }
             /*fprintf(stderr, "sample %d box %d truth x %f y %f w %f h %f\n", b,
                     t, truth.x, truth.y, truth.w, truth.h);*/
             float best_iou = 0;
@@ -304,10 +309,10 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
             yolo_box truth_shift = truth;
             truth_shift.x = 0;
             truth_shift.y = 0;
-            for (n = 0; n < layer->total; ++n) {
+            for (n = 0; n < param->total; ++n) {
                 yolo_box pred = {0};
-                pred.w = layer->biases.data[2 * n] / net->input_width;
-                pred.h = layer->biases.data[2 * n + 1] / net->input_height;
+                pred.w = param->biases.data[2 * n] / net->input_width;
+                pred.h = param->biases.data[2 * n + 1] / net->input_height;
                 float iou = box_iou(pred, truth_shift);
                 if (iou > best_iou) {
                     best_iou = iou;
@@ -316,8 +321,8 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
             }
             // fprintf(stderr, "best_iou %f best_n %d\n", best_iou, best_n);
             int mask_n = -1;
-            for (int k = 0; k < layer->num; ++k) {
-                if (layer->mask[k] == best_n) {
+            for (int k = 0; k < param->num; ++k) {
+                if (param->mask[k] == best_n) {
                     mask_n = k;
                     break;
                 }
@@ -325,41 +330,41 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
             if (mask_n >= 0) {
                 // Box coordinates
                 int box_index =
-                    entry_index(layer, dst_tensor, b,
+                    entry_index(param, dst_tensor, b,
                                 mask_n * src_tensor->w * src_tensor->h +
                                     j * src_tensor->w + i,
                                 0);
                 float iou = delta_yolo_box(
-                    truth, dst_tensor->data, layer->biases.data, best_n,
+                    truth, dst_tensor->data, param->biases.data, best_n,
                     box_index, i, j, src_tensor->w, src_tensor->h,
                     net->input_width, net->input_height, dst_tensor->grad_data,
                     (2 - truth.w * truth.h), src_tensor->w * src_tensor->h);
                 // Objectness
                 int obj_index =
-                    entry_index(layer, dst_tensor, b,
+                    entry_index(param, dst_tensor, b,
                                 mask_n * src_tensor->w * src_tensor->h +
                                     j * src_tensor->w + i,
-                                layer->coords);
+                                param->coords);
                 avg_obj += dst_tensor->data[obj_index];
                 /*dst_tensor->grad_data[obj_index] =
                     (1 - dst_tensor->data[obj_index]);*/
                 dst_tensor->grad_data[obj_index] =
                     (dst_tensor->data[obj_index] - 1);
 
-                int class = label->data[t * (layer->coords + 1) +
-                                        b * layer->truths + layer->coords];
+                int class = label->data[t * (param->coords + 1) +
+                                        b * param->truths + param->coords];
                 int class_index =
-                    entry_index(layer, dst_tensor, b,
+                    entry_index(param, dst_tensor, b,
                                 mask_n * src_tensor->w * src_tensor->h +
                                     j * src_tensor->w + i,
-                                layer->coords + 1);
+                                param->coords + 1);
                 /*fprintf(
                     stderr, "sample %d box %d class %d out_class %f\n", b, t,
                     class,
                     dst_tensor->data[class_index +
                                      src_tensor->w * src_tensor->h * class]);*/
                 delta_yolo_class(dst_tensor->data, dst_tensor->grad_data,
-                                 class_index, class, layer->classes,
+                                 class_index, class, param->classes,
                                  src_tensor->w * src_tensor->h, &avg_cat);
                 int stride = src_tensor->w * src_tensor->h;
                 ++count;
@@ -374,7 +379,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
             }
         }
     }
-    *(layer->cost) =
+    *(param->cost) =
         powf(sqrtf(bcnn_dot(bcnn_tensor_size(dst_tensor), dst_tensor->grad_data,
                             dst_tensor->grad_data)),
              2);
@@ -383,17 +388,17 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_layer *layer,
             ".75R: %f num_boxes: %d cost: %f\n",
             avg_iou / count, avg_cat / class_count, avg_obj / count,
             avg_anyobj /
-                (src_tensor->w * src_tensor->h * layer->num * src_tensor->n),
-            recall / count, recall75 / count, count, *(layer->cost));
+                (src_tensor->w * src_tensor->h * param->num * src_tensor->n),
+            recall / count, recall75 / count, count, *(param->cost));
 }
 
 #ifdef BCNN_USE_CUDA
-void bcnn_forward_yolo_layer_gpu(bcnn_net *net, bcnn_layer *layer,
+void bcnn_forward_yolo_layer_gpu(bcnn_net *net, bcnn_yolo_param *param,
                                  bcnn_tensor *src_tensor, bcnn_tensor *label,
                                  bcnn_tensor *dst_tensor) {
     int sz = bcnn_tensor_size(src_tensor);
     bcnn_cuda_memcpy_dev2host(src_tensor->data_gpu, src_tensor->data, sz);
-    bcnn_forward_yolo_layer_cpu(net, layer, src_tensor, label, dst_tensor);
+    bcnn_forward_yolo_layer_cpu(net, param, src_tensor, label, dst_tensor);
     if (net->state == TRAIN) {
         sz = bcnn_tensor_size(dst_tensor);
         bcnn_cuda_memcpy_host2dev(dst_tensor->grad_data_gpu,
@@ -402,7 +407,8 @@ void bcnn_forward_yolo_layer_gpu(bcnn_net *net, bcnn_layer *layer,
     return;
 }
 
-void bcnn_backward_yolo_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+void bcnn_backward_yolo_layer_gpu(bcnn_yolo_param *param,
+                                  bcnn_tensor *src_tensor,
                                   bcnn_tensor *dst_tensor) {
     bcnn_cuda_axpy(bcnn_tensor_size(src_tensor), 1, dst_tensor->grad_data_gpu,
                    1, src_tensor->grad_data_gpu, 1);
@@ -410,7 +416,8 @@ void bcnn_backward_yolo_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
 }
 #endif
 
-void bcnn_backward_yolo_layer_cpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
+void bcnn_backward_yolo_layer_cpu(bcnn_yolo_param *param,
+                                  bcnn_tensor *src_tensor,
                                   bcnn_tensor *dst_tensor) {
     bcnn_axpy(bcnn_tensor_size(src_tensor), 1, dst_tensor->grad_data,
               src_tensor->grad_data);
@@ -422,9 +429,9 @@ void bcnn_forward_yolo_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *label = &net->tensors[1];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_yolo_layer_gpu(net, node->layer, src, label, dst);
+    return bcnn_forward_yolo_layer_gpu(net, node->param, src, label, dst);
 #else
-    return bcnn_forward_yolo_layer_cpu(net, node->layer, src, label, dst);
+    return bcnn_forward_yolo_layer_cpu(net, node->param, src, label, dst);
 #endif
 }
 
@@ -432,9 +439,9 @@ void bcnn_backward_yolo_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_yolo_layer_gpu(node->layer, src, dst);
+    return bcnn_backward_yolo_layer_gpu(node->param, src, dst);
 #else
-    return bcnn_backward_yolo_layer_cpu(node->layer, src, dst);
+    return bcnn_backward_yolo_layer_cpu(node->param, src, dst);
 #endif
 }
 
@@ -474,14 +481,14 @@ yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w, int h,
     int count = 0;
     // First, compute the total number of detections
     for (int k = 0; k < net->num_nodes; ++k) {
-        if (net->nodes[k].layer->type == YOLO) {
-            bcnn_layer *layer = net->nodes[k].layer;
+        if (net->nodes[k].type == YOLO) {
+            bcnn_yolo_param *param = (bcnn_yolo_param *)net->nodes[k].param;
             bcnn_tensor *dst = &net->tensors[net->nodes[k].dst[0]];
             for (i = 0; i < dst->w * dst->h; ++i) {
-                for (n = 0; n < layer->num; ++n) {
+                for (n = 0; n < param->num; ++n) {
                     int obj_index =
-                        entry_index(layer, dst, batch, n * dst->w * dst->h + i,
-                                    layer->coords);
+                        entry_index(param, dst, batch, n * dst->w * dst->h + i,
+                                    param->coords);
                     if (dst->data[obj_index] > thresh) {
                         fprintf(stderr, "loc %d box %d obj_index %d obj %f\n",
                                 i, n, obj_index, dst->data[obj_index]);
@@ -494,12 +501,13 @@ yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w, int h,
     yolo_detection *dets = NULL;
     if (count > 0) {
         dets = (yolo_detection *)calloc(count, sizeof(yolo_detection));
-        bcnn_layer *layer = net->nodes[net->num_nodes - 1].layer;
+        bcnn_yolo_param *param =
+            (bcnn_yolo_param *)net->nodes[net->num_nodes - 1].param;
         for (i = 0; i < count; ++i) {
-            dets[i].prob = (float *)calloc(layer->classes, sizeof(float));
-            if (layer->coords > 4) {
+            dets[i].prob = (float *)calloc(param->classes, sizeof(float));
+            if (param->coords > 4) {
                 dets[i].mask =
-                    (float *)calloc(layer->coords - 4, sizeof(float));
+                    (float *)calloc(param->coords - 4, sizeof(float));
             }
         }
     }
@@ -507,32 +515,32 @@ yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w, int h,
     // Fill the detected boxes
     count = 0;
     for (int k = 0; k < net->num_nodes; ++k) {
-        if (net->nodes[k].layer->type == YOLO) {
-            bcnn_layer *layer = net->nodes[k].layer;
+        if (net->nodes[k].type == YOLO) {
+            bcnn_yolo_param *param = (bcnn_yolo_param *)net->nodes[k].param;
             bcnn_tensor *dst = &net->tensors[net->nodes[k].dst[0]];
             for (i = 0; i < dst->w * dst->h; ++i) {
                 int row = i / dst->w;
                 int col = i % dst->w;
-                for (n = 0; n < layer->num; ++n) {
+                for (n = 0; n < param->num; ++n) {
                     int obj_index =
-                        entry_index(layer, dst, batch, n * dst->w * dst->h + i,
-                                    layer->coords);
+                        entry_index(param, dst, batch, n * dst->w * dst->h + i,
+                                    param->coords);
                     float objectness = dst->data[obj_index];
                     if (objectness <= thresh) {
                         continue;
                     }
-                    int box_index = entry_index(layer, dst, batch,
+                    int box_index = entry_index(param, dst, batch,
                                                 n * dst->w * dst->h + i, 0);
                     dets[count].bbox = get_yolo_box(
-                        dst->data, layer->biases.data, layer->mask[n],
+                        dst->data, param->biases.data, param->mask[n],
                         box_index, col, row, dst->w, dst->h, net->input_width,
                         net->input_height, dst->w * dst->h);
                     dets[count].objectness = objectness;
-                    dets[count].classes = layer->classes;
-                    for (j = 0; j < layer->classes; ++j) {
-                        int class_index = entry_index(layer, dst, batch,
+                    dets[count].classes = param->classes;
+                    for (j = 0; j < param->classes; ++j) {
+                        int class_index = entry_index(param, dst, batch,
                                                       n * dst->w * dst->h + i,
-                                                      layer->coords + 1 + j);
+                                                      param->coords + 1 + j);
                         float prob = objectness * dst->data[class_index];
                         dets[count].prob[j] = (prob > thresh) ? prob : 0;
                     }

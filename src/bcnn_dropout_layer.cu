@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
+* Copyright (c) 2016-present Jean-Noel Braun.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a copy
 * of this software and associated documentation files (the "Software"), to deal
@@ -33,37 +33,37 @@ __global__ void _bcnn_dropout_layer_kernel(float *input, int size, float *rand, 
     }
 }
 
-int bcnn_forward_dropout_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor, bcnn_tensor *dst_tensor,
-    bcnn_state state)
+void bcnn_forward_dropout_layer_gpu(bcnn_net *net, bcnn_node *node)
 {
-    
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_dropout_param *param = (bcnn_dropout_param *)node->param;
     int size = bcnn_tensor_size(src_tensor);
     
-    if (state != TRAIN) { // state != train
-        return BCNN_SUCCESS;
+    if (net->state != TRAIN) {
+        return;
     }
-
-    bcnn_cuda_fill_with_random(layer->rand_gpu, size);
-
+    bcnn_cuda_fill_with_random(param->rand_gpu, size);
     _bcnn_dropout_layer_kernel<<<bcnn_cuda_gridsize(size), BCNN_CUDA_THREADS>>>(src_tensor->data_gpu,
-     size, layer->rand_gpu, layer->dropout_rate, layer->scale);
+     size, param->rand_gpu, param->dropout_rate, param->scale);
     bcnn_cuda_check(cudaPeekAtLastError());
-    return BCNN_SUCCESS;
+
+    return;
 }
 
-int bcnn_backward_dropout_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor, bcnn_tensor *dst_tensor)
+void bcnn_backward_dropout_layer_gpu(bcnn_net *net, bcnn_node *node)
 {
-    
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_dropout_param *param = (bcnn_dropout_param *)node->param;
     int size = bcnn_tensor_size(src_tensor);
 
     if (!src_tensor->grad_data_gpu) {
-        return BCNN_SUCCESS;
+        return;
     }
-    
     _bcnn_dropout_layer_kernel<<<bcnn_cuda_gridsize(size), BCNN_CUDA_THREADS>>>(src_tensor->grad_data_gpu,
-     size, layer->rand_gpu, layer->dropout_rate, layer->scale);
+     size, param->rand_gpu, param->dropout_rate, param->scale);
     bcnn_cuda_check(cudaPeekAtLastError());
-    return BCNN_SUCCESS;
+    
+    return;
 }
 
 

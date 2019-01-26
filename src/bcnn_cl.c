@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Jean-Noel Braun.
+ * Copyright (c) 2016-present Jean-Noel Braun.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +31,7 @@
 #include "bcnn/bcnn.h"
 #include "bcnn/bcnn_cl.h"
 #include "bcnn_utils.h"
+#include "bcnn_yolo.h"
 
 int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                             bcnncl_param *param) {
@@ -582,19 +583,26 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
                         }
                     }
                     int sz_label = bcnn_tensor_size3d(&net->tensors[1]);
-                    for (j = 0;
-                         j < net->nodes[net->num_nodes - 1].layer->classes;
-                         ++j) {
-                        // truth
-                        unsigned char green[3] = {0, 255, 0};
-                        for (int t = 0; t < BCNN_DETECTION_MAX_BOXES; ++t) {
-                            bcnn_draw_color_box(
-                                dump_img, net->input_width, net->input_height,
-                                net->tensors[1].data[b * sz_label + t * 5],
-                                net->tensors[1].data[b * sz_label + t * 5 + 1],
-                                net->tensors[1].data[b * sz_label + t * 5 + 2],
-                                net->tensors[1].data[b * sz_label + t * 5 + 3],
-                                green);
+                    if (net->nodes[net->num_nodes - 1].type == YOLO) {
+                        bcnn_node *node = &net->nodes[net->num_nodes - 1];
+                        bcnn_yolo_param *yolo_param =
+                            (bcnn_yolo_param *)node->param;
+                        for (j = 0; j < yolo_param->classes; ++j) {
+                            // truth
+                            unsigned char green[3] = {0, 255, 0};
+                            for (int t = 0; t < BCNN_DETECTION_MAX_BOXES; ++t) {
+                                bcnn_draw_color_box(
+                                    dump_img, net->input_width,
+                                    net->input_height,
+                                    net->tensors[1].data[b * sz_label + t * 5],
+                                    net->tensors[1]
+                                        .data[b * sz_label + t * 5 + 1],
+                                    net->tensors[1]
+                                        .data[b * sz_label + t * 5 + 2],
+                                    net->tensors[1]
+                                        .data[b * sz_label + t * 5 + 3],
+                                    green);
+                            }
                         }
                     }
                     for (int d = 0; d < num_dets; ++d) {

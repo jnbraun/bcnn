@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2016 Jean-Noel Braun.
+* Copyright (c) 2016-present Jean-Noel Braun.
 *
 * Permission is hereby granted, free of charge, to any person obtaining a copy
 * of this software and associated documentation files (the "Software"), to deal
@@ -51,18 +51,20 @@ __global__ void bcnn_forward_upsample_cuda_kernel(size_t dst_sz, float *src,
     dst[dst_idx] += src[src_idx];
 }
 
-int bcnn_forward_upsample_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor) {
+void bcnn_forward_upsample_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_upsample_param *param = (bcnn_upsample_param *)node->param;
     bcnn_cuda_fill_f32(bcnn_tensor_size(dst_tensor), 0, dst_tensor->data_gpu,
                        1);
     size_t size = src_tensor->w * src_tensor->h * src_tensor->c *
-                  src_tensor->n * layer->size * layer->size;
+                  src_tensor->n * param->size * param->size;
     bcnn_forward_upsample_cuda_kernel<<<bcnn_cuda_gridsize(size),
                                         BCNN_CUDA_THREADS>>>(
         size, src_tensor->data_gpu, src_tensor->w, src_tensor->h, src_tensor->c,
-        src_tensor->n, layer->size, dst_tensor->data_gpu);
+        src_tensor->n, param->size, dst_tensor->data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
-    return BCNN_SUCCESS;
+    return;
 }
 
 __global__ void bcnn_backward_upsample_cuda_kernel(size_t dst_sz, float *src,
@@ -87,16 +89,18 @@ __global__ void bcnn_backward_upsample_cuda_kernel(size_t dst_sz, float *src,
     src[src_idx] += dst[dst_idx];
 }
 
-int bcnn_backward_upsample_layer_gpu(bcnn_layer *layer, bcnn_tensor *src_tensor,
-                                     bcnn_tensor *dst_tensor) {
+void bcnn_backward_upsample_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
+    bcnn_upsample_param *param = (bcnn_upsample_param *)node->param;
     size_t size = src_tensor->w * src_tensor->h * src_tensor->c * src_tensor->n *
-               layer->size * layer->size;
+               param->size * param->size;
     bcnn_backward_upsample_cuda_kernel<<<bcnn_cuda_gridsize(size),
                                          BCNN_CUDA_THREADS>>>(
         size, src_tensor->grad_data_gpu, src_tensor->w, src_tensor->h,
-        src_tensor->c, src_tensor->n, layer->size, dst_tensor->grad_data_gpu);
+        src_tensor->c, src_tensor->n, param->size, dst_tensor->grad_data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
-    return BCNN_SUCCESS;
+    return;
 }
 
 #endif  // BCNN_USE_CUDA

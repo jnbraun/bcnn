@@ -289,7 +289,7 @@ void bcnn_backward_activation_layer(bcnn_net *net, bcnn_node *node) {
 
 void bcnn_update_activation_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_activation_param *param = (bcnn_activation_param *)node->param;
-    if (param->activation = PRELU) {
+    if (param->activation == PRELU) {
         bcnn_tensor *weights = &net->tensors[node->src[1]];
         if (net->learner.optimizer == SGD) {
 #ifdef BCNN_USE_CUDA

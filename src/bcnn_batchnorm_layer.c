@@ -64,6 +64,7 @@ bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id,
     bcnn_batchnorm_param *param = (bcnn_batchnorm_param *)node.param;
     node.forward = bcnn_forward_batchnorm_layer;
     node.backward = bcnn_backward_batchnorm_layer;
+    node.release_param = bcnn_release_param_batchnorm_layer;
 
     channels = net->tensors[node.dst[0]].c;
     char saved_mean_name[256], saved_var_name[256], running_mean_name[256],
@@ -328,5 +329,25 @@ void bcnn_backward_batchnorm_layer(bcnn_net *net, bcnn_node *node) {
     return bcnn_backward_batchnorm_layer_gpu(net, node);
 #else
     return bcnn_backward_batchnorm_layer_cpu(net, node);
+#endif
+}
+
+void bcnn_release_param_batchnorm_layer(bcnn_node *node) {
+    bcnn_batchnorm_param *param = (bcnn_batchnorm_param *)node->param;
+    bh_free(param->workspace);
+    bh_free(param->x_norm);
+    bcnn_tensor_destroy(&param->saved_mean);
+    bcnn_tensor_destroy(&param->saved_variance);
+#ifdef BCNN_USE_CUDA
+    if (p_layer->x_norm_gpu) {
+        bcnn_cuda_free(param->x_norm_gpu);
+    }
+    if (p_layer->bn_workspace_gpu) {
+        bcnn_cuda_free(param->bn_workspace_gpu);
+    }
+#ifdef BCNN_USE_CUDNN
+    cudnnDestroyTensorDescriptor(param->dst_tensor_desc);
+    cudnnDestroyTensorDescriptor(param->bias_desc);
+#endif
 #endif
 }

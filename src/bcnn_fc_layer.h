@@ -42,6 +42,7 @@ typedef struct bcnn_fullc_param {
 void bcnn_forward_fullc_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_fullc_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_update_fullc_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_release_param_fullc_layer(bcnn_node *node);
 
 #ifdef __cplusplus
 }

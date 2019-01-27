@@ -48,6 +48,7 @@ typedef struct bcnn_deconv_param {
 void bcnn_forward_deconv_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_deconv_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_update_deconv_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_release_param_deconv_layer(bcnn_node *node);
 
 #ifdef __cplusplus
 }

@@ -74,6 +74,7 @@ bcnn_status bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size,
     node.forward = bcnn_forward_deconv_layer;
     node.backward = bcnn_backward_deconv_layer;
     node.update = bcnn_update_deconv_layer;
+    node.release_param = bcnn_release_param_deconv_layer;
 
     // Create weights tensor
     bcnn_tensor weights = {0};
@@ -382,4 +383,20 @@ void bcnn_update_deconv_layer(bcnn_net *net, bcnn_node *node) {
         }
         default: { break; }
     }
+}
+
+void bcnn_release_param_deconv_layer(bcnn_node *node) {
+    bcnn_deconv_param *param = (bcnn_deconv_param *)node->param;
+    bh_free(param->conv_workspace);
+    bh_free(param->adam_m);
+    bh_free(param->adam_v);
+#ifdef BCNN_USE_CUDA
+    if (param->adam_m_gpu) {
+        bcnn_cuda_free(param->adam_m_gpu);
+    }
+    if (param->adam_v_gpu) {
+        bcnn_cuda_free(param->adam_v_gpu);
+    }
+// param->conv_workspace_gpu is alloc'd / free'd at the struct bcnn_net level
+#endif
 }

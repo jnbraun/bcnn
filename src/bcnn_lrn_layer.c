@@ -74,6 +74,7 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
     param->tmp_squared = (float *)calloc(sz, sizeof(float));
     node.forward = bcnn_forward_lrn_layer;
     node.backward = bcnn_backward_lrn_layer;
+    node.release_param = bcnn_release_param_lrn_layer;
 
     BCNN_CHECK_AND_LOG(
         net->log_ctx, local_size < net->tensors[node.src[0]].c,
@@ -210,4 +211,14 @@ void bcnn_backward_lrn_layer(bcnn_net *net, bcnn_node *node) {
 #else
     return bcnn_backward_lrn_layer_cpu(net, node);
 #endif
+}
+
+void bcnn_release_param_lrn_layer(bcnn_node *node) {
+    bcnn_lrn_param *param = (bcnn_lrn_param *)node->param;
+    bh_free(param->tmp_squared);
+    bh_free(param->tmp_sum);
+#ifdef BCNN_USE_CUDA
+// Not implemented
+#endif
+    return;
 }

@@ -40,8 +40,6 @@ typedef struct bcnn_conv_param {
     bcnn_activation activation;
     bcnn_tensor saved_mean;
     bcnn_tensor saved_variance;
-    bcnn_tensor running_mean;
-    bcnn_tensor running_variance;
     float *conv_workspace;
     float *workspace;  // embedded batchnorm
     float *x_norm;
@@ -69,6 +67,7 @@ typedef struct bcnn_conv_param {
 void bcnn_forward_conv_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_conv_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_update_conv_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_release_param_conv_layer(bcnn_node *node);
 
 #ifdef __cplusplus
 }

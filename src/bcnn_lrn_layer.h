@@ -40,6 +40,7 @@ typedef struct bcnn_lrn_param {
 
 void bcnn_forward_lrn_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_lrn_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_release_param_lrn_layer(bcnn_node *node);
 
 void bcnn_forward_lrn_layer_cpu(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_lrn_layer_cpu(bcnn_net *net, bcnn_node *node);

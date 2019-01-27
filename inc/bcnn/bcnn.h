@@ -404,81 +404,6 @@ int bcnn_tensor_size3d(bcnn_tensor *t);
 
 int bcnn_tensor_size2d(bcnn_tensor *t);
 
-/**
- * \brief Structure defining a generic layer.
- */
-typedef struct bcnn_layer {
-    int num;
-    int size;
-    int stride;
-    int pad;
-    int quantize;
-    bcnn_layer_type type;
-    bcnn_activation activation;
-    bcnn_loss loss;
-    bcnn_loss_metric loss_metric;
-    float dropout_rate;
-    float scale;
-    int concat_index;
-    bcnn_tensor weights;
-    bcnn_tensor biases;
-    int *indexes;
-    float *conv_workspace;
-    float *rand;
-#ifdef BCNN_USE_CUDA
-    int *indexes_gpu;
-    float *conv_workspace_gpu;
-    float *rand_gpu;
-#endif
-    int batch_norm;
-    int num_groups;
-    float *workspace;
-    bcnn_tensor saved_mean;
-    bcnn_tensor saved_variance;
-    bcnn_tensor running_mean;
-    bcnn_tensor running_variance;
-    bcnn_tensor scales;
-    float *x_norm;
-#ifdef BCNN_USE_CUDA
-    float *bn_workspace_gpu;
-    float *x_norm_gpu;
-#endif
-    float *adam_m; /**< Adam optimizer: first moment gradient */
-    float *adam_v; /**< Adam optimizer: second moment gradient */
-#ifdef BCNN_USE_CUDA
-    float *adam_m_gpu; /**< Adam optimizer: first moment gradient */
-    float *adam_v_gpu; /**< Adam optimizer: second moment gradient */
-#endif
-    unsigned int *binary_weight;
-    unsigned int *binary_workspace;
-    size_t workspace_size;
-#ifdef BCNN_USE_CUDA
-#ifdef BCNN_USE_CUDNN
-    cudnnTensorDescriptor_t src_tensor_desc;
-    cudnnTensorDescriptor_t dst_tensor_desc;
-    cudnnFilterDescriptor_t filter_desc;
-    cudnnTensorDescriptor_t bias_desc;
-    cudnnConvolutionDescriptor_t conv_desc;
-    cudnnPoolingDescriptor_t pooling_desc;
-    cudnnConvolutionFwdAlgo_t fwd_algo;
-    cudnnConvolutionBwdDataAlgo_t bwd_data_algo;
-    cudnnConvolutionBwdFilterAlgo_t bwd_filter_algo;
-#endif
-#endif
-    float alpha;  // LRN
-    float beta;   // LRN
-    float k;      // LRN
-    float num_constraints;
-    int classes;    // Yolo: # classes
-    int coords;     // Yolo: # coords
-    int truths;     // Yolo
-    int max_boxes;  // Yolo
-    int total;      // Yolo v3
-    int *mask;      // Yolo v3
-    float *cost;    // Yolo
-    bcnn_gemm_context *gemm_ctx;
-} bcnn_layer;
-
 struct bcnn_net;
 typedef struct bcnn_net bcnn_net;
 
@@ -490,7 +415,6 @@ struct bcnn_node {
     int *src;  // 'num_src' tensors indexes (net->tensors array)
     int num_dst;
     int *dst;  // 'num_dst' tensors indexes (net->tensors array)
-    bcnn_layer *layer;
     size_t param_size;
     bcnn_layer_type type;
     void *param;
@@ -592,12 +516,11 @@ bcnn_status bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size,
                                            char *src_id, char *dst_id);
 
 /* Depthwise separable conv layer */
-bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
-                                              int stride, int pad,
-                                              int batch_norm,
-                                              bcnn_filler_type init,
-                                              bcnn_activation activation,
-                                              char *src_id, char *dst_id);
+bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
+                                          int pad, int batch_norm,
+                                          bcnn_filler_type init,
+                                          bcnn_activation activation,
+                                          char *src_id, char *dst_id);
 
 /* Batchnorm layer */
 bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id);
@@ -693,7 +616,6 @@ int bcnn_predict_on_batch(bcnn_net *net, bcnn_iterator *iter, float **pred,
                           float *error);
 
 /* Free routines */
-int bcnn_free_layer(bcnn_layer **layer);
 bcnn_status bcnn_free_net(bcnn_net *cnn);
 
 /* Helpers */

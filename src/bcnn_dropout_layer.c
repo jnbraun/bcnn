@@ -44,7 +44,7 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
                        "Dropout layer: invalid input node name %s", src_id);
 
-        node.type = DROPOUT;
+    node.type = DROPOUT;
     node.param_size = sizeof(bcnn_dropout_param);
     node.param = (bcnn_dropout_param *)calloc(1, node.param_size);
     bcnn_dropout_param *param = (bcnn_dropout_param *)node.param;
@@ -57,6 +57,7 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
 #endif
     node.forward = bcnn_forward_dropout_layer;
     node.backward = bcnn_backward_dropout_layer;
+    node.release_param = bcnn_release_param_dropout_layer;
 
     bcnn_net_add_node(net, node);
 
@@ -123,4 +124,13 @@ void bcnn_backward_dropout_layer(bcnn_net *net, bcnn_node *node) {
 #else
     return bcnn_backward_dropout_layer_cpu(net, node);
 #endif
+}
+
+void bcnn_release_param_dropout_layer(bcnn_node *node) {
+    bcnn_dropout_param *param = (bcnn_dropout_param *)node->param;
+    bh_free(param->rand);
+#ifdef BCNN_USE_CUDA
+    bh_free(param->rand_gpu);
+#endif
+    return;
 }

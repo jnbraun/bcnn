@@ -46,6 +46,7 @@ typedef struct bcnn_batchnorm_param {
 
 void bcnn_forward_batchnorm_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_batchnorm_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_release_param_batchnorm_layer(bcnn_node *node);
 
 void bcnn_forward_batchnorm_cpu(bcnn_tensor *src_tensor,
                                 bcnn_tensor *dst_tensor, bcnn_tensor *bn_mean,
@@ -75,7 +76,7 @@ void bcnn_forward_batchnorm_gpu(bcnn_tensor *src_tensor,
                                 cudnnTensorDescriptor_t dst_tensor_desc,
                                 cudnnTensorDescriptor_t bias_desc
 #endif
-);
+                                );
 void bcnn_backward_batchnorm_gpu(bcnn_tensor *src_tensor,
                                  bcnn_tensor *dst_tensor, bcnn_tensor *bn_mean,
                                  bcnn_tensor *bn_var, bcnn_tensor *bn_scales,
@@ -87,7 +88,7 @@ void bcnn_backward_batchnorm_gpu(bcnn_tensor *src_tensor,
                                  cudnnTensorDescriptor_t dst_tensor_desc,
                                  cudnnTensorDescriptor_t bias_desc
 #endif
-);
+                                 );
 void bcnn_forward_batchnorm_layer_gpu(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_batchnorm_layer_gpu(bcnn_net *net, bcnn_node *node);
 #endif

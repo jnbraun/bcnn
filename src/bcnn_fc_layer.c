@@ -113,6 +113,7 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
     node.forward = bcnn_forward_fullc_layer;
     node.backward = bcnn_backward_fullc_layer;
     node.update = bcnn_update_fullc_layer;
+    node.release_param = bcnn_release_param_fullc_layer;
 
     bcnn_net_add_node(net, node);
 
@@ -324,4 +325,19 @@ void bcnn_update_fullc_layer(bcnn_net *net, bcnn_node *node) {
         }
         default: { break; }
     }
+}
+
+void bcnn_release_param_fullc_layer(bcnn_node *node) {
+    bcnn_fullc_param *param = (bcnn_fullc_param *)node->param;
+    bh_free(param->adam_m);
+    bh_free(param->adam_v);
+#ifdef BCNN_USE_CUDA
+    if (param->adam_m_gpu) {
+        bcnn_cuda_free(param->adam_m_gpu);
+    }
+    if (param->adam_v_gpu) {
+        bcnn_cuda_free(param->adam_v_gpu);
+    }
+#endif
+    return;
 }

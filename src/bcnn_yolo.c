@@ -57,6 +57,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     }
     node.forward = bcnn_forward_yolo_layer;
     node.backward = bcnn_backward_yolo_layer;
+    node.release_param = bcnn_release_param_yolo_layer;
     // Setup output tensor
     bcnn_tensor dst_tensor = {0};
     bcnn_tensor_set_shape(&dst_tensor,
@@ -552,4 +553,12 @@ yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w, int h,
     *num_dets = count;
     correct_region_boxes(dets, count, w, h, netw, neth, relative);
     return dets;
+}
+
+void bcnn_release_param_yolo_layer(bcnn_node *node) {
+    bcnn_yolo_param *param = (bcnn_yolo_param *)node->param;
+    bh_free(param->cost);
+    bh_free(param->mask);
+    bcnn_tensor_destroy(&param->biases);
+    return;
 }

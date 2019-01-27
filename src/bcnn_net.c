@@ -91,6 +91,7 @@ bcnn_status bcnn_free_net(bcnn_net *net) {
     int i;
     bcnn_free_workload(net);
     for (i = 0; i < net->num_nodes; ++i) {
+        net->nodes[i].release_param(&net->nodes[i]);
         bcnn_free_node(&net->nodes[i]);
     }
     bh_free(net->nodes);

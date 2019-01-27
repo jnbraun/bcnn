@@ -33,12 +33,11 @@
 
 /* Depthwise Separable convolution */
 
-bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
-                                              int stride, int pad,
-                                              int batch_norm,
-                                              bcnn_filler_type init,
-                                              bcnn_activation activation,
-                                              char *src_id, char *dst_id) {
+bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
+                                          int pad, int batch_norm,
+                                          bcnn_filler_type init,
+                                          bcnn_activation activation,
+                                          char *src_id, char *dst_id) {
     int num_nodes = net->num_nodes + 1;
     int i, sz;
     bcnn_node node = {0};
@@ -75,9 +74,10 @@ bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
     param->num = net->tensors[node.src[0]].c;
     param->size = size;
     param->stride = stride;
-    node.forward = bcnn_forward_depthwise_sep_conv_layer;
-    node.backward = bcnn_backward_depthwise_sep_conv_layer;
-    node.update = bcnn_update_depthwise_sep_conv_layer;
+    node.forward = bcnn_forward_depthwise_conv_layer;
+    node.backward = bcnn_backward_depthwise_conv_layer;
+    node.update = bcnn_update_depthwise_conv_layer;
+    node.release_param = bcnn_release_param_depthwise_conv_layer;
 
     // Create weights tensor
     bcnn_tensor weights = {0};
@@ -155,7 +155,7 @@ bcnn_status bcnn_add_depthwise_sep_conv_layer(bcnn_net *net, int size,
     return 0;
 }
 
-void bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
+void bcnn_forward_depthwise_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     bcnn_tensor *weights = &net->tensors[node->src[1]];
@@ -282,8 +282,7 @@ void bcnn_forward_depthwise_sep_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     return;
 }
 
-void bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_net *net,
-                                                bcnn_node *node) {
+void bcnn_backward_depthwise_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     bcnn_tensor *weights = &net->tensors[node->src[1]];
@@ -539,23 +538,23 @@ void bcnn_backward_depthwise_sep_conv_layer_cpu(bcnn_net *net,
     return;
 }
 
-void bcnn_forward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
+void bcnn_forward_depthwise_conv_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_depthwise_sep_conv_layer_gpu(net, node);
+    return bcnn_forward_depthwise_conv_layer_gpu(net, node);
 #else
-    return bcnn_forward_depthwise_sep_conv_layer_cpu(net, node);
+    return bcnn_forward_depthwise_conv_layer_cpu(net, node);
 #endif
 }
 
-void bcnn_backward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
+void bcnn_backward_depthwise_conv_layer(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_depthwise_sep_conv_layer_gpu(net, node);
+    return bcnn_backward_depthwise_conv_layer_gpu(net, node);
 #else
-    return bcnn_backward_depthwise_sep_conv_layer_cpu(net, node);
+    return bcnn_backward_depthwise_conv_layer_cpu(net, node);
 #endif
 }
 
-void bcnn_update_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
+void bcnn_update_depthwise_conv_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *weights = &net->tensors[node->src[1]];
     bcnn_tensor *biases = &net->tensors[node->src[2]];
     bcnn_depthwise_conv_param *param = (bcnn_depthwise_conv_param *)node->param;
@@ -599,4 +598,19 @@ void bcnn_update_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node) {
         }
         default: { break; }
     }
+}
+
+void bcnn_release_param_depthwise_conv_layer(bcnn_node *node) {
+    bcnn_depthwise_conv_param *param = (bcnn_depthwise_conv_param *)node->param;
+    bh_free(param->adam_m);
+    bh_free(param->adam_v);
+#ifdef BCNN_USE_CUDA
+    if (param->adam_m_gpu) {
+        bcnn_cuda_free(param->adam_m_gpu);
+    }
+    if (param->adam_v_gpu) {
+        bcnn_cuda_free(param->adam_v_gpu);
+    }
+#endif
+    return;
 }

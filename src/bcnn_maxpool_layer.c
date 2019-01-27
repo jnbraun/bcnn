@@ -117,6 +117,7 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
 #endif
     node.forward = bcnn_forward_maxpool_layer;
     node.backward = bcnn_backward_maxpool_layer;
+    node.release_param = bcnn_release_param_maxpool_layer;
 
     bcnn_net_add_node(net, node);
 
@@ -272,6 +273,22 @@ void bcnn_backward_maxpool_layer(bcnn_net *net, bcnn_node *node) {
     return bcnn_backward_maxpool_layer_gpu(net, node);
 #else
     return bcnn_backward_maxpool_layer_cpu(net, node);
+#endif
+    return;
+}
+
+void bcnn_release_param_maxpool_layer(bcnn_node *node) {
+    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node->param;
+    bh_free(param->indexes);
+#ifdef BCNN_USE_CUDA
+    if (param->indexes_gpu) {
+        bcnn_cuda_free(param->indexes_gpu);
+    }
+#ifdef BCNN_USE_CUDNN
+    cudnnDestroyTensorDescriptor(param->src_tensor_desc);
+    cudnnDestroyTensorDescriptor(param->dst_tensor_desc);
+    cudnnDestroyTensorDescriptor(p_layer->pooling_desc);
+#endif
 #endif
     return;
 }

@@ -40,6 +40,7 @@ typedef struct bcnn_dropout_param {
 
 void bcnn_forward_dropout_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_dropout_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_release_param_dropout_layer(bcnn_node *node);
 
 #ifdef BCNN_USE_CUDA
 void bcnn_forward_dropout_layer_gpu(bcnn_net *net, bcnn_node *node);

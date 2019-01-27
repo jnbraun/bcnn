@@ -121,8 +121,8 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_depthwise_sep_conv_layer(
-                            net, size, stride, pad, 0, init, a, src_id, dst_id);
+                        bcnn_add_depthwise_conv_layer(net, size, stride, pad, 0,
+                                                      init, a, src_id, dst_id);
                     } else if (strcmp(curr_layer, "{activation}") == 0 ||
                                strcmp(curr_layer, "{nl}") == 0) {
                         bcnn_add_activation_layer(net, a, src_id);

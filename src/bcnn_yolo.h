@@ -21,6 +21,7 @@ typedef struct bcnn_yolo_param {
 
 void bcnn_forward_yolo_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_yolo_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_release_param_yolo_layer(bcnn_node *node);
 
 #ifdef __cplusplus
 }

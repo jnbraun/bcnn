@@ -43,13 +43,14 @@ typedef struct bcnn_depthwise_conv_param {
 #endif
 } bcnn_depthwise_conv_param;
 
-void bcnn_forward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node);
-void bcnn_backward_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node);
-void bcnn_update_depthwise_sep_conv_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_forward_depthwise_conv_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_depthwise_conv_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_update_depthwise_conv_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_release_param_depthwise_conv_layer(bcnn_node *node);
 
 #ifdef BCNN_USE_CUDA
-void bcnn_forward_depthwise_sep_conv_layer_gpu(bcnn_net *net, bcnn_node *node);
-void bcnn_backward_depthwise_sep_conv_layer_gpu(bcnn_net *net, bcnn_node *node);
+void bcnn_forward_depthwise_conv_layer_gpu(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_depthwise_conv_layer_gpu(bcnn_net *net, bcnn_node *node);
 #endif
 
 #ifdef __cplusplus

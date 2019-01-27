@@ -28,6 +28,7 @@
 #include <bh/bh_string.h>
 
 #include "bcnn_activation_layer.h"
+#include "bcnn_learner.h"
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
 
@@ -111,6 +112,7 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
 #endif
     node.forward = bcnn_forward_fullc_layer;
     node.backward = bcnn_backward_fullc_layer;
+    node.update = bcnn_update_fullc_layer;
 
     bcnn_net_add_node(net, node);
 
@@ -276,4 +278,50 @@ void bcnn_backward_fullc_layer(bcnn_net *net, bcnn_node *node) {
 #else
     return bcnn_backward_fullc_layer_cpu(net, node);
 #endif
+}
+
+void bcnn_update_fullc_layer(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *weights = &net->tensors[node->src[1]];
+    bcnn_tensor *biases = &net->tensors[node->src[2]];
+    bcnn_fullc_param *param = (bcnn_fullc_param *)node->param;
+    int batch_size = net->batch_size;
+    int weights_size = bcnn_tensor_size(weights);
+    int biases_size = bcnn_tensor_size(biases);
+    switch (net->learner.optimizer) {
+        case ADAM: {
+#ifdef BCNN_USE_CUDA
+            bcnn_adam_update_gpu(weights->data_gpu, biases->data_gpu,
+                                 weights->grad_data_gpu, biases->grad_data_gpu,
+                                 param->adam_m_gpu, param->adam_v_gpu,
+                                 weights_size, biases_size, batch_size,
+                                 net->seen, net->learner.beta1,
+                                 net->learner.beta2, net->learner.learning_rate,
+                                 net->learner.momentum, net->learner.decay);
+#else
+            bcnn_adam_update_cpu(
+                weights->data, biases->data, weights->grad_data,
+                biases->grad_data, param->adam_m, param->adam_v, weights_size,
+                biases_size, batch_size, net->seen, net->learner.beta1,
+                net->learner.beta2, net->learner.learning_rate,
+                net->learner.momentum, net->learner.decay);
+#endif
+            break;
+        }
+        case SGD: {
+#ifdef BCNN_USE_CUDA
+            bcnn_sgd_update_gpu(weights->data_gpu, biases->data_gpu,
+                                weights->grad_data_gpu, biases->grad_data_gpu,
+                                weights_size, biases_size, batch_size,
+                                net->learner.learning_rate,
+                                net->learner.momentum, net->learner.decay);
+#else
+            bcnn_sgd_update_cpu(weights->data, biases->data, weights->grad_data,
+                                biases->grad_data, weights_size, biases_size,
+                                batch_size, net->learner.learning_rate,
+                                net->learner.momentum, net->learner.decay);
+#endif
+            break;
+        }
+        default: { break; }
+    }
 }

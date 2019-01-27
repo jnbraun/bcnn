@@ -272,6 +272,20 @@ int bcnn_adam_optimizer_graph(bcnn_net *net, bcnn_node *node, int iter,
 int bcnn_update(bcnn_net *net) {
     int i;
     float lr = bcnn_update_learning_rate(net);
+
+    for (int i = 0; i < net->num_nodes; ++i) {
+        bcnn_node *node = &net->nodes[i];
+        if (node->update) {
+            node->update(net, node);
+        }
+    }
+    return BCNN_SUCCESS;
+}
+
+#if 0
+int bcnn_update(bcnn_net *net) {
+    int i;
+    float lr = bcnn_update_learning_rate(net);
     bcnn_layer_type type;
 
     if (net->learner.optimizer == SGD) {
@@ -303,3 +317,4 @@ int bcnn_update(bcnn_net *net) {
 
     return BCNN_SUCCESS;
 }
+#endif

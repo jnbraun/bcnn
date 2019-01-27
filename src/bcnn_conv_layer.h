@@ -68,6 +68,7 @@ typedef struct bcnn_conv_param {
 
 void bcnn_forward_conv_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_conv_layer(bcnn_net *net, bcnn_node *node);
+void bcnn_update_conv_layer(bcnn_net *net, bcnn_node *node);
 
 #ifdef __cplusplus
 }

@@ -303,6 +303,18 @@ void bcnn_update_activation_layer(bcnn_net *net, bcnn_node *node) {
                                 net->learner.learning_rate,
                                 net->learner.momentum, net->learner.decay);
 #endif
+        } else if (net->learner.optimizer == ADAM) {
+#ifdef BCNN_USE_CUDA
+            bcnn_sgd_update_gpu(weights->data_gpu, NULL, weights->grad_data_gpu,
+                                NULL, bcnn_tensor_size(weights), 0, weights->n,
+                                net->learner.learning_rate,
+                                net->learner.momentum, net->learner.decay);
+#else
+            bcnn_sgd_update_cpu(weights->data, NULL, weights->grad_data, NULL,
+                                bcnn_tensor_size(weights), 0, weights->n,
+                                net->learner.learning_rate,
+                                net->learner.momentum, net->learner.decay);
+#endif
         }
     }
     return;

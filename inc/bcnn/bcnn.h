@@ -497,7 +497,7 @@ struct bcnn_node {
     void (*forward)(struct bcnn_net *net, struct bcnn_node *node);
     void (*backward)(struct bcnn_net *net, struct bcnn_node *node);
     void (*update)(struct bcnn_net *net, struct bcnn_node *node);
-    void (*free_param)(struct bcnn_node *node);
+    void (*release_param)(struct bcnn_node *node);
 };
 
 struct bcnn_net {

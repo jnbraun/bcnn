@@ -265,7 +265,7 @@ int run(char *train_data, char *test_data, model_type model) {
     create_network(net, model);
 
     BCNN_INFO(net->log_ctx, "Start training...");
-    if (train_cifar10(net, train_data, test_data, 4000000, 500, &error_train) !=
+    if (train_cifar10(net, train_data, test_data, 4000000, 10, &error_train) !=
         0) {
         BCNN_ERROR(net->log_ctx, -1, "Can not perform training");
     }

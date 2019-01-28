@@ -19,10 +19,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include "bcnn/bcnn.h"
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
+#include "bcnn/bcnn.h"
 
 /* include bip image processing lib */
 #include <bip/bip.h>
@@ -77,7 +77,7 @@ void bcnn_convert_img_to_float2(unsigned char *src, int w, int h, int c,
     float m[3] = {mean_r, mean_g, mean_b};
     if (swap_to_bgr) {
         if (c != 3) {
-            bh_log(BCNN_LOG_ERROR,
+            bh_log(BH_LOG_ERROR,
                    "bcnn_convert_img_to_float2: number of channels %d is "
                    "inconsistent. Expected 3",
                    c);
@@ -251,10 +251,11 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            n_img, n_labels);
-        BCNN_CHECK_AND_LOG(
-            net->log_ctx, (net->input_height == iter->input_height &&
-                           net->input_width == iter->input_width),
-            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(net->log_ctx,
+                           (net->input_height == iter->input_height &&
+                            net->input_width == iter->input_width),
+                           BCNN_INVALID_DATA,
+                           "MNIST data: incoherent image width and height");
         iter->n_samples = n_img;
     }
 

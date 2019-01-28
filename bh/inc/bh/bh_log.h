@@ -58,6 +58,9 @@ static inline void bh_log(bh_log_level level, const char *fmt, ...) {
             fprintf(stderr, "\33[31;1m[ERROR] %s\33[0m\n", msg);
             break;
         }
+        case BH_LOG_SILENT: {
+            break;
+        }
     }
     return;
 }

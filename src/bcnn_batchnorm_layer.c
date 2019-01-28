@@ -339,11 +339,11 @@ void bcnn_release_param_batchnorm_layer(bcnn_node *node) {
     bcnn_tensor_destroy(&param->saved_mean);
     bcnn_tensor_destroy(&param->saved_variance);
 #ifdef BCNN_USE_CUDA
-    if (p_layer->x_norm_gpu) {
+    if (param->x_norm_gpu) {
         bcnn_cuda_free(param->x_norm_gpu);
     }
-    if (p_layer->bn_workspace_gpu) {
-        bcnn_cuda_free(param->bn_workspace_gpu);
+    if (param->workspace_gpu) {
+        bcnn_cuda_free(param->workspace_gpu);
     }
 #ifdef BCNN_USE_CUDNN
     cudnnDestroyTensorDescriptor(param->dst_tensor_desc);

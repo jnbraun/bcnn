@@ -287,7 +287,7 @@ void bcnn_release_param_maxpool_layer(bcnn_node *node) {
 #ifdef BCNN_USE_CUDNN
     cudnnDestroyTensorDescriptor(param->src_tensor_desc);
     cudnnDestroyTensorDescriptor(param->dst_tensor_desc);
-    cudnnDestroyTensorDescriptor(p_layer->pooling_desc);
+    cudnnDestroyPoolingDescriptor(param->pooling_desc);
 #endif
 #endif
     return;

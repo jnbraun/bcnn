@@ -36,7 +36,7 @@ void bcnn_log(bcnn_log_context ctx, bcnn_log_level level, const char *fmt,
         vsnprintf(msg, sizeof(msg), fmt, args);
         va_end(args);
         if (ctx.fct) {
-            ctx.fct(level, msg);
+            ctx.fct(msg);
         } else {  // Use default logging to stderr
             bh_log((bh_log_level)level, msg);
         }

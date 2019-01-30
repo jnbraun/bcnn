@@ -27,7 +27,7 @@ enable_language(C ASM)
 set (CMAKE_C_STANDARD 99)
 
 # Compiler flags
-set(CMAKE_C_FLAGS "-O3")
+set(CMAKE_C_FLAGS "-O3 -fPIC")
 set(CMAKE_ASM_FLAGS "${CFLAGS} -x assembler-with-cpp")
 
 # Get the target system processor

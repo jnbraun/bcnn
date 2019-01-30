@@ -25,6 +25,8 @@
 
 #include <bcnn/bcnn.h>
 
+#include "bcnn_utils.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

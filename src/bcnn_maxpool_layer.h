@@ -24,6 +24,7 @@
 #define BCNN_MAXPOOL_LAYER_H
 
 #include <bcnn/bcnn.h>
+#include "bcnn_utils.h"
 
 #ifdef __cplusplus
 extern "C" {

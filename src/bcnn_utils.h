@@ -52,6 +52,16 @@ void bcnn_draw_color_box(unsigned char *img, int w_img, int h_img, float cx_box,
 
 #ifdef BCNN_USE_CUDA
 
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 200)
+#define BCNN_CUDA_THREADS 1024
+#else
+#define BCNN_CUDA_THREADS 512
+#endif
+
+static inline int bcnn_cuda_blocks(int n) {
+    return (n - 1) / (BCNN_CUDA_THREADS) + 1;
+}
+
 cublasHandle_t bcnn_cublas_handle();
 
 #define bcnn_cuda_check(RET)                                                   \

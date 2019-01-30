@@ -24,6 +24,7 @@
 #define BCNN_H
 
 /* Cuda include */
+#if 0
 #ifdef BCNN_USE_CUDA
 #include <cublas_v2.h>
 #include <cuda.h>
@@ -34,6 +35,7 @@
 #include <cudnn.h>
 #endif  // BCNN_USE_CUDNN
 #endif  // BCNN_USE_CUDA
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -632,28 +634,6 @@ int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c,
 void bcnn_convert_img_to_float2(unsigned char *src, int w, int h, int c,
                                 float norm_coeff, int swap_to_bgr, float mean_r,
                                 float mean_g, float mean_b, float *dst);
-
-/* Cuda kernels routines */
-#ifdef BCNN_USE_CUDA
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 200)
-#define BCNN_CUDA_THREADS 1024
-#else
-#define BCNN_CUDA_THREADS 512
-#endif
-
-static inline int bcnn_cuda_blocks(int n) {
-    return (n - 1) / (BCNN_CUDA_THREADS) + 1;
-}
-
-/* Wrapper to cudaSetDevice */
-void bcnn_cuda_set_device(int id);
-
-int bcnn_forward_bias_gpu(float *output, float *biases, int batch_size, int n,
-                          int size);
-int bcnn_backward_bias_gpu(float *bias_diff, float *diff, int batch_size, int n,
-                           int size);
-
-#endif  // BCNN_USE_CUDA
 
 #ifdef __cplusplus
 }

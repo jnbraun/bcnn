@@ -23,40 +23,11 @@
 #ifndef BCNN_H
 #define BCNN_H
 
-/* Cuda include */
-#if 0
-#ifdef BCNN_USE_CUDA
-#include <cublas_v2.h>
-#include <cuda.h>
-#include <cuda_runtime.h>
-#include <curand.h>
-#include <driver_types.h>  // cuda driver types
-#ifdef BCNN_USE_CUDNN
-#include <cudnn.h>
-#endif  // BCNN_USE_CUDNN
-#endif  // BCNN_USE_CUDA
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include <assert.h>
-#include <float.h>
-#include <limits.h>
-#include <math.h>
-#include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#ifdef BCNN_USE_AVX
-#if defined(_MSC_VER)
-#include <intrin.h>
-#else
-#include <x86intrin.h>
-#endif
-#endif
 
 #if defined(__GNUC__) || (defined(_MSC_VER) && (_MSC_VER >= 1600))
 #include <stdint.h>
@@ -120,9 +91,6 @@ typedef unsigned __int64 uint64_t;
         bcnn_log((ctx), BCNN_LOG_WARNING, (fmt), ##__VA_ARGS__); \
     } while (0)
 
-//#define USE_GRID
-//#define USE_MASKHP
-//#define USE_HPONLY
 #define USE_2EYES
 
 /**
@@ -395,11 +363,11 @@ void bcnn_tensor_allocate(bcnn_tensor *t, int net_state);
 
 void bcnn_tensor_free(bcnn_tensor *t);
 
-int bcnn_tensor_size(bcnn_tensor *tensor);
+int bcnn_tensor_size(const bcnn_tensor *tensor);
 
-int bcnn_tensor_size3d(bcnn_tensor *t);
+int bcnn_tensor_size3d(const bcnn_tensor *t);
 
-int bcnn_tensor_size2d(bcnn_tensor *t);
+int bcnn_tensor_size2d(const bcnn_tensor *t);
 
 struct bcnn_net;
 typedef struct bcnn_net bcnn_net;
@@ -502,70 +470,75 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
                                          int stride, int pad, int num_groups,
                                          int batch_norm, bcnn_filler_type init,
                                          bcnn_activation activation,
-                                         int quantize, char *src_id,
-                                         char *dst_id);
+                                         int quantize, const char *src_id,
+                                         const char *dst_id);
 
 /* Deconv layer */
-bcnn_status bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size,
-                                           int stride, int pad,
-                                           bcnn_filler_type init,
-                                           bcnn_activation activation,
-                                           char *src_id, char *dst_id);
+bcnn_status bcnn_add_deconvolutional_layer(
+    bcnn_net *net, int n, int size, int stride, int pad, bcnn_filler_type init,
+    bcnn_activation activation, const char *src_id, const char *dst_id);
 
 /* Depthwise separable conv layer */
 bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
                                           int pad, int batch_norm,
                                           bcnn_filler_type init,
                                           bcnn_activation activation,
-                                          char *src_id, char *dst_id);
+                                          const char *src_id,
+                                          const char *dst_id);
 
 /* Batchnorm layer */
-bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id, char *dst_id);
+bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
+                                     const char *dst_id);
 
 /* Local Response normalization layer */
 bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
-                               float beta, float k, char *src_id, char *dst_id);
+                               float beta, float k, const char *src_id,
+                               const char *dst_id);
 
 /* Full-connected layer */
 bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
                                  bcnn_filler_type init,
                                  bcnn_activation activation, int quantize,
-                                 char *src_id, char *dst_id);
+                                 const char *src_id, const char *dst_id);
 
 /* Activation layer */
 bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
-                                      char *id);
+                                      const char *id);
 
 /* Softmax layer */
-bcnn_status bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id);
+bcnn_status bcnn_add_softmax_layer(bcnn_net *net, const char *src_id,
+                                   const char *dst_id);
 
 /* Max-Pooling layer */
 bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
-                                   bcnn_padding padding, char *src_id,
-                                   char *dst_id);
+                                   bcnn_padding padding, const char *src_id,
+                                   const char *dst_id);
 
 /* Average pooling layer */
-bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, char *src_id, char *dst_id);
+bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, const char *src_id,
+                                   const char *dst_id);
 
 /* Concat layer */
-bcnn_status bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
-                                  char *dst_id);
+bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
+                                  const char *src_id2, const char *dst_id);
 
 /* Elementwise addition layer */
 bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
-                                   char *src_id1, char *src_id2, char *dst_id);
+                                   const char *src_id1, const char *src_id2,
+                                   const char *dst_id);
 
 /* Dropout layer */
-bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *id);
+bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, const char *id);
 
 /* Upsample layer */
-bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, char *src_id,
-                                    char *dst_id);
+bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, const char *src_id,
+                                    const char *dst_id);
 
 /* Cost layer */
 bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 bcnn_loss_metric loss_metric, float scale,
-                                char *src_id, char *label_id, char *dst_id);
+                                const char *src_id, const char *label_id,
+                                const char *dst_id);
 
 /* YOLO */
 #define BCNN_DETECTION_MAX_BOXES 50
@@ -573,7 +546,9 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
 /* TODO: move to private header */
 bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter);
 
-typedef struct { float x, y, w, h; } yolo_box;
+typedef struct {
+    float x, y, w, h;
+} yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;
@@ -586,16 +561,11 @@ typedef struct yolo_detection {
 
 bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                                 int classes, int coords, int total, int *mask,
-                                float *anchors, char *src_id, char *dst_id);
+                                float *anchors, const char *src_id,
+                                const char *dst_id);
 yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w, int h,
                                          int netw, int neth, float thresh,
                                          int relative, int *num_dets);
-
-// Temporary put these functions here
-float overlap(float x1, float w1, float x2, float w2);
-float box_intersection(yolo_box a, yolo_box b);
-float box_union(yolo_box a, yolo_box b);
-float box_iou(yolo_box a, yolo_box b);
 
 /* Core network routines */
 int bcnn_update(bcnn_net *net);
@@ -622,8 +592,6 @@ int bcnn_load_image_from_memory(bcnn_net *net, unsigned char *buffer,
                                 int buffer_size, int w, int h, int c,
                                 unsigned char **img, int *x_shift,
                                 int *y_shift);
-int bcnn_data_augmentation(unsigned char *img, int width, int height, int depth,
-                           bcnn_data_augment *param, unsigned char *buffer);
 
 int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter);
 

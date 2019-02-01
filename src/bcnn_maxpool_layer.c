@@ -21,6 +21,9 @@
  */
 #include "bcnn_maxpool_layer.h"
 
+#include <float.h>
+#include <math.h>
+
 #include <bh/bh_string.h>
 #include "bcnn_utils.h"
 
@@ -31,8 +34,8 @@
 #endif
 
 bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
-                                   bcnn_padding padding, char *src_id,
-                                   char *dst_id) {
+                                   bcnn_padding padding, const char *src_id,
+                                   const char *dst_id) {
     int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};

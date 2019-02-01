@@ -28,8 +28,8 @@
 #include <bh/bh_string.h>
 
 bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
-                               float beta, float k, char *src_id,
-                               char *dst_id) {
+                               float beta, float k, const char *src_id,
+                               const char *dst_id) {
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
 

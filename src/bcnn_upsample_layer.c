@@ -26,8 +26,8 @@
 
 /* Adapted from darknet for yolo v3 port */
 
-bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, char *src_id,
-                                    char *dst_id) {
+bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, const char *src_id,
+                                    const char *dst_id) {
     int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};

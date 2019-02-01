@@ -38,8 +38,8 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
                                          int stride, int pad, int num_groups,
                                          int batch_norm, bcnn_filler_type init,
                                          bcnn_activation activation,
-                                         int quantize, char *src_id,
-                                         char *dst_id) {
+                                         int quantize, const char *src_id,
+                                         const char *dst_id) {
     int i, sz, k, l;
     bcnn_node node = {0};
     float std_init = 0.0f;

@@ -29,7 +29,8 @@
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
-                                   char *src_id1, char *src_id2, char *dst_id) {
+                                   const char *src_id1, const char *src_id2,
+                                   const char *dst_id) {
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
     int is_src_node1_found = 0, is_src_node2_found = 0;

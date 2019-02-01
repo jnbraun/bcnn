@@ -19,6 +19,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include <math.h>
 
 #include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
@@ -84,11 +85,11 @@ void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w,
     t->has_grad = has_grad;
 }
 
-int bcnn_tensor_size(bcnn_tensor *t) { return t->w * t->h * t->c * t->n; }
+int bcnn_tensor_size(const bcnn_tensor *t) { return t->w * t->h * t->c * t->n; }
 
-int bcnn_tensor_size3d(bcnn_tensor *t) { return t->w * t->h * t->c; }
+int bcnn_tensor_size3d(const bcnn_tensor *t) { return t->w * t->h * t->c; }
 
-int bcnn_tensor_size2d(bcnn_tensor *t) { return t->w * t->h; }
+int bcnn_tensor_size2d(const bcnn_tensor *t) { return t->w * t->h; }
 
 void bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
     int size = t->n * t->c * t->h * t->w;

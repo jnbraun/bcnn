@@ -25,7 +25,8 @@
 
 #include "bcnn_utils.h"
 
-bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate, char *src_id) {
+bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate,
+                                   const char *src_id) {
     bcnn_node node = {0};
 
     BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,

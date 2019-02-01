@@ -1,5 +1,7 @@
 #include "bcnn_cost_layer.h"
 
+#include <math.h>
+
 #include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"

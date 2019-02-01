@@ -22,6 +22,9 @@
 
 #include "bcnn_cost_layer.h"
 
+#include <float.h>
+#include <math.h>
+
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 
@@ -30,7 +33,8 @@
 
 bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 bcnn_loss_metric loss_metric, float scale,
-                                char *src_id, char *label_id, char *dst_id) {
+                                const char *src_id, const char *label_id,
+                                const char *dst_id) {
     int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};

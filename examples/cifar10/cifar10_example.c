@@ -20,6 +20,8 @@
  * SOFTWARE.
  */
 
+#include <stdlib.h>
+
 #include <bh/bh_timer.h>
 
 #include "bcnn/bcnn.h"

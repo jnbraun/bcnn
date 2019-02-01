@@ -27,8 +27,8 @@
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
 
-bcnn_status bcnn_add_concat_layer(bcnn_net *net, char *src_id1, char *src_id2,
-                                  char *dst_id) {
+bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
+                                  const char *src_id2, const char *dst_id) {
     int i, sz, ind_concat = -1;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};

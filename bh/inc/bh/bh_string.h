@@ -143,12 +143,12 @@ static inline int bh_strstrip(char *s) {
     return 0;
 }
 
-static inline void bh_strfill(char **option, char *argv) {
+static inline void bh_strfill(char **dst, const char *src) {
     size_t length;
-    bh_free(*option);
-    length = strlen(argv) + 1;
-    *option = (char *)calloc(length, sizeof(char));
-    memcpy(*option, argv, length);
+    bh_free(*dst);
+    length = strlen(src) + 1;
+    *dst = (char *)calloc(length, sizeof(char));
+    memcpy(*dst, src, length);
 }
 
 static inline int bh_fskipline(FILE *f, int nb_lines) {

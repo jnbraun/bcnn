@@ -21,13 +21,16 @@
  */
 
 #include "bcnn_batchnorm_layer.h"
+
+#include <math.h>
+
 #include "bcnn_mat.h"
 #include "bcnn_utils.h"
 
 #include <bh/bh_string.h>
 
-bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, char *src_id,
-                                     char *dst_id) {
+bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
+                                     const char *dst_id) {
     int i, sz, channels;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};

@@ -37,7 +37,8 @@ bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
                                           int pad, int batch_norm,
                                           bcnn_filler_type init,
                                           bcnn_activation activation,
-                                          char *src_id, char *dst_id) {
+                                          const char *src_id,
+                                          const char *dst_id) {
     int num_nodes = net->num_nodes + 1;
     int i, sz;
     bcnn_node node = {0};

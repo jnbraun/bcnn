@@ -1,5 +1,7 @@
 #include "bcnn_yolo.h"
 
+#include <math.h>
+
 #include <bh/bh_string.h>
 
 #include "bcnn_activation_layer.h"
@@ -9,7 +11,8 @@
 /** From yolo darknet */
 bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                                 int classes, int coords, int total, int *mask,
-                                float *anchors, char *src_id, char *dst_id) {
+                                float *anchors, const char *src_id,
+                                const char *dst_id) {
     bcnn_node node = {0};
 
     BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,
@@ -86,7 +89,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     return 0;
 }
 
-float overlap(float x1, float w1, float x2, float w2) {
+static float overlap(float x1, float w1, float x2, float w2) {
     float l1 = x1 - w1 / 2;
     float l2 = x2 - w2 / 2;
     float left = l1 > l2 ? l1 : l2;
@@ -96,7 +99,7 @@ float overlap(float x1, float w1, float x2, float w2) {
     return right - left;
 }
 
-float box_intersection(yolo_box a, yolo_box b) {
+static float box_intersection(yolo_box a, yolo_box b) {
     float w = overlap(a.x, a.w, b.x, b.w);
     float h = overlap(a.y, a.h, b.y, b.h);
     if (w < 0 || h < 0) return 0;
@@ -104,13 +107,13 @@ float box_intersection(yolo_box a, yolo_box b) {
     return area;
 }
 
-float box_union(yolo_box a, yolo_box b) {
+static float box_union(yolo_box a, yolo_box b) {
     float i = box_intersection(a, b);
     float u = a.w * a.h + b.w * b.h - i;
     return u;
 }
 
-float box_iou(yolo_box a, yolo_box b) {
+static float box_iou(yolo_box a, yolo_box b) {
     return box_intersection(a, b) / box_union(a, b);
 }
 

@@ -19,10 +19,12 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
+#include "bcnn_data.h"
+
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
-#include "bcnn/bcnn.h"
 
 /* include bip image processing lib */
 #include <bip/bip.h>

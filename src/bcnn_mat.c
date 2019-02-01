@@ -22,6 +22,15 @@
 
 #include "bcnn_mat.h"
 
+#ifdef BCNN_USE_AVX
+#if defined(_MSC_VER)
+#include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
+#endif
+#include <math.h>
+
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_mem.h>

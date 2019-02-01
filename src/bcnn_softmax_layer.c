@@ -21,13 +21,17 @@
  */
 #include "bcnn_softmax_layer.h"
 
+#include <float.h>
+#include <math.h>
+
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 #include "bcnn_utils.h"
 
-bcnn_status bcnn_add_softmax_layer(bcnn_net *net, char *src_id, char *dst_id) {
+bcnn_status bcnn_add_softmax_layer(bcnn_net *net, const char *src_id,
+                                   const char *dst_id) {
     int num_nodes = net->num_nodes + 1;
     int sz, i;
     bcnn_node node = {0};

@@ -34,6 +34,7 @@
 #include "bcnn_concat_layer.h"
 #include "bcnn_conv_layer.h"
 #include "bcnn_cost_layer.h"
+#include "bcnn_data.h"
 #include "bcnn_deconv_layer.h"
 #include "bcnn_depthwise_conv_layer.h"
 #include "bcnn_dropout_layer.h"
@@ -88,14 +89,15 @@ bcnn_status bcnn_free_tensor(bcnn_tensor *tensor) {
 }
 
 bcnn_status bcnn_free_net(bcnn_net *net) {
-    int i;
     bcnn_free_workload(net);
-    for (i = 0; i < net->num_nodes; ++i) {
-        net->nodes[i].release_param(&net->nodes[i]);
+    for (int i = 0; i < net->num_nodes; ++i) {
+        if (net->nodes[i].release_param) {
+            net->nodes[i].release_param(&net->nodes[i]);
+        }
         bcnn_free_node(&net->nodes[i]);
     }
     bh_free(net->nodes);
-    for (i = 0; i < net->nb_finetune; ++i) {
+    for (int i = 0; i < net->nb_finetune; ++i) {
         bh_free(net->finetune_id[i]);
     }
     bh_free(net->finetune_id);

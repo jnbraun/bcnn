@@ -21,7 +21,6 @@
  */
 
 #ifdef BCNN_USE_CUDA
-#include <bh/bh_timer.h>
 #include "bcnn_activation_layer.h"
 #include "bcnn_depthwise_conv_layer.h"
 

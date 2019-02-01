@@ -21,6 +21,9 @@
  */
 
 #include "bcnn_utils.h"
+
+#include <math.h>
+
 #include "bcnn/bcnn.h"
 
 #include <bh/bh_log.h>

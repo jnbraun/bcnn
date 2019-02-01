@@ -35,7 +35,7 @@
 bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
                                  bcnn_filler_type init,
                                  bcnn_activation activation, int quantize,
-                                 char *src_id, char *dst_id) {
+                                 const char *src_id, const char *dst_id) {
     int i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};

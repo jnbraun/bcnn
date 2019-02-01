@@ -34,11 +34,9 @@
 #include "bcnn_utils.h"
 
 /* Deconv layer */
-bcnn_status bcnn_add_deconvolutional_layer(bcnn_net *net, int n, int size,
-                                           int stride, int pad,
-                                           bcnn_filler_type init,
-                                           bcnn_activation activation,
-                                           char *src_id, char *dst_id) {
+bcnn_status bcnn_add_deconvolutional_layer(
+    bcnn_net *net, int n, int size, int stride, int pad, bcnn_filler_type init,
+    bcnn_activation activation, const char *src_id, const char *dst_id) {
     int i, sz;
     float std_init = 0.0f;
     bcnn_gauss_gen g = {0};

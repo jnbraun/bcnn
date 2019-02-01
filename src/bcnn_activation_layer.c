@@ -22,11 +22,14 @@
 
 #include "bcnn_activation_layer.h"
 
+#include <math.h>
+#include <string.h>
+
 #include <bh/bh_macros.h>
 #include "bcnn_learner.h"
 
 bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
-                                      char *src_id) {
+                                      const char *src_id) {
     bcnn_node node = {0};
     char type_name[256];
     int i;

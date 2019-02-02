@@ -19,14 +19,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
+#include "bcnn_tensor.h"
+
 #include <math.h>
 
 #include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
-#include "bcnn/bcnn.h"
 #include "bcnn_utils.h"
+
+#define BCNN_CHECK_ALLOC(p)                  \
+    do {                                     \
+        if (((void *)p) == ((void *)NULL)) { \
+            return BCNN_FAILED_ALLOC;        \
+        }                                    \
+    } while (0)
+
+// Alignment for align_malloc
+static const size_t align_offset_ = 32;
 
 void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
                         int has_grad, char *name, int net_state) {
@@ -91,16 +103,20 @@ int bcnn_tensor_size3d(const bcnn_tensor *t) { return t->w * t->h * t->c; }
 
 int bcnn_tensor_size2d(const bcnn_tensor *t) { return t->w * t->h; }
 
-void bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
+bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
     int size = t->n * t->c * t->h * t->w;
 
     bcnn_tensor_free(t);
-    if (size <= 0) return;
+    if (size <= 0) {
+        return BCNN_INVALID_PARAMETER;
+    }
     t->data = (float *)bh_align_calloc(size * sizeof(float), align_offset_);
+    BCNN_CHECK_ALLOC(t->data);
 #ifndef BCNN_DEPLOY_ONLY
     if (t->has_grad && net_state == TRAIN) {
         t->grad_data =
             (float *)bh_align_calloc(size * sizeof(float), align_offset_);
+        BCNN_CHECK_ALLOC(t->grad_data);
     }
 #endif
 #ifdef BCNN_USE_CUDA
@@ -111,6 +127,7 @@ void bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
     }
 #endif
 #endif
+    return BCNN_SUCCESS;
 }
 
 void bcnn_tensor_free(bcnn_tensor *t) {

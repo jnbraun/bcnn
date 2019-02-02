@@ -6,6 +6,8 @@
 
 #include "bcnn_activation_layer.h"
 #include "bcnn_mat.h"
+#include "bcnn_net.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 /** From yolo darknet */
@@ -52,7 +54,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     char biases_name[256];
     sprintf(biases_name, "%s_b", src_id);
     bcnn_tensor_create(&param->biases, 1, 1, 1, total * 2, 0, biases_name,
-                       net->state);
+                       net->mode);
     bcnn_tensor_filler w_filler = {.value = 0.5f, .type = FIXED};
     bcnn_tensor_fill(&param->biases, w_filler);
     if (anchors != NULL) {
@@ -69,7 +71,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                           net->tensors[node.src[0]].h,  // height
                           net->tensors[node.src[0]].w,  // width
                           1);
-    bcnn_tensor_allocate(&dst_tensor, net->state);
+    bcnn_tensor_allocate(&dst_tensor, net->mode);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);
@@ -228,7 +230,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_yolo_param *param,
                 (1 + param->classes) * src_tensor->w * src_tensor->h, LOGISTIC);
         }
     }
-    if (net->state != TRAIN) {
+    if (net->mode != TRAIN) {
         return;
     }
     if (dst_tensor->grad_data) {
@@ -403,7 +405,7 @@ void bcnn_forward_yolo_layer_gpu(bcnn_net *net, bcnn_yolo_param *param,
     int sz = bcnn_tensor_size(src_tensor);
     bcnn_cuda_memcpy_dev2host(src_tensor->data_gpu, src_tensor->data, sz);
     bcnn_forward_yolo_layer_cpu(net, param, src_tensor, label, dst_tensor);
-    if (net->state == TRAIN) {
+    if (net->mode == TRAIN) {
         sz = bcnn_tensor_size(dst_tensor);
         bcnn_cuda_memcpy_host2dev(dst_tensor->grad_data_gpu,
                                   dst_tensor->grad_data, sz);

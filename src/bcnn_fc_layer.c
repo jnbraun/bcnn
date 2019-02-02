@@ -30,19 +30,20 @@
 #include "bcnn_activation_layer.h"
 #include "bcnn_learner.h"
 #include "bcnn_mat.h"
+#include "bcnn_net.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
                                  bcnn_filler_type init,
                                  bcnn_activation activation, int quantize,
                                  const char *src_id, const char *dst_id) {
-    int i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
 
     if (net->num_nodes > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_tensors - 1; i >= 0; --i) {
+        for (int i = net->num_tensors - 1; i >= 0; --i) {
             if (strcmp(net->tensors[i].name, src_id) == 0) {
                 bcnn_node_add_input(net, &node, i);
                 is_src_node_found = 1;
@@ -67,7 +68,7 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
     bcnn_tensor weights = {0};
     bcnn_tensor_create(&weights, output_size, net->tensors[node.src[0]].c,
                        net->tensors[node.src[0]].h, net->tensors[node.src[0]].w,
-                       1, weights_name, net->state);
+                       1, weights_name, net->mode);
     bcnn_tensor_filler w_filler = {.range = input_size, .type = init};
     bcnn_tensor_fill(&weights, w_filler);
     bcnn_net_add_tensor(net, weights);
@@ -75,7 +76,7 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
     // Create bias tensor
     bcnn_tensor biases = {0};
     bcnn_tensor_create(&biases, 1, 1, 1, output_size, 1, biases_name,
-                       net->state);
+                       net->mode);
     bcnn_net_add_tensor(net, biases);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
 
@@ -86,7 +87,7 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
                           1,                            // height
                           1,                            // width
                           1);
-    bcnn_tensor_allocate(&dst_tensor, net->state);
+    bcnn_tensor_allocate(&dst_tensor, net->mode);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);

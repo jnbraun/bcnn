@@ -29,6 +29,8 @@
 #include <bh/bh_string.h>
 
 #include "bcnn_mat.h"
+#include "bcnn_net.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
@@ -69,7 +71,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                           net->tensors[node.src[0]].c,
                           net->tensors[node.src[0]].h,
                           net->tensors[node.src[0]].w, 0);
-    bcnn_tensor_allocate(&net->tensors[1], net->state);
+    bcnn_tensor_allocate(&net->tensors[1], net->mode);
     // Add pointer to label node to connection
     bcnn_node_add_input(net, &node, 1 /* LABEL_NODE_ID */);
 
@@ -77,7 +79,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
     bcnn_tensor_set_shape(
         &dst_tensor, net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
         net->tensors[node.src[0]].h, net->tensors[node.src[0]].w, 1);
-    bcnn_tensor_allocate(&dst_tensor, net->state);
+    bcnn_tensor_allocate(&dst_tensor, net->mode);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
@@ -249,7 +251,7 @@ void bcnn_forward_cost_layer(bcnn_net *net, bcnn_node *node) {
         case EUCLIDEAN_LOSS:
             bcnn_euclidean_loss_forward(src_tensor, label, dst_tensor);
             break;
-        case LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS:
+        case LIFTED_STRUCT_LOSS:
             bcnn_lifted_struct_loss_forward(net, node);
             break;
     }
@@ -267,7 +269,7 @@ void bcnn_backward_cost_layer(bcnn_net *net, bcnn_node *node) {
         case EUCLIDEAN_LOSS:
             bcnn_euclidean_loss_backward(src_tensor, dst_tensor, param);
             break;
-        case LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS:
+        case LIFTED_STRUCT_LOSS:
             bcnn_lifted_struct_loss_backward(net, node);
             break;
     }

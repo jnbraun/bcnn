@@ -188,7 +188,7 @@ void bcnn_forward_batchnorm_gpu(bcnn_tensor *src_tensor,
                                 bcnn_tensor *bn_var, bcnn_tensor *bn_scales,
                                 bcnn_tensor *bn_biases, bcnn_tensor *saved_mean,
                                 bcnn_tensor *saved_variance, float *x_norm_gpu,
-                                float *workspace_gpu, bcnn_state state
+                                float *workspace_gpu, bcnn_mode mode
 #ifdef BCNN_USE_CUDNN
                                 ,
                                 cudnnTensorDescriptor_t dst_tensor_desc,
@@ -209,7 +209,7 @@ void bcnn_forward_batchnorm_gpu(bcnn_tensor *src_tensor,
     bcnn_cuda_copy_f32(sz * batch_size, dst_tensor->data_gpu, 1, workspace_gpu,
                        1);
 
-    if (state == TRAIN) {
+    if (mode == TRAIN) {
 #ifdef BCNN_USE_CUDNN
         bcnn_cudnn_check(cudnnBatchNormalizationForwardTraining(
             bcnn_cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &alpha, &beta,
@@ -281,7 +281,7 @@ void bcnn_forward_batchnorm_layer_gpu(bcnn_net *net, bcnn_node *node) {
     bcnn_forward_batchnorm_gpu(src_tensor, dst_tensor, bn_mean, bn_var,
                                bn_scales, bn_biases, &param->saved_mean,
                                &param->saved_variance, param->x_norm_gpu,
-                               param->workspace_gpu, net->state
+                               param->workspace_gpu, net->mode
 #ifdef BCNN_USE_CUDNN
                                ,
                                param->dst_tensor_desc, param->bias_desc
@@ -294,7 +294,7 @@ void bcnn_backward_batchnorm_gpu(
     bcnn_tensor *src_tensor, bcnn_tensor *dst_tensor, bcnn_tensor *bn_mean,
     bcnn_tensor *bn_var, bcnn_tensor *bn_scales, bcnn_tensor *bn_biases,
     bcnn_tensor *saved_mean, bcnn_tensor *saved_variance, float *x_norm_gpu,
-    float *workspace_gpu, bcnn_state state
+    float *workspace_gpu, bcnn_mode mode
 #ifdef BCNN_USE_CUDNN
     ,
     cudnnTensorDescriptor_t dst_tensor_desc, cudnnTensorDescriptor_t bias_desc
@@ -306,7 +306,7 @@ void bcnn_backward_batchnorm_gpu(
     float a_data = 1.0f, a_param = 1.0f;
     float b_data = 0.0f, b_param = 1.0f;
 #endif
-    if (state != TRAIN) {
+    if (mode != TRAIN) {
         saved_mean->data_gpu = bn_mean->data_gpu;
         saved_variance->data_gpu = bn_var->data_gpu;
     }
@@ -365,7 +365,7 @@ void bcnn_backward_batchnorm_layer_gpu(bcnn_net *net, bcnn_node *node) {
     bcnn_backward_batchnorm_gpu(src_tensor, dst_tensor, bn_mean, bn_var,
                                 bn_scales, bn_biases, &param->saved_mean,
                                 &param->saved_variance, param->x_norm_gpu,
-                                param->workspace_gpu, net->state
+                                param->workspace_gpu, net->mode
 #ifdef BCNN_USE_CUDNN
                                 ,
                                 param->dst_tensor_desc, param->bias_desc

@@ -51,46 +51,6 @@ typedef signed __int64 int64_t;
 typedef unsigned __int64 uint64_t;
 #endif
 
-/** Convenient macros */
-#define BCNN_CHECK(exp, err) \
-    do {                     \
-        if (!(exp)) {        \
-            return (err);    \
-        }                    \
-    } while (0)
-
-#define BCNN_CHECK_AND_LOG(ctx, exp, err, fmt, ...)                \
-    do {                                                           \
-        if (!(exp)) {                                              \
-            bcnn_log((ctx), BCNN_LOG_ERROR, (fmt), ##__VA_ARGS__); \
-            return (err);                                          \
-        }                                                          \
-    } while (0)
-
-#define BCNN_CHECK_STATUS(s)         \
-    do {                             \
-        bcnn_status ret = (s);       \
-        if ((ret) != BCNN_SUCCESS) { \
-            return (ret);            \
-        }                            \
-    } while (0)
-
-#define BCNN_ERROR(ctx, err, fmt, ...)                         \
-    do {                                                       \
-        bcnn_log((ctx), BCNN_LOG_ERROR, (fmt), ##__VA_ARGS__); \
-        return (err);                                          \
-    } while (0)
-
-#define BCNN_INFO(ctx, fmt, ...)                              \
-    do {                                                      \
-        bcnn_log((ctx), BCNN_LOG_INFO, (fmt), ##__VA_ARGS__); \
-    } while (0)
-
-#define BCNN_WARNING(ctx, fmt, ...)                              \
-    do {                                                         \
-        bcnn_log((ctx), BCNN_LOG_WARNING, (fmt), ##__VA_ARGS__); \
-    } while (0)
-
 #define USE_2EYES
 
 /**
@@ -109,7 +69,7 @@ typedef enum {
 /**
  * \brief Enum of available tasks.
  */
-typedef enum { UNKNOWN, PREDICT, TRAIN, VALID } bcnn_state;
+typedef enum { UNKNOWN, PREDICT, TRAIN, VALID } bcnn_mode;
 
 typedef enum {
     CLASSIFICATION,
@@ -212,15 +172,16 @@ typedef enum { SGD, ADAM } bcnn_optimizer;
  * \brief Structure to handle learner method and parameters.
  */
 typedef struct {
+    int step;
+    int max_batches;     /**< Maximum number of batches for training */
     float momentum;      /**< Momentum parameter */
     float decay;         /**< Decay parameter */
     float learning_rate; /**< Base learning rate */
     float gamma;
     float scale;
     float power;
-    float beta1; /**< Parameter for Adam optimizer */
-    float beta2; /**< Parameter for Adam optimizer */
-    int step;
+    float beta1;              /**< Parameter for Adam optimizer */
+    float beta2;              /**< Parameter for Adam optimizer */
     bcnn_optimizer optimizer; /**< Optimization method */
     bcnn_lr_policy policy;    /**< Learning rate policy */
 } bcnn_learner;
@@ -267,10 +228,7 @@ typedef enum {
 /**
  * \brief Enum of available loss functions.
  */
-typedef enum {
-    EUCLIDEAN_LOSS,
-    LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS
-} bcnn_loss;
+typedef enum { EUCLIDEAN_LOSS, LIFTED_STRUCT_LOSS } bcnn_loss;
 
 /**
  * \brief Enum of available error metrics.
@@ -293,9 +251,8 @@ typedef enum {
     PADDING_CAFFE /**< Caffe-like padding for compatibility purposes */
 } bcnn_padding;
 
-typedef void (*bcnn_log_callback)(const char *fmt, ...);
-
 /* Logging */
+typedef void (*bcnn_log_callback)(const char *fmt, ...);
 
 /**
  * Available log levels
@@ -312,7 +269,6 @@ typedef struct bcnn_log_context {
     bcnn_log_level lvl;
 } bcnn_log_context;
 
-static const int align_offset_ = 32;
 /**
  * Tensor struct
  */
@@ -335,6 +291,12 @@ typedef struct {
     char *name;
 } bcnn_tensor;
 
+int bcnn_tensor_size(const bcnn_tensor *t);
+
+int bcnn_tensor_size3d(const bcnn_tensor *t);
+
+int bcnn_tensor_size2d(const bcnn_tensor *t);
+
 // The different type of tensor initialization.
 // This is ususally used to randomly initialize the weights/bias of one layer
 typedef enum bcnn_filler_type {
@@ -342,32 +304,6 @@ typedef enum bcnn_filler_type {
     XAVIER,  // Xavier init
     MSRA     // MSRA init
 } bcnn_filler_type;
-
-typedef struct tensor_filler {
-    int range;
-    float value;
-    bcnn_filler_type type;
-} bcnn_tensor_filler;
-
-void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
-                        int has_grad, char *name, int net_state);
-
-void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler);
-
-void bcnn_tensor_destroy(bcnn_tensor *t);
-
-void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w,
-                           int has_grad);
-
-void bcnn_tensor_allocate(bcnn_tensor *t, int net_state);
-
-void bcnn_tensor_free(bcnn_tensor *t);
-
-int bcnn_tensor_size(const bcnn_tensor *tensor);
-
-int bcnn_tensor_size3d(const bcnn_tensor *t);
-
-int bcnn_tensor_size2d(const bcnn_tensor *t);
 
 struct bcnn_net;
 typedef struct bcnn_net bcnn_net;
@@ -394,8 +330,6 @@ struct bcnn_net {
     int input_height;
     int input_channels;
     int batch_size;
-    int max_batches;              /**< Maximum number of batches during training
-                                   (=iterations) */
     bcnn_loss_metric loss_metric; /**< Loss metric for evaluation */
     bcnn_learner learner;         /**< Learner/optimizer parameters */
     int seen; /**< Number of instances seen by the network */
@@ -405,7 +339,7 @@ struct bcnn_net {
     bcnn_tensor *tensors; /**< Array of tensors hold in the network */
     bcnn_target prediction_type;
     bcnn_data_augment data_aug; /**< Parameters for online data augmentation */
-    bcnn_state state;
+    bcnn_mode mode;
     int nb_finetune;
     char **finetune_id;
     unsigned char *input_buffer;
@@ -434,18 +368,8 @@ void bcnn_net_set_input_shape(bcnn_net *net, int input_width, int input_height,
  */
 bcnn_status bcnn_net_add_input(bcnn_net *net, int w, int h, int c, char *name);
 
-bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node);
-bcnn_status bcnn_free_node(bcnn_node *node);
-void bcnn_net_free_nodes(bcnn_net *net);
-void bcnn_net_destroy_tensors(bcnn_net *net);
-
-bcnn_status bcnn_node_add_input(bcnn_net *net, bcnn_node *node, int index);
-bcnn_status bcnn_node_add_output(bcnn_net *net, bcnn_node *node, int index);
-
-bcnn_status bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor);
-
 bcnn_status bcnn_init_net(bcnn_net **net);
-bcnn_status bcnn_end_net(bcnn_net **net);
+void bcnn_end_net(bcnn_net **net);
 
 int bcnn_set_param(bcnn_net *net, char *name, char *val);
 
@@ -461,9 +385,6 @@ bcnn_status bcnn_load_model(bcnn_net *net, char *filename);
 bcnn_status bcnn_write_model(bcnn_net *net, char *filename);
 /* For compatibility with older versions */
 bcnn_status bcnn_load_model_legacy(bcnn_net *net, char *filename);
-
-bcnn_status bcnn_init_workload(bcnn_net *net);
-bcnn_status bcnn_free_workload(bcnn_net *net);
 
 /* Conv layer */
 bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
@@ -546,9 +467,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
 /* TODO: move to private header */
 bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter);
 
-typedef struct {
-    float x, y, w, h;
-} yolo_box;
+typedef struct { float x, y, w, h; } yolo_box;
 
 typedef struct yolo_detection {
     yolo_box bbox;
@@ -569,9 +488,7 @@ yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w, int h,
 
 /* Core network routines */
 int bcnn_update(bcnn_net *net);
-int bcnn_sgd_optimizer(bcnn_net *net, bcnn_node *node, int batch_size,
-                       float learning_rate, float momentum, float decay);
-int bcnn_visualize_network(bcnn_net *net);
+
 int bcnn_forward(bcnn_net *net);
 int bcnn_backward(bcnn_net *net);
 
@@ -579,9 +496,6 @@ int bcnn_backward(bcnn_net *net);
 int bcnn_train_on_batch(bcnn_net *net, bcnn_iterator *iter, float *loss);
 int bcnn_predict_on_batch(bcnn_net *net, bcnn_iterator *iter, float **pred,
                           float *error);
-
-/* Free routines */
-bcnn_status bcnn_free_net(bcnn_net *cnn);
 
 /* Helpers */
 int bcnn_load_image_from_csv(bcnn_net *net, char *str, int w, int h, int c,

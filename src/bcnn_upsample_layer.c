@@ -22,9 +22,9 @@
 #include "bcnn_upsample_layer.h"
 
 #include <bh/bh_string.h>
+#include "bcnn_net.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
-
-/* Adapted from darknet for yolo v3 port */
 
 bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, const char *src_id,
                                     const char *dst_id) {
@@ -54,7 +54,7 @@ bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, const char *src_id,
                           net->tensors[node.src[0]].h * size,  // height
                           net->tensors[node.src[0]].w * size,  // width
                           1);
-    bcnn_tensor_allocate(&dst_tensor, net->state);
+    bcnn_tensor_allocate(&dst_tensor, net->mode);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);

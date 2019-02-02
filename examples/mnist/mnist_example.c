@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <bh/bh_timer.h>
+#include <bh/bh_timer.h>  // For timing
 
 #include "bcnn/bcnn.h"
 
@@ -34,7 +34,7 @@ int create_network(bcnn_net *net) {
     net->learner.step = 40000;
     net->learner.beta1 = 0.9f;
     net->learner.beta2 = 0.999f;
-    net->max_batches = 50000;
+    net->learner.max_batches = 50000;
 
     bcnn_net_set_input_shape(net, 28, 28, 1, 16);
 
@@ -81,7 +81,7 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
     int output_size =
         bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
 
-    net->state = VALID;
+    net->mode = VALID;
     bcnn_iterator_initialize(net, &data_mnist, test_img, test_label, "mnist");
 
     f = fopen(pred_out, "wt");
@@ -128,10 +128,11 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
     bh_timer t = {0}, tp = {0};
     bcnn_iterator data_mnist = {0};
 
-    net->state = TRAIN;
+    net->mode = TRAIN;
     if (bcnn_iterator_initialize(net, &data_mnist, train_img, train_label,
-                                 "mnist") != 0)
+                                 "mnist") != 0) {
         return -1;
+    }
 
     bh_timer_start(&t);
     for (i = 0; i < nb_iter; ++i) {
@@ -154,7 +155,7 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
             bh_timer_start(&t);
             sum_error = 0;
             // Reschedule net for training
-            net->state = TRAIN;
+            net->mode = TRAIN;
         }
     }
 
@@ -169,22 +170,23 @@ int run(char *train_img, char *train_label, char *test_img, char *test_label) {
     bcnn_net *net = NULL;
 
     bcnn_init_net(&net);
-    net->state = TRAIN;
-    BCNN_INFO(net->log_ctx, "Create Network...");
+    net->mode = TRAIN;
+    fprintf(stderr, "Create Network...\n");
     create_network(net);
 
-    BCNN_INFO(net->log_ctx, "Start training...");
+    fprintf(stderr, "Start training...\n");
     if (train_mnist(net, train_img, train_label, test_img, test_label, 100000,
                     50, &error_train) != 0) {
-        BCNN_ERROR(net->log_ctx, -1, "Can not perform training");
+        fprintf(stderr, "Can not perform training");
+        bcnn_end_net(&net);
+        return -1;
     }
 
-    BCNN_INFO(net->log_ctx, "Start prediction...");
-    net->state = VALID;
+    fprintf(stderr, "Start prediction...\n");
+    net->mode = VALID;
     predict_mnist(net, test_img, test_label, &error_test, 10000,
                   "pred_mnist.txt");
-    BCNN_INFO(net->log_ctx, "Prediction ended successfully");
-
+    fprintf(stderr, "Prediction ended successfully\n");
     bcnn_end_net(&net);
 
     return 0;

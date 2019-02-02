@@ -3,10 +3,19 @@
 /* bcnn include */
 #include <bcnn/bcnn.h>
 #include <bcnn/bcnn_cl.h>
+#include <bcnn_activation_layer.h>
+#include <bcnn_net.h>
+#include <bcnn_tensor.h>
 #include <bcnn_utils.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 #include <bip/bip.h>
+#include "bcnn_avgpool_layer.h"
+#include "bcnn_conv_layer.h"
+#include "bcnn_deconv_layer.h"
+#include "bcnn_depthwise_conv_layer.h"
+#include "bcnn_fc_layer.h"
+#include "bcnn_maxpool_layer.h"
 
 /* tflite generated flatbuffers */
 #include "schema_generated.h"
@@ -48,14 +57,13 @@ void add_reshape_node(bcnn_net* net, int dst_n, int dst_c, int dst_h, int dst_w,
         bcnn_node_add_input(net, &node, 0);
     }
     bcnn_tensor_set_shape(&dst_tensor, dst_n, dst_c, dst_h, dst_w, 1);
-    bcnn_tensor_allocate(&dst_tensor, net->state);
+    bcnn_tensor_allocate(&dst_tensor, net->mode);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
-    node.layer = (bcnn_layer*)calloc(1, sizeof(bcnn_layer));
-    node.layer->type = RESHAPE;
+    node.type = RESHAPE;
     bcnn_net_add_node(net, node);
     return;
 }
@@ -119,7 +127,7 @@ export_tensors(bcnn_net* net, FlatBufferBuilder* builder,
         std::vector<int> shape = {net->tensors[i].n, net->tensors[i].h,
                                   net->tensors[i].w, net->tensors[i].c};
         for (int n = 0; n < net->num_nodes; ++n) {
-            if (net->nodes[n].layer->type == FULL_CONNECTED) {
+            if (net->nodes[n].type == FULL_CONNECTED) {
                 if (net->nodes[n].src[1] == i) {
                     // Special case for FullyConnected as TFlite only
                     // supports 2-D tensor as FullyConnected weights shape
@@ -128,15 +136,17 @@ export_tensors(bcnn_net* net, FlatBufferBuilder* builder,
                                                     net->tensors[i].h *
                                                     net->tensors[i].w};
                 }
-            } else if (net->nodes[n].layer->type == ACTIVATION &&
-                       net->nodes[n].layer->activation == PRELU) {
-                if (net->nodes[n].src[1] == i) {
-                    // Special case for Prelu as TFlite only
-                    // supports 3-D tensor as Prelu slope(=alpha) shape
-                    shape.clear();
-                    shape = {1, 1,
-                             net->tensors[i].c * net->tensors[i].h *
-                                 net->tensors[i].w};
+            } else if (net->nodes[n].type == ACTIVATION) {
+                bcnn_activation_param* param =
+                    (bcnn_activation_param*)net->nodes[n].param;
+                if (param->activation == PRELU) {
+                    if (net->nodes[n].src[1] == i) {
+                        // Special case for Prelu as TFlite only
+                        // supports 3-D tensor as Prelu slope(=alpha) shape
+                        shape.clear();
+                        shape = {1, 1, net->tensors[i].c * net->tensors[i].h *
+                                           net->tensors[i].w};
+                    }
                 }
             }
         }
@@ -197,27 +207,25 @@ export_operator_codes(bcnn_net* net, FlatBufferBuilder* builder) {
     std::vector<flatbuffers::Offset<tflite::OperatorCode>> opcode_vector;
     opcode_vector.reserve(net->num_nodes);
     for (int i = 0; i < net->num_nodes; ++i) {
-        if (net->nodes[i].layer->type != ACTIVATION) {
-            if (bcnn_tflite_ops_map.count(net->nodes[i].layer->type) > 0) {
+        if (net->nodes[i].type != ACTIVATION) {
+            if (bcnn_tflite_ops_map.count(net->nodes[i].type) > 0) {
                 opcode_vector.push_back(tflite::CreateOperatorCode(
-                    *builder, bcnn_tflite_ops_map.at(net->nodes[i].layer->type),
-                    0,
+                    *builder, bcnn_tflite_ops_map.at(net->nodes[i].type), 0,
                     /*op_version=*/1));
             } else {
                 fprintf(stderr, "[ERROR] The operator %d is not supported",
-                        net->nodes[i].layer->type);
+                        net->nodes[i].type);
                 return builder->CreateVector(opcode_vector);
             }
         } else {
-            if (bcnn_tflite_act_map.count(net->nodes[i].layer->activation) >
-                0) {
+            bcnn_activation_param* param = (bcnn_activation_param*)param;
+            if (bcnn_tflite_act_map.count(param->activation) > 0) {
                 opcode_vector.push_back(tflite::CreateOperatorCode(
-                    *builder,
-                    bcnn_tflite_act_map.at(net->nodes[i].layer->activation), 0,
+                    *builder, bcnn_tflite_act_map.at(param->activation), 0,
                     /*op_version=*/1));
             } else {
                 fprintf(stderr, "[ERROR] The activation %d is not supported",
-                        net->nodes[i].layer->type);
+                        net->nodes[i].type);
                 return builder->CreateVector(opcode_vector);
             }
         }
@@ -253,7 +261,6 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
                  FlatBufferBuilder* builder) {
     std::vector<flatbuffers::Offset<tflite::Operator>> op_vector;
     for (int i = 0; i < net->num_nodes; ++i) {
-        bcnn_layer* layer = net->nodes[i].layer;
         // We need to check manually for each type of layer, the inputs /
         // outputs
         std::vector<int32_t> inputs;
@@ -264,16 +271,20 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
                     net->tensors[net->nodes[i].src[j]].h,
                     net->tensors[net->nodes[i].src[j]].c);
             inputs.push_back(net->nodes[i].src[j]);
-            if (layer->type == CONVOLUTIONAL ||
-                layer->type == DECONVOLUTIONAL ||
-                layer->type == DEPTHWISE_CONV ||
-                layer->type == FULL_CONNECTED) {
+            if (net->nodes[i].type == CONVOLUTIONAL ||
+                net->nodes[i].type == DECONVOLUTIONAL ||
+                net->nodes[i].type == DEPTHWISE_CONV ||
+                net->nodes[i].type == FULL_CONNECTED) {
                 // Set the weights and bias buffer writable
                 buffers_to_write->at(net->nodes[i].src[1]).need_to_write = true;
                 buffers_to_write->at(net->nodes[i].src[2]).need_to_write = true;
-            } else if (layer->type == ACTIVATION &&
-                       layer->activation == PRELU) {
-                buffers_to_write->at(net->nodes[i].src[1]).need_to_write = true;
+            } else if (net->nodes[i].type == ACTIVATION) {
+                bcnn_activation_param* param =
+                    (bcnn_activation_param*)net->nodes[i].param;
+                if (param->activation == PRELU) {
+                    buffers_to_write->at(net->nodes[i].src[1]).need_to_write =
+                        true;
+                }
             }
         }
         std::vector<int32_t> outputs;
@@ -283,15 +294,16 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
         }
         tflite::BuiltinOptions type;
         flatbuffers::Offset<void> offset;
-        if (layer->type != ACTIVATION) {
-            switch (layer->type) {
+        if (net->nodes[i].type != ACTIVATION) {
+            switch (net->nodes[i].type) {
                 case CONVOLUTIONAL: {
+                    bcnn_conv_param* param = (bcnn_conv_param*)param;
                     tflite::Padding pad =
-                        resolve_padding(net, i, layer->size, layer->stride);
+                        resolve_padding(net, i, param->size, param->stride);
                     flatbuffers::Offset<tflite::Conv2DOptions> conv2d_options =
                         tflite::CreateConv2DOptions(
-                            *builder, pad, layer->stride, layer->stride,
-                            bcnn_tflite_fused_act_map.at(layer->activation),
+                            *builder, pad, param->stride, param->stride,
+                            bcnn_tflite_fused_act_map.at(param->activation),
                             /*dilation=*/1,
                             /*dilation=*/1);
                     type = tflite::BuiltinOptions_Conv2DOptions;
@@ -299,54 +311,62 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
                     break;
                 }
                 case DECONVOLUTIONAL: {
+                    bcnn_deconv_param* param = (bcnn_deconv_param*)param;
                     flatbuffers::Offset<tflite::TransposeConvOptions>
                         trans_conv_options = tflite::CreateTransposeConvOptions(
-                            *builder, tflite::Padding_SAME, layer->stride,
-                            layer->stride);
+                            *builder, tflite::Padding_SAME, param->stride,
+                            param->stride);
                     type = tflite::BuiltinOptions_TransposeConvOptions;
                     offset = trans_conv_options.Union();
                     break;
                 }
                 case DEPTHWISE_CONV: {
+                    bcnn_depthwise_conv_param* param =
+                        (bcnn_depthwise_conv_param*)param;
                     flatbuffers::Offset<tflite::DepthwiseConv2DOptions>
                         dw_conv_options = tflite::CreateDepthwiseConv2DOptions(
-                            *builder, tflite::Padding_SAME, layer->stride,
-                            layer->stride,
+                            *builder, tflite::Padding_SAME, param->stride,
+                            param->stride,
                             /*depth_multiplier=*/1,
-                            bcnn_tflite_fused_act_map.at(layer->activation));
+                            bcnn_tflite_fused_act_map.at(param->activation));
                     type = tflite::BuiltinOptions_DepthwiseConv2DOptions;
                     offset = dw_conv_options.Union();
                     break;
                 }
                 case FULL_CONNECTED: {
+                    bcnn_fullc_param* param = (bcnn_fullc_param*)param;
                     flatbuffers::Offset<tflite::FullyConnectedOptions>
                         fc_options = tflite::CreateFullyConnectedOptions(
                             *builder,
-                            bcnn_tflite_fused_act_map.at(layer->activation));
+                            bcnn_tflite_fused_act_map.at(param->activation));
                     type = tflite::BuiltinOptions_FullyConnectedOptions;
                     offset = fc_options.Union();
                     break;
                 }
                 case MAXPOOL: {
+                    bcnn_maxpool_param* param = (bcnn_maxpool_param*)param;
                     tflite::Padding pad =
-                        resolve_padding(net, i, layer->size, layer->stride);
+                        resolve_padding(net, i, param->size, param->stride);
                     flatbuffers::Offset<tflite::Pool2DOptions> maxpool_options =
                         tflite::CreatePool2DOptions(
-                            *builder, pad, layer->stride, layer->stride,
-                            layer->size, layer->size,
-                            bcnn_tflite_fused_act_map.at(layer->activation));
+                            *builder, pad, param->stride, param->stride,
+                            param->size, param->size,
+                            bcnn_tflite_fused_act_map.at(NONE));
                     type = tflite::BuiltinOptions_Pool2DOptions;
                     offset = maxpool_options.Union();
                     break;
                 }
                 case AVGPOOL: {
-                    tflite::Padding pad =
-                        resolve_padding(net, i, layer->size, layer->stride);
+                    tflite::Padding pad = resolve_padding(
+                        net, i, /*size=*/net->tensors[net->nodes[i].dst[0]].w,
+                        /*stride=*/net->tensors[net->nodes[i].dst[0]].w);
                     flatbuffers::Offset<tflite::Pool2DOptions> avgpool_options =
                         tflite::CreatePool2DOptions(
-                            *builder, pad, layer->stride, layer->stride,
-                            layer->size, layer->size,
-                            bcnn_tflite_fused_act_map.at(layer->activation));
+                            *builder, pad, net->tensors[net->nodes[i].dst[0]].w,
+                            net->tensors[net->nodes[i].dst[0]].h,
+                            net->tensors[net->nodes[i].dst[0]].w,
+                            net->tensors[net->nodes[i].dst[0]].h,
+                            bcnn_tflite_fused_act_map.at(NONE));
                     type = tflite::BuiltinOptions_Pool2DOptions;
                     offset = avgpool_options.Union();
                     break;
@@ -500,8 +520,8 @@ int add_layer(bcnn_net* net, char* curr_layer, int stride, int pad,
                            "Invalid output node name. "
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?");
-        bcnn_add_depthwise_sep_conv_layer(net, size, stride, pad, 0, init, a,
-                                          src_id, dst_id);
+        bcnn_add_depthwise_conv_layer(net, size, stride, pad, 0, init, a,
+                                      src_id, dst_id);
     } else if (strcmp(curr_layer, "{activation}") == 0 ||
                strcmp(curr_layer, "{nl}") == 0) {
         bcnn_add_activation_layer(net, a, src_id);
@@ -616,9 +636,9 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
                                    "Wrong format option in config file");
                 if (strcmp(tok[0], "task") == 0) {
                     if (strcmp(tok[1], "train") == 0)
-                        net->state = TRAIN;
+                        net->mode = TRAIN;
                     else if (strcmp(tok[1], "predict") == 0) {
-                        net->state = PREDICT;
+                        net->mode = PREDICT;
                     } else
                         BCNN_ERROR(
                             net->log_ctx, BCNN_INVALID_PARAMETER,
@@ -738,7 +758,7 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
                         loss = EUCLIDEAN_LOSS;
                     } else if (strcmp(tok[1], "lifted_struct_similarity") ==
                                0) {
-                        loss = LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS;
+                        loss = LIFTED_STRUCT_LOSS;
                     } else {
                         BCNN_WARNING(
                             net->log_ctx,

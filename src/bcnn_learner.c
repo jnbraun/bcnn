@@ -44,7 +44,7 @@ static float bcnn_update_learning_rate(bcnn_net *net) {
                    (float)pow(net->learner.gamma, iter);
         case POLY:
             return net->learner.learning_rate *
-                   (float)pow(1 - (float)iter / net->max_batches,
+                   (float)pow(1 - (float)iter / net->learner.max_batches,
                               net->learner.power);
         case SIGMOID:
             return net->learner.learning_rate *

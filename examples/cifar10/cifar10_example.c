@@ -183,7 +183,7 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
     int output_size =
         bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
 
-    net->state = VALID;
+    net->mode = VALID;
     if (bcnn_iterator_initialize(net, &data_iter, test_img, NULL, "cifar10") !=
         0) {
         return -1;
@@ -191,7 +191,7 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
 
     f = fopen(pred_out, "wt");
     if (f == NULL) {
-        fprintf(stderr, "[ERROR] Could not open file %s", pred_out);
+        fprintf(stderr, "[ERROR] Could not open file %s\n", pred_out);
         return -1;
     }
 
@@ -208,7 +208,9 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
     }
     *error = err / nb_pred;
 
-    if (f != NULL) fclose(f);
+    if (f != NULL) {
+        fclose(f);
+    }
     bcnn_iterator_terminate(&data_iter);
     return 0;
 }
@@ -220,7 +222,7 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
     bh_timer t = {0}, tp = {0};
     bcnn_iterator data_iter = {0};
 
-    net->state = TRAIN;
+    net->mode = TRAIN;
     if (bcnn_iterator_initialize(net, &data_iter, train_img, NULL, "cifar10") !=
         0) {
         return -1;
@@ -247,7 +249,7 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
             bh_timer_start(&t);
             sum_error = 0;
             // Reschedule net for training
-            net->state = TRAIN;
+            net->mode = TRAIN;
         }
     }
 
@@ -262,21 +264,23 @@ int run(char *train_data, char *test_data, model_type model) {
     bcnn_net *net = NULL;
 
     bcnn_init_net(&net);
-    net->state = TRAIN;
-    BCNN_INFO(net->log_ctx, "Create Network...");
+    net->mode = TRAIN;
+    fprintf(stderr, "Create Network...\n");
     create_network(net, model);
 
-    BCNN_INFO(net->log_ctx, "Start training...");
+    fprintf(stderr, "Start training...\n");
     if (train_cifar10(net, train_data, test_data, 4000000, 10, &error_train) !=
         0) {
-        BCNN_ERROR(net->log_ctx, -1, "Can not perform training");
+        fprintf(stderr, "Can not perform training");
+        bcnn_end_net(&net);
+        return -1;
     }
 
-    BCNN_INFO(net->log_ctx, "Start prediction...");
-    net->state = VALID;
+    fprintf(stderr, "Start prediction...\n");
+    net->mode = VALID;
     predict_cifar10(net, test_data, &error_test, 10000,
                     "predictions_cifar10.txt");
-    BCNN_INFO(net->log_ctx, "Prediction ended successfully");
+    fprintf(stderr, "Prediction ended successfully\n");
 
     bcnn_end_net(&net);
 

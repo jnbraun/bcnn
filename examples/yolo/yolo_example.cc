@@ -724,7 +724,7 @@ int run(int argc, char **argv) {
     // Init net
     bcnn_net *net = NULL;
     bcnn_init_net(&net);
-    net->state = PREDICT;
+    net->mode = PREDICT;
     net->prediction_type = DETECTION;
     // Setup net and weights
     char **toks = NULL;

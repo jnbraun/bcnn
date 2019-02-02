@@ -23,6 +23,8 @@
 
 #include <bh/bh_string.h>
 
+#include "bcnn_net.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate,
@@ -75,7 +77,7 @@ void bcnn_forward_dropout_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_dropout_param *param = (bcnn_dropout_param *)node->param;
     int sz = bcnn_tensor_size(src_tensor);
 
-    if (net->state != TRAIN) {
+    if (net->mode != TRAIN) {
         return;
     }
     for (int i = 0; i < sz; ++i) {

@@ -25,6 +25,8 @@
 #include <bh/bh_string.h>
 
 #include "bcnn_mat.h"
+#include "bcnn_net.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
@@ -82,7 +84,7 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
         &dst_tensor, net->tensors[node.src[0]].n,
         net->tensors[node.src[0]].c + net->tensors[node.src[1]].c,
         net->tensors[node.src[0]].h, net->tensors[node.src[0]].w, 1);
-    bcnn_tensor_allocate(&dst_tensor, net->state);
+    bcnn_tensor_allocate(&dst_tensor, net->mode);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);

@@ -30,6 +30,7 @@
 
 #include "bcnn/bcnn.h"
 #include "bcnn/bcnn_cl.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
@@ -68,7 +69,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
         switch (line[0]) {
             case '{':
                 BCNN_CHECK_AND_LOG(
-                    net->log_ctx, (net->state != UNKNOWN),
+                    net->log_ctx, (net->mode != UNKNOWN),
                     BCNN_INVALID_PARAMETER,
                     "Unknown value for 'task' field, available parameters: "
                     "TRAIN, PREDICT");
@@ -228,9 +229,9 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                                    "Wrong format option in config file");
                 if (strcmp(tok[0], "task") == 0) {
                     if (strcmp(tok[1], "train") == 0)
-                        net->state = TRAIN;
+                        net->mode = TRAIN;
                     else if (strcmp(tok[1], "predict") == 0) {
-                        net->state = PREDICT;
+                        net->mode = PREDICT;
                     } else
                         BCNN_ERROR(
                             net->log_ctx, BCNN_INVALID_PARAMETER,
@@ -404,7 +405,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                         loss = EUCLIDEAN_LOSS;
                     } else if (strcmp(tok[1], "lifted_struct_similarity") ==
                                0) {
-                        loss = LIFTED_STRUCT_SIMILARITY_SOFTMAX_LOSS;
+                        loss = LIFTED_STRUCT_LOSS;
                     } else {
                         BCNN_WARNING(
                             net->log_ctx,
@@ -463,7 +464,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
 
 int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
     float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
-    int i = 0, nb_iter = net->max_batches;
+    int i = 0, nb_iter = net->learner.max_batches;
     int batch_size = net->batch_size;
     bh_timer t = {0};
     bcnn_iterator iter_data = {0};
@@ -682,7 +683,7 @@ int run(char *config_file) {
     // Initialize network from config file
     BCNN_CHECK_STATUS(bcnncl_init_from_config(net, config_file, &param));
     BCNN_CHECK_STATUS(bcnn_compile_net(net));
-    if (net->state == TRAIN) {
+    if (net->mode == TRAIN) {
         if (param.input_model != NULL) {
             fprintf(stderr, "[INFO] Loading pre-trained model %s\n",
                     param.input_model);
@@ -691,15 +692,15 @@ int run(char *config_file) {
         BCNN_INFO(net->log_ctx, "Start training...");
         BCNN_CHECK_STATUS(bcnncl_train(net, &param, &error_train));
         if (param.pred_out != NULL) {
-            net->state = VALID;
+            net->mode = VALID;
             BCNN_CHECK_STATUS(bcnncl_predict(net, &param, &error_valid, 1));
-            net->state = TRAIN;
+            net->mode = TRAIN;
         }
         if (param.output_model != NULL) {
             bcnn_write_model(net, param.output_model);
         }
         BCNN_INFO(net->log_ctx, "Training ended successfully");
-    } else if (net->state == PREDICT) {
+    } else if (net->mode == PREDICT) {
         if (param.input_model != NULL)
             bcnn_load_model(net, param.input_model);
         else {

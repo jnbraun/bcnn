@@ -19,10 +19,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 #include "bcnn_depthwise_conv_layer.h"
+
 #include "bcnn_activation_layer.h"
 #include "bcnn_learner.h"
 #include "bcnn_mat.h"
+#include "bcnn_net.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 #ifdef BCNN_USE_BLAS
@@ -86,7 +90,7 @@ bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
     sprintf(weights_name, "%s_w", src_id);
     bcnn_tensor_create(&weights, 1, 1, 1,
                        net->tensors[node.src[0]].c * size * size, 1,
-                       weights_name, net->state);
+                       weights_name, net->mode);
     bcnn_tensor_filler w_filler = {
         .range = (size * size * net->tensors[node.src[0]].c), .type = init};
     bcnn_tensor_fill(&weights, w_filler);
@@ -97,7 +101,7 @@ bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
     char biases_name[256];
     sprintf(biases_name, "%s_b", src_id);
     bcnn_tensor_create(&biases, 1, 1, 1, net->tensors[node.src[0]].c, 1,
-                       biases_name, net->state);
+                       biases_name, net->mode);
     bcnn_net_add_tensor(net, biases);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
 
@@ -123,7 +127,7 @@ bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
                 param->stride +
             1,
         1);
-    bcnn_tensor_allocate(&dst_tensor, net->state);
+    bcnn_tensor_allocate(&dst_tensor, net->mode);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);

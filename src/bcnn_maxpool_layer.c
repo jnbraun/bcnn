@@ -25,6 +25,8 @@
 #include <math.h>
 
 #include <bh/bh_string.h>
+#include "bcnn_net.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 #include <bh/bh_timer.h>
@@ -84,7 +86,7 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
                           out_h,                        // height
                           out_w,                        // width
                           1);
-    bcnn_tensor_allocate(&dst_tensor, net->state);
+    bcnn_tensor_allocate(&dst_tensor, net->mode);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);

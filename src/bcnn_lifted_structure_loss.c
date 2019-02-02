@@ -4,6 +4,7 @@
 
 #include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 #include <bh/bh_mem.h>

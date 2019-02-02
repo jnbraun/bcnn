@@ -29,6 +29,9 @@
 /* include bip image processing lib */
 #include <bip/bip.h>
 
+#include "bcnn_tensor.h"
+#include "bcnn_utils.h"
+
 int bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c,
                               int no_input_norm, int swap_to_bgr, float mean_r,
                               float mean_g, float mean_b, float *dst) {
@@ -147,8 +150,8 @@ int bcnn_load_image_from_path(bcnn_net *net, char *path, int w, int h, int c,
     }
 
     if (w_img != w || h_img != h) {
-        if (net->state == PREDICT ||
-            net->state == VALID) {  // state predict, always center crop
+        if (net->mode == PREDICT ||
+            net->mode == VALID) {  // state predict, always center crop
             x_ul = (w_img - w) / 2;
             y_ul = (h_img - h) / 2;
         } else {  // state train, random crop
@@ -189,8 +192,8 @@ int bcnn_load_image_from_memory(bcnn_net *net, unsigned char *buffer,
     }
 
     if (w_img != w || h_img != h) {
-        if (net->state == PREDICT ||
-            net->state == VALID) {  // state predict, always center crop
+        if (net->mode == PREDICT ||
+            net->mode == VALID) {  // state predict, always center crop
             x_ul = (w_img - w) / 2;
             y_ul = (h_img - h) / 2;
         } else {  // state train, random crop
@@ -253,11 +256,10 @@ static int bcnn_mnist_next_iter(bcnn_net *net, bcnn_iterator *iter) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            n_img, n_labels);
-        BCNN_CHECK_AND_LOG(net->log_ctx,
-                           (net->input_height == iter->input_height &&
-                            net->input_width == iter->input_width),
-                           BCNN_INVALID_DATA,
-                           "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, (net->input_height == iter->input_height &&
+                           net->input_width == iter->input_width),
+            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
         iter->n_samples = n_img;
     }
 
@@ -399,7 +401,7 @@ static int bcnn_cifar10_iter(bcnn_net *net, bcnn_iterator *iter) {
         rand_skip = /*(int)(10.0f * (float)rand() / RAND_MAX) + 1*/ 0;
     char tmp[3072];
 
-    if (net->state == TRAIN) {
+    if (net->mode == TRAIN) {
         for (i = 0; i < rand_skip; ++i) {
             if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0) {
                 rewind(iter->f_input);
@@ -553,7 +555,7 @@ bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter) {
     bip_resize_bilinear(pimg, w_img, h_img, w_img * c_img, buf, nw, nh,
                         nw * c_img, c_img);
     int dx, dy;  // Canvas offsets
-    if (net->state == TRAIN) {
+    if (net->mode == TRAIN) {
         dx = (int)bcnn_rand_between(0.f, (float)(net->input_width - nw));
         dy = (int)bcnn_rand_between(0.f, (float)(net->input_height - nh));
     } else {
@@ -566,7 +568,7 @@ bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter) {
                    net->input_width, net->input_height,
                    net->input_width * net->input_channels, net->input_channels);
     bh_free(buf);
-    if (net->state == TRAIN) {
+    if (net->mode == TRAIN) {
         // TODO: only brightness / contrast / flip is currently supported for
         // detection
         net->data_aug.apply_fliph = 0;
@@ -579,7 +581,7 @@ bcnn_status bcnn_data_iter_detection(bcnn_net *net, bcnn_iterator *iter) {
     }
     memcpy(iter->input_uchar, net->input_buffer,
            net->input_channels * net->input_width * net->input_height);
-    if (net->state != PREDICT) {
+    if (net->mode != PREDICT) {
         // Fill labels
         memset(iter->label_float, 0, iter->label_width * sizeof(float));
         int num_boxes = (n_tok - 1) / 5;
@@ -637,7 +639,7 @@ static int bcnn_list_iter(bcnn_net *net, bcnn_iterator *iter) {
         line = bh_fgetline(iter->f_input);
     }
     n_tok = bh_strsplit(line, ' ', &tok);
-    if (net->state != PREDICT && net->prediction_type == CLASSIFICATION) {
+    if (net->mode != PREDICT && net->prediction_type == CLASSIFICATION) {
         BCNN_CHECK_AND_LOG(net->log_ctx, n_tok == 2, BCNN_INVALID_DATA,
                            "Wrong data format for classification");
     }

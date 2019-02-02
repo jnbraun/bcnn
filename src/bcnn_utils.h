@@ -41,6 +41,46 @@
 extern "C" {
 #endif
 
+/** Convenient macros */
+#define BCNN_CHECK(exp, err) \
+    do {                     \
+        if (!(exp)) {        \
+            return (err);    \
+        }                    \
+    } while (0)
+
+#define BCNN_CHECK_AND_LOG(ctx, exp, err, fmt, ...)                \
+    do {                                                           \
+        if (!(exp)) {                                              \
+            bcnn_log((ctx), BCNN_LOG_ERROR, (fmt), ##__VA_ARGS__); \
+            return (err);                                          \
+        }                                                          \
+    } while (0)
+
+#define BCNN_CHECK_STATUS(s)         \
+    do {                             \
+        bcnn_status ret = (s);       \
+        if ((ret) != BCNN_SUCCESS) { \
+            return (ret);            \
+        }                            \
+    } while (0)
+
+#define BCNN_ERROR(ctx, err, fmt, ...)                         \
+    do {                                                       \
+        bcnn_log((ctx), BCNN_LOG_ERROR, (fmt), ##__VA_ARGS__); \
+        return (err);                                          \
+    } while (0)
+
+#define BCNN_INFO(ctx, fmt, ...)                              \
+    do {                                                      \
+        bcnn_log((ctx), BCNN_LOG_INFO, (fmt), ##__VA_ARGS__); \
+    } while (0)
+
+#define BCNN_WARNING(ctx, fmt, ...)                              \
+    do {                                                         \
+        bcnn_log((ctx), BCNN_LOG_WARNING, (fmt), ##__VA_ARGS__); \
+    } while (0)
+
 typedef struct {
     int state;
     float r;

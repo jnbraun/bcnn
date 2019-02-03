@@ -27,7 +27,7 @@
 #include "bcnn_mat.h"
 
 static float bcnn_update_learning_rate(bcnn_net *net) {
-    int iter = net->seen / net->batch_size;
+    int iter = net->learner.seen / net->batch_size;
 
     switch (net->learner.policy) {
         case CONSTANT:

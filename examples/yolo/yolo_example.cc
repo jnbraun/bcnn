@@ -43,13 +43,13 @@ void load_yolo_weights(bcnn_net *net, char *model) {
     if ((major * 10 + minor) >= 2 && major < 1000 && minor < 1000) {
         size_t lseen = 0;
         nr = fread(&lseen, sizeof(uint64_t), 1, fp);
-        net->seen = lseen;
+        net->learner.seen = lseen;
     } else {
         int iseen = 0;
         nr = fread(&iseen, sizeof(int), 1, fp);
-        net->seen = iseen;
+        net->learner.seen = iseen;
     }
-    fprintf(stderr, "version %d.%d seen %d\n", major, minor, net->seen);
+    fprintf(stderr, "version %d.%d seen %d\n", major, minor, net->learner.seen);
     int transpose = (major > 1000) || (minor > 1000);
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];

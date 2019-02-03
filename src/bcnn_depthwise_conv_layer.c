@@ -573,14 +573,14 @@ void bcnn_update_depthwise_conv_layer(bcnn_net *net, bcnn_node *node) {
                                  weights->grad_data_gpu, biases->grad_data_gpu,
                                  param->adam_m_gpu, param->adam_v_gpu,
                                  weights_size, biases_size, batch_size,
-                                 net->seen, net->learner.beta1,
+                                 net->learner.seen, net->learner.beta1,
                                  net->learner.beta2, net->learner.learning_rate,
                                  net->learner.momentum, net->learner.decay);
 #else
             bcnn_adam_update_cpu(
                 weights->data, biases->data, weights->grad_data,
                 biases->grad_data, param->adam_m, param->adam_v, weights_size,
-                biases_size, batch_size, net->seen, net->learner.beta1,
+                biases_size, batch_size, net->learner.seen, net->learner.beta1,
                 net->learner.beta2, net->learner.learning_rate,
                 net->learner.momentum, net->learner.decay);
 #endif

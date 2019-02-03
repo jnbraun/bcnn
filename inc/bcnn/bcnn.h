@@ -173,6 +173,7 @@ typedef enum { SGD, ADAM } bcnn_optimizer;
  */
 typedef struct {
     int step;
+    int seen;            /**< Number of instances seen by the network */
     int max_batches;     /**< Maximum number of batches for training */
     float momentum;      /**< Momentum parameter */
     float decay;         /**< Decay parameter */
@@ -330,9 +331,7 @@ struct bcnn_net {
     int input_height;
     int input_channels;
     int batch_size;
-    bcnn_loss_metric loss_metric; /**< Loss metric for evaluation */
-    bcnn_learner learner;         /**< Learner/optimizer parameters */
-    int seen; /**< Number of instances seen by the network */
+    bcnn_learner learner; /**< Learner/optimizer parameters */
     int num_nodes;
     bcnn_node *nodes;
     int num_tensors;      /**< Number of tensors hold in the network */
@@ -340,8 +339,6 @@ struct bcnn_net {
     bcnn_target prediction_type;
     bcnn_data_augment data_aug; /**< Parameters for online data augmentation */
     bcnn_mode mode;
-    int nb_finetune;
-    char **finetune_id;
     unsigned char *input_buffer;
     int workspace_size;
     float *workspace;

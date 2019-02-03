@@ -102,10 +102,6 @@ static void bcnn_free_net(bcnn_net *net) {
         bcnn_free_node(&net->nodes[i]);
     }
     bh_free(net->nodes);
-    for (int i = 0; i < net->nb_finetune; ++i) {
-        bh_free(net->finetune_id[i]);
-    }
-    bh_free(net->finetune_id);
     bcnn_net_destroy_tensors(net);
     // Gemm context
     bh_align_free(net->gemm_ctx);
@@ -142,24 +138,6 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val) {
         net->batch_size = atoi(val);
     } else if (strcmp(name, "max_batches") == 0) {
         net->learner.max_batches = atoi(val);
-    } else if (strcmp(name, "loss") == 0) {
-        if (strcmp(val, "error") == 0) {
-            net->loss_metric = COST_ERROR;
-        } else if (strcmp(val, "logloss") == 0) {
-            net->loss_metric = COST_LOGLOSS;
-        } else if (strcmp(val, "sse") == 0) {
-            net->loss_metric = COST_SSE;
-        } else if (strcmp(val, "mse") == 0) {
-            net->loss_metric = COST_MSE;
-        } else if (strcmp(val, "crps") == 0) {
-            net->loss_metric = COST_CRPS;
-        } else if (strcmp(val, "dice") == 0) {
-            net->loss_metric = COST_DICE;
-        } else {
-            BCNN_WARNING(net->log_ctx, "Unknown cost metric %s, going with sse",
-                         val);
-            net->loss_metric = COST_SSE;
-        }
     } else if (strcmp(name, "learning_policy") == 0) {
         if (strcmp(val, "sigmoid") == 0) {
             net->learner.policy = SIGMOID;
@@ -243,16 +221,6 @@ int bcnn_set_param(bcnn_net *net, char *name, char *val) {
         } else if (strcmp(val, "detection") == 0) {
             net->prediction_type = DETECTION;
         }
-    } else if (strcmp(name, "finetune_id") == 0) {
-        net->nb_finetune++;
-        if (net->nb_finetune == 1) {
-            net->finetune_id =
-                (char **)calloc(net->nb_finetune, sizeof(char *));
-        } else {
-            net->finetune_id =
-                (char **)realloc(net->finetune_id, net->nb_finetune);
-        }
-        bh_strfill(&net->finetune_id[net->nb_finetune - 1], val);
     }
     return BCNN_SUCCESS;
 }
@@ -870,7 +838,7 @@ int bcnn_iter_batch(bcnn_net *net, bcnn_iterator *iter) {
 int bcnn_train_on_batch(bcnn_net *net, bcnn_iterator *iter, float *loss) {
     bcnn_iter_batch(net, iter);
 
-    net->seen += net->batch_size;
+    net->learner.seen += net->batch_size;
     // Forward
     bcnn_forward(net);
     // Back prop
@@ -947,7 +915,7 @@ bcnn_status bcnn_write_model(bcnn_net *net, char *filename) {
     fwrite(&net->learner.learning_rate, sizeof(float), 1, fp);
     fwrite(&net->learner.momentum, sizeof(float), 1, fp);
     fwrite(&net->learner.decay, sizeof(float), 1, fp);
-    fwrite(&net->seen, sizeof(int), 1, fp);
+    fwrite(&net->learner.seen, sizeof(int), 1, fp);
 
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
@@ -1039,11 +1007,11 @@ bcnn_status bcnn_load_model(bcnn_net *net, char *filename) {
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
-    nb_read = fread(&net->seen, sizeof(int), 1, fp);
+    nb_read = fread(&net->learner.seen, sizeof(int), 1, fp);
     BCNN_INFO(net->log_ctx, "lr= %f ", net->learner.learning_rate);
     BCNN_INFO(net->log_ctx, "m= %f ", net->learner.momentum);
     BCNN_INFO(net->log_ctx, "decay= %f ", net->learner.decay);
-    BCNN_INFO(net->log_ctx, "seen= %d\n", net->seen);
+    BCNN_INFO(net->log_ctx, "seen= %d\n", net->learner.seen);
 
     for (i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
@@ -1153,11 +1121,11 @@ bcnn_status bcnn_load_model_legacy(bcnn_net *net, char *filename) {
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
-    nb_read = fread(&net->seen, sizeof(int), 1, fp);
+    nb_read = fread(&net->learner.seen, sizeof(int), 1, fp);
     BCNN_INFO(net->log_ctx, "lr= %f ", net->learner.learning_rate);
     BCNN_INFO(net->log_ctx, "m= %f ", net->learner.momentum);
     BCNN_INFO(net->log_ctx, "decay= %f ", net->learner.decay);
-    BCNN_INFO(net->log_ctx, "seen= %d\n", net->seen);
+    BCNN_INFO(net->log_ctx, "seen= %d\n", net->learner.seen);
 
     for (i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];

@@ -29,7 +29,7 @@
 #include "bcnn_utils.h"
 
 __global__ void bcnn_forward_activation_layer_kernel(float *x, int sz,
-                                                      bcnn_activation a) {
+                                                     bcnn_activation a) {
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
     if (i < sz) {
         switch (a) {
@@ -61,8 +61,8 @@ __global__ void bcnn_forward_activation_layer_kernel(float *x, int sz,
 }
 
 void bcnn_forward_activation_gpu(float *x, int sz, bcnn_activation a) {
-    bcnn_forward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz),
-                                            BCNN_CUDA_THREADS>>>(x, sz, a);
+    bcnn_forward_activation_layer_kernel<<<bcnn_cuda_blocks(sz),
+                                           BCNN_CUDA_THREADS>>>(x, sz, a);
     return;
 }
 
@@ -80,8 +80,8 @@ void bcnn_forward_activation_layer_gpu(bcnn_net *net, bcnn_node *node) {
 }
 
 __global__ void bcnn_backward_activation_layer_kernel(float *x, float *dx,
-                                                       int sz,
-                                                       bcnn_activation a) {
+                                                      int sz,
+                                                      bcnn_activation a) {
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
     if (i < sz) {
         switch (a) {
@@ -112,9 +112,9 @@ __global__ void bcnn_backward_activation_layer_kernel(float *x, float *dx,
 }
 
 void bcnn_backward_activation_gpu(float *x, float *dx, int sz,
-                                 bcnn_activation a) {
-    bcnn_backward_activation_layer_kernel<<<bcnn_cuda_gridsize(sz),
-                                             BCNN_CUDA_THREADS>>>(x, dx, sz, a);
+                                  bcnn_activation a) {
+    bcnn_backward_activation_layer_kernel<<<bcnn_cuda_blocks(sz),
+                                            BCNN_CUDA_THREADS>>>(x, dx, sz, a);
     return;
 }
 

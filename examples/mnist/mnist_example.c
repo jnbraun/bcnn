@@ -36,7 +36,7 @@ int create_network(bcnn_net *net) {
     net->learner.beta2 = 0.999f;
     net->learner.max_batches = 50000;
 
-    bcnn_net_set_input_shape(net, 28, 28, 1, 16);
+    bcnn_set_input_shape(net, 28, 28, 1, 16);
 
     bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 0, XAVIER, RELU, 0,
                                  "input", "conv1");
@@ -63,26 +63,27 @@ int create_network(bcnn_net *net) {
     net->data_aug.rotation_range = 30.0f;
 
     // Target
-    net->prediction_type = CLASSIFICATION;
+    // net->prediction_type = CLASSIFICATION;
 
     bcnn_compile_net(net);
 
     return 0;
 }
 
-int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
-                  int nb_pred, char *pred_out) {
+int predict_mnist(bcnn_net *net, const char *test_img, const char *test_label,
+                  float *error, int nb_pred, const char *pred_out) {
     int i = 0, j = 0, n = 0, k = 0;
     float *out = NULL;
     float err = 0.0f, error_batch = 0.0f;
     FILE *f = NULL;
-    bcnn_iterator data_mnist = {0};
+    bcnn_loader data_mnist = {0};
     int nb = net->num_nodes;
     int output_size =
         bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
 
     net->mode = VALID;
-    bcnn_iterator_initialize(net, &data_mnist, test_img, test_label, "mnist");
+    bcnn_loader_initialize(&data_mnist, BCNN_LOAD_MNIST, net, test_img,
+                           test_label);
 
     f = fopen(pred_out, "wt");
     if (f == NULL) {
@@ -116,21 +117,21 @@ int predict_mnist(bcnn_net *net, char *test_img, char *test_label, float *error,
     *error = err / nb_pred;
 
     if (f != NULL) fclose(f);
-    bcnn_iterator_terminate(&data_mnist);
+    bcnn_loader_terminate(&data_mnist);
     return 0;
 }
 
-int train_mnist(bcnn_net *net, char *train_img, char *train_label,
-                char *test_img, char *test_label, int nb_iter, int eval_period,
-                float *error) {
+int train_mnist(bcnn_net *net, const char *train_img, const char *train_label,
+                const char *test_img, const char *test_label, int nb_iter,
+                int eval_period, float *error) {
     float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
     int i = 0;
     bh_timer t = {0}, tp = {0};
-    bcnn_iterator data_mnist = {0};
+    bcnn_loader data_mnist = {0};
 
     net->mode = TRAIN;
-    if (bcnn_iterator_initialize(net, &data_mnist, train_img, train_label,
-                                 "mnist") != 0) {
+    if (bcnn_loader_initialize(&data_mnist, BCNN_LOAD_MNIST, net, train_img,
+                               train_label) != 0) {
         return -1;
     }
 
@@ -159,13 +160,14 @@ int train_mnist(bcnn_net *net, char *train_img, char *train_label,
         }
     }
 
-    bcnn_iterator_terminate(&data_mnist);
+    bcnn_loader_terminate(&data_mnist);
     *error = (float)sum_error / (eval_period * net->batch_size);
 
     return 0;
 }
 
-int run(char *train_img, char *train_label, char *test_img, char *test_label) {
+int run(const char *train_img, const char *train_label, const char *test_img,
+        const char *test_label) {
     float error_train = 0.0f, error_test = 0.0f;
     bcnn_net *net = NULL;
 

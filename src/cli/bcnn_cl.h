@@ -1,12 +1,14 @@
 #ifndef BCNN_CL_H
 #define BCNN_CL_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "bcnn/bcnn.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * \brief Structure for general parameters.
@@ -21,9 +23,9 @@ typedef struct {
     char *input_model;      /**< Path to input model. */
     char *output_model;     /**< Path to output model. */
     char *pred_out;         /**< Path to output prediction file. */
-    bcnn_target prediction_type; /**< Type of prediction to make. */
-    char *data_format;           /**< Data format. */
-    int save_model;              /**< Periodicity of model saving. */
+    // char *data_format;                 /**< Data format. */
+    bcnn_loader_type data_format;
+    int save_model;  /**< Periodicity of model saving. */
     int nb_pred;     /**< Number of samples to be predicted in test file. */
     int eval_period; /**< Periodicity of evaluating the train/test error. */
     int eval_test;   /**< Set to 1 if evaluation of test database is asked. */

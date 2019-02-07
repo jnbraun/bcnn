@@ -78,11 +78,11 @@ void bcnn_forward_maxpool_layer_gpu(bcnn_net *net, bcnn_node *node) {
 #else
     int sz = bcnn_tensor_size(dst_tensor);
 
-    bcnn_forward_maxpool_layer_kernel<<<bcnn_cuda_gridsize(sz),
-                                        BCNN_CUDA_THREADS>>>(
-        sz, src_tensor->h, src_tensor->w, src_tensor->c, param->stride,
-        param->size, src_tensor->data_gpu, dst_tensor->data_gpu,
-        param->indexes_gpu);
+    bcnn_forward_maxpool_layer_kernel<<<
+        /*bcnn_cuda_blocks(sz)*/ (sz - 1) / BCNN_CUDA_THREADS + 1,
+        BCNN_CUDA_THREADS>>>(sz, src_tensor->h, src_tensor->w, src_tensor->c,
+                               param->stride, param->size, src_tensor->data_gpu,
+                               dst_tensor->data_gpu, param->indexes_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
 #endif
 
@@ -144,7 +144,7 @@ void bcnn_backward_maxpool_layer_gpu(bcnn_net *net, bcnn_node *node) {
 #else
     int sz = bcnn_tensor_size(src_tensor);
 
-    bcnn_backward_maxpool_layer_kernel<<<bcnn_cuda_gridsize(sz),
+    bcnn_backward_maxpool_layer_kernel<<<bcnn_cuda_blocks(sz),
                                          BCNN_CUDA_THREADS>>>(
         sz, src_tensor->h, src_tensor->w, src_tensor->c, param->stride,
         param->size, dst_tensor->grad_data_gpu, src_tensor->grad_data_gpu,

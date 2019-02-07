@@ -145,7 +145,7 @@ void setup_yolov3_tiny_net(bcnn_net *net, int input_width, int input_height,
                            char *model) {
     int num_classes = 80;
     int boxes_per_cell = 3;
-    bcnn_net_set_input_shape(net, input_width, input_height, 3, 1);
+    bcnn_set_input_shape(net, input_width, input_height, 3, 1);
     bcnn_add_convolutional_layer(net, 16, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"input", (char *)"conv1");
     bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, (char *)"conv1",
@@ -214,7 +214,7 @@ void setup_yolov3_net(bcnn_net *net, int input_width, int input_height,
     int boxes_per_cell = 3;
     float anchors[18] = {10, 13, 16,  30,  33, 23,  30,  61,  62,
                          45, 59, 119, 116, 90, 156, 198, 373, 326};
-    bcnn_net_set_input_shape(net, input_width, input_height, 3, 1);
+    bcnn_set_input_shape(net, input_width, input_height, 3, 1);
     bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 1, XAVIER, LRELU, 0,
                                  (char *)"input", (char *)"conv1");
     // Downsample
@@ -503,8 +503,8 @@ void prepare_frame(unsigned char *frame, int w_frame, int h_frame, float *img,
             }
         }
     }
-    bcnn_convert_img_to_float2(canvas, w, h, 3, 1.0f / 255.0f, 1, 0.0f, 0.0f,
-                               0.0f, img);
+    bcnn_convert_img_to_float(canvas, w, h, 3, 1.0f / 255.0f, 1, 0.0f, 0.0f,
+                              0.0f, img);
     bh_free(img_rz);
     bh_free(canvas);
     return;
@@ -725,7 +725,7 @@ int run(int argc, char **argv) {
     bcnn_net *net = NULL;
     bcnn_init_net(&net);
     net->mode = PREDICT;
-    net->prediction_type = DETECTION;
+    // net->prediction_type = DETECTION;
     // Setup net and weights
     char **toks = NULL;
     int ntoks = bh_strsplit(argv[3], '/', &toks);

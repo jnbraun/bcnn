@@ -58,7 +58,7 @@ __global__ void _bcnn_cuda_fill_f32_kernel(int N, float ALPHA, float *X,
 }
 
 void bcnn_cuda_fill_f32(int n, float alpha, float *x, int incx) {
-    _bcnn_cuda_fill_f32_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(
+    _bcnn_cuda_fill_f32_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(
         n, alpha, x, incx);
     bcnn_cuda_check(cudaPeekAtLastError());
 }
@@ -88,7 +88,7 @@ __global__ void _bcnn_vadd_kernel(int n, float *a, float *b, float *y) {
 }
 
 void bcnn_cuda_vadd(int n, float *a, float *b, float *y) {
-    _bcnn_vadd_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, a, b, y);
+    _bcnn_vadd_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(n, a, b, y);
 }
 
 __global__ void _bcnn_vsub_kernel(int n, float *a, float *b, float *y) {
@@ -97,7 +97,7 @@ __global__ void _bcnn_vsub_kernel(int n, float *a, float *b, float *y) {
 }
 
 void bcnn_cuda_vsub(int n, float *a, float *b, float *y) {
-    _bcnn_vsub_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, a, b, y);
+    _bcnn_vsub_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(n, a, b, y);
 }
 
 __global__ void _bcnn_vmul_kernel(int n, float *a, float *b, float *y) {
@@ -106,7 +106,7 @@ __global__ void _bcnn_vmul_kernel(int n, float *a, float *b, float *y) {
 }
 
 void bcnn_cuda_vmul(int n, float *a, float *b, float *y) {
-    _bcnn_vmul_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, a, b, y);
+    _bcnn_vmul_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(n, a, b, y);
 }
 
 __global__ void _bcnn_vdiv_kernel(int n, float *a, float *b, float *y) {
@@ -115,7 +115,7 @@ __global__ void _bcnn_vdiv_kernel(int n, float *a, float *b, float *y) {
 }
 
 void bcnn_cuda_vdiv(int n, float *a, float *b, float *y) {
-    _bcnn_vdiv_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, a, b, y);
+    _bcnn_vdiv_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(n, a, b, y);
 }
 
 __global__ void _bcnn_pow_kernel(int n, float *x, float a, float *y) {
@@ -124,7 +124,7 @@ __global__ void _bcnn_pow_kernel(int n, float *x, float a, float *y) {
 }
 
 void bcnn_cuda_pow(int n, float *x, float a, float *y) {
-    _bcnn_pow_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, a, y);
+    _bcnn_pow_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(n, x, a, y);
 }
 
 void bcnn_cuda_axpby(int n, float a, float *x, float b, float *y) {
@@ -138,8 +138,8 @@ __global__ void _bcnn_add_scalar_kernel(int n, float a, float *y) {
 }
 
 void bcnn_cuda_add_scalar(int n, float a, float *y) {
-    _bcnn_add_scalar_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, a,
-                                                                          y);
+    _bcnn_add_scalar_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(n, a,
+                                                                        y);
 }
 
 __global__ void _bcnn_vsum_kernel(int n, float *x, float *sum) {
@@ -148,7 +148,7 @@ __global__ void _bcnn_vsum_kernel(int n, float *x, float *sum) {
 }
 
 void bcnn_cuda_vsum(int n, float *x, float *sum) {
-    _bcnn_vsum_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x, sum);
+    _bcnn_vsum_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(n, x, sum);
 }
 
 __global__ void _mean_variance_forward_kernel(float *x, int b, int c, int wxh,
@@ -172,7 +172,7 @@ __global__ void _mean_variance_forward_kernel(float *x, int b, int c, int wxh,
 
 void bcnn_cuda_mean_variance_forward(float *x, int b, int c, int wxh,
                                      float *mean, float *var) {
-    _mean_variance_forward_kernel<<<bcnn_cuda_gridsize(c), BCNN_CUDA_THREADS>>>(
+    _mean_variance_forward_kernel<<<bcnn_cuda_blocks(c), BCNN_CUDA_THREADS>>>(
         x, b, c, wxh, mean, var);
 }
 
@@ -188,8 +188,8 @@ __global__ void _norm_forward_kernel(float *x, float *mean, float *variance,
 
 void bcnn_cuda_norm_forward(float *x, float *mean, float *variance, int b,
                             int c, int wxh) {
-    _norm_forward_kernel<<<bcnn_cuda_gridsize(b * c * wxh),
-                           BCNN_CUDA_THREADS>>>(x, mean, variance, b, c, wxh);
+    _norm_forward_kernel<<<bcnn_cuda_blocks(b * c * wxh), BCNN_CUDA_THREADS>>>(
+        x, mean, variance, b, c, wxh);
 }
 
 __global__ void _norm_backward_kernel(float *x, float *mean, float *var,
@@ -208,9 +208,8 @@ __global__ void _norm_backward_kernel(float *x, float *mean, float *var,
 void bcnn_cuda_norm_backward(float *x, float *mean, float *var,
                              float *mean_diff, float *var_diff, int b, int c,
                              int wxh, float *grad) {
-    _norm_backward_kernel<<<bcnn_cuda_gridsize(b * c * wxh),
-                            BCNN_CUDA_THREADS>>>(x, mean, var, mean_diff,
-                                                 var_diff, b, c, wxh, grad);
+    _norm_backward_kernel<<<bcnn_cuda_blocks(b * c * wxh), BCNN_CUDA_THREADS>>>(
+        x, mean, var, mean_diff, var_diff, b, c, wxh, grad);
 }
 
 __global__ void _mean_variance_backward_kernel(float *x, float *grad,
@@ -238,8 +237,7 @@ __global__ void _mean_variance_backward_kernel(float *x, float *grad,
 void bcnn_cuda_mean_variance_backward(float *x, float *grad, float *mean,
                                       float *var, int b, int c, int wxh,
                                       float *mean_diff, float *var_diff) {
-    _mean_variance_backward_kernel<<<bcnn_cuda_gridsize(c),
-                                     BCNN_CUDA_THREADS>>>(
+    _mean_variance_backward_kernel<<<bcnn_cuda_blocks(c), BCNN_CUDA_THREADS>>>(
         x, grad, mean, var, b, c, wxh, mean_diff, var_diff);
 }
 
@@ -252,8 +250,8 @@ __global__ void bcnn_op_cuda_tanh_kernel(int n, float *x, float *y) {
 }
 
 void bcnn_op_cuda_tanh(int n, float *x, float *y) {
-    bcnn_op_cuda_tanh_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x,
-                                                                           y);
+    bcnn_op_cuda_tanh_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(n, x,
+                                                                         y);
 }
 
 __global__ void bcnn_op_cuda_tanh_grad_kernel(int n, float *x, float *dx) {
@@ -265,7 +263,7 @@ __global__ void bcnn_op_cuda_tanh_grad_kernel(int n, float *x, float *dx) {
 }
 
 void bcnn_op_cuda_tanh_grad(int n, float *x, float *dx) {
-    bcnn_op_cuda_tanh_grad_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(
+    bcnn_op_cuda_tanh_grad_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(
         n, x, dx);
 }
 
@@ -278,8 +276,8 @@ __global__ void bcnn_op_cuda_relu_kernel(int n, float *x, float *y) {
 }
 
 void bcnn_op_cuda_relu(int n, float *x, float *y) {
-    bcnn_op_cuda_relu_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x,
-                                                                           y);
+    bcnn_op_cuda_relu_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(n, x,
+                                                                         y);
 }
 
 __global__ void bcnn_op_cuda_relu_grad_kernel(int n, float *x, float *dx) {
@@ -291,7 +289,7 @@ __global__ void bcnn_op_cuda_relu_grad_kernel(int n, float *x, float *dx) {
 }
 
 void bcnn_op_cuda_relu_grad(int n, float *x, float *dx) {
-    bcnn_op_cuda_relu_grad_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(
+    bcnn_op_cuda_relu_grad_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(
         n, x, dx);
 }
 
@@ -304,8 +302,8 @@ __global__ void bcnn_op_cuda_ramp_kernel(int n, float *x, float *y) {
 }
 
 void bcnn_op_cuda_ramp(int n, float *x, float *y) {
-    bcnn_op_cuda_ramp_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(n, x,
-                                                                           y);
+    bcnn_op_cuda_ramp_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(n, x,
+                                                                         y);
 }
 
 __global__ void bcnn_op_cuda_ramp_grad_kernel(int n, float *x, float *dx) {
@@ -317,7 +315,7 @@ __global__ void bcnn_op_cuda_ramp_grad_kernel(int n, float *x, float *dx) {
 }
 
 void bcnn_op_cuda_ramp_grad(int n, float *x, float *dx) {
-    bcnn_op_cuda_ramp_grad_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(
+    bcnn_op_cuda_ramp_grad_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(
         n, x, dx);
 }
 
@@ -330,8 +328,8 @@ __global__ void bcnn_op_cuda_clamp_kernel(int n, float *x, float *y) {
 }
 
 void bcnn_op_cuda_clamp(int n, float *x, float *y) {
-    bcnn_op_cuda_clamp_kernel<<<bcnn_cuda_gridsize(n), BCNN_CUDA_THREADS>>>(
-        n, x, y);
+    bcnn_op_cuda_clamp_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(n, x,
+                                                                          y);
 }
 
 __global__ void bcnn_op_cuda_clamp_grad_kernel(int n, float *x, float *dx) {
@@ -343,8 +341,8 @@ __global__ void bcnn_op_cuda_clamp_grad_kernel(int n, float *x, float *dx) {
 }
 
 void bcnn_op_cuda_clamp_grad(int n, float *x, float *dx) {
-    bcnn_op_cuda_clamp_grad_kernel<<<bcnn_cuda_gridsize(n),
-                                     BCNN_CUDA_THREADS>>>(n, x, dx);
+    bcnn_op_cuda_clamp_grad_kernel<<<bcnn_cuda_blocks(n), BCNN_CUDA_THREADS>>>(
+        n, x, dx);
 }
 
 __global__ void bcnn_cuda_add_bias_kernel(float *output, float *bias,

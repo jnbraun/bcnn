@@ -35,7 +35,15 @@ message(STATUS "[bcnn] Targeted system processor: " ${CMAKE_SYSTEM_PROCESSOR})
 
 # Blas backend
 if (USE_BLAS)
-    add_definitions(-DBCNN_USE_BLAS)
+    # Check that USE_CUDA is turn off when using Blas
+    if (USE_CUDA OR USE_CUDNN)
+        message(FATAL_ERROR 
+        "[bcnn] Can not use Blas when USE_CUDA is turned ON.
+        Please turn off USE_CUDA option if you want to run on CPU or
+        turn off USE_BLAS if you want to use CUDA")
+    else()
+        add_definitions(-DBCNN_USE_BLAS)
+    endif()
     # Try to find openblas first
     set(OpenBLAS_INC_PATHS /opt/OpenBLAS/include /usr/include /usr/include/openblas
         /usr/local/include
@@ -70,6 +78,9 @@ endif()
 if (USE_CUDA)
     find_package(CUDA QUIET REQUIRED)
     add_definitions(-DBCNN_USE_CUDA)
+    if (USE_BLAS)
+        add_definitions(-DBCNN_USE_BLAS=OFF)
+    endif()
     message(STATUS "[bcnn] Build with Cuda")
     message(STATUS "[bcnn] Found Cuda libraries: " ${CUDA_CUBLAS_LIBRARIES})
     # Uncomment the proper line according to the system cuda arch
@@ -146,16 +157,15 @@ include_directories (
 add_subdirectory(bip) 
 
 if (USE_CUDA)
-file(GLOB SRC_LIB src/*.c src/*.cu)
+file(GLOB SRC_LIB src/*.c src/*.cu src/data_loader/*.c)
 else()
     if(USE_NEON AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-        file(GLOB SRC_LIB src/*.c src/openblas/*.c src/openblas/generic/*.c src/openblas/arm64/*.S)
+        file(GLOB SRC_LIB src/*.c src/data_loader/*.c src/openblas/*.c src/openblas/generic/*.c src/openblas/arm64/*.S)
     else()
-        file(GLOB SRC_LIB src/*.c)
+        file(GLOB SRC_LIB src/*.c src/data_loader/*.c)
     endif()
 endif()
-list(REMOVE_ITEM SRC_LIB ${CMAKE_CURRENT_SOURCE_DIR}/src/bcnn_cl.c)
-file(GLOB SRC_CLI src/bcnn_cl.c)
+file(GLOB SRC_CLI src/cli/*.c)
 #MESSAGE(STATUS "${SRC_LIB}")
 #MESSAGE(STATUS "${CMAKE_CURRENT_SOURCE_DIR}")
 

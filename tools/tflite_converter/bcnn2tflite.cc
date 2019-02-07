@@ -2,7 +2,7 @@
 
 /* bcnn include */
 #include <bcnn/bcnn.h>
-#include <bcnn/bcnn_cl.h>
+//#include <bcnn/bcnn_cl.h>
 #include <bcnn_activation_layer.h>
 #include <bcnn_net.h>
 #include <bcnn_tensor.h>
@@ -30,6 +30,23 @@ typedef struct {
     bcnn_tensor* p_tensor;
     bool need_to_write;
 } buffer_to_write;
+
+typedef struct {
+    char* train_input;      /**< Path to train file. */
+    char* test_input;       /**< Path to test/validation file. */
+    char* path_train_label; /**< Path to label train file (used for mnist format
+                               only). */
+    char* path_test_label;  /**< Path to label test file (used for mnist format
+                               only). */
+    char* input_model;      /**< Path to input model. */
+    char* output_model;     /**< Path to output model. */
+    char* pred_out;         /**< Path to output prediction file. */
+    bcnn_loader_type data_format;
+    int save_model;  /**< Periodicity of model saving. */
+    int nb_pred;     /**< Number of samples to be predicted in test file. */
+    int eval_period; /**< Periodicity of evaluating the train/test error. */
+    int eval_test;   /**< Set to 1 if evaluation of test database is asked. */
+} config_param;
 
 // Small function to simulate a reshape function as bcnn does not have/need it
 // and it is needed by tflite in somes particular cases such as FC+PRelu.
@@ -88,9 +105,9 @@ void run_bcnn_reference(bcnn_net* net, char* img_path) {
         free(img);
         img = img_rz;
     }
-    bcnn_convert_img_to_float2(img, net->tensors[0].w, net->tensors[0].h,
-                               net->tensors[0].c, 1 / 127.5f, 0, 127.5f, 127.5f,
-                               127.5f, net->tensors[0].data);
+    bcnn_convert_img_to_float(img, net->tensors[0].w, net->tensors[0].h,
+                              net->tensors[0].c, 1 / 127.5f, 0, 127.5f, 127.5f,
+                              127.5f, net->tensors[0].data);
     for (int i = 0; i < 5; ++i) {
         fprintf(stderr, "%f ", net->tensors[0].data[i]);
     }
@@ -570,7 +587,7 @@ int add_layer(bcnn_net* net, char* curr_layer, int stride, int pad,
     return BCNN_SUCCESS;
 }
 
-int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
+int init_from_config(bcnn_net* net, char* config_file, config_param* param) {
     FILE* file = NULL;
     char *line = NULL, *curr_layer = NULL;
     char** tok = NULL;
@@ -609,7 +626,7 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
                         BCNN_CHECK_AND_LOG(net->log_ctx, net->batch_size > 0,
                                            BCNN_INVALID_PARAMETER,
                                            "Batch size must be > 0");
-                        bcnn_net_set_input_shape(
+                        bcnn_set_input_shape(
                             net, net->input_width, net->input_height,
                             net->input_channels, net->batch_size);
                     }
@@ -644,9 +661,26 @@ int init_from_config(bcnn_net* net, char* config_file, bcnncl_param* param) {
                             net->log_ctx, BCNN_INVALID_PARAMETER,
                             "Invalid parameter for task, available parameters: "
                             "TRAIN, PREDICT");
-                } else if (strcmp(tok[0], "data_format") == 0)
-                    bh_strfill(&param->data_format, tok[1]);
-                else if (strcmp(tok[0], "input_model") == 0)
+                } else if (strcmp(tok[0], "data_format") == 0) {
+                    if (strcmp(tok[1], "mnist") == 0) {
+                        param->data_format = BCNN_LOAD_MNIST;
+                    } else if (strcmp(tok[1], "cifar10") == 0) {
+                        param->data_format = BCNN_LOAD_CIFAR10;
+                    } else if (strcmp(tok[1], "classif") == 0 ||
+                               strcmp(tok[1], "classification") == 0) {
+                        param->data_format = BCNN_LOAD_CLASSIFICATION_LIST;
+                    } else if (strcmp(tok[1], "reg") == 0 ||
+                               strcmp(tok[1], "regression") == 0) {
+                        param->data_format = BCNN_LOAD_REGRESSION_LIST;
+                    } else if (strcmp(tok[1], "detection") == 0) {
+                        param->data_format = BCNN_LOAD_DETECTION_LIST;
+                    } else {
+                        BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
+                                   "Invalid parameter for 'data_format', "
+                                   "available parameters: "
+                                   "mnist, cifar10, classif, reg, detection");
+                    }
+                } else if (strcmp(tok[0], "input_model") == 0)
                     bh_strfill(&param->input_model, tok[1]);
                 else if (strcmp(tok[0], "output_model") == 0)
                     bh_strfill(&param->output_model, tok[1]);
@@ -812,7 +846,7 @@ int main(int argc, char** argv) {
         return -1;
     }
     bcnn_net* net = NULL;
-    bcnncl_param param;
+    config_param param;
     bcnn_init_net(&net);
     init_from_config(net, argv[1], &param);
     bcnn_load_model(net, argv[2]);

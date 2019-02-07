@@ -35,6 +35,7 @@
 #endif
 #endif
 
+#include <stdlib.h>  // RAND_MAX
 #include <time.h>
 
 #ifdef __cplusplus
@@ -92,6 +93,13 @@ void bcnn_draw_color_box(unsigned char *img, int w_img, int h_img, float cx_box,
                          float cy_box, float w_box, float h_box,
                          unsigned char color[3]);
 
+static inline int rand_between(int min, int max) {
+    if (min > max) {
+        return 0.f;
+    }
+    return (int)(((float)rand() / RAND_MAX * (max - min)) + min + 0.5f);
+}
+
 #ifdef BCNN_USE_CUDA
 
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 200)
@@ -100,7 +108,7 @@ void bcnn_draw_color_box(unsigned char *img, int w_img, int h_img, float cx_box,
 #define BCNN_CUDA_THREADS 512
 #endif
 
-static inline int bcnn_cuda_blocks(int n) {
+static inline int bcnn_cuda_blocks(const int n) {
     return (n - 1) / (BCNN_CUDA_THREADS) + 1;
 }
 
@@ -128,8 +136,6 @@ cublasHandle_t bcnn_cublas_handle();
             exit((RET));                                          \
         }                                                         \
     }
-
-dim3 bcnn_cuda_gridsize(unsigned int n);
 
 int *bcnn_cuda_malloc_i32(int n);
 

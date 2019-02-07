@@ -123,24 +123,6 @@ cublasHandle_t bcnn_cublas_handle() {
     return handle;
 }
 
-dim3 bcnn_cuda_gridsize(unsigned int n) {
-    unsigned int k = (n - 1) / (BCNN_CUDA_THREADS) + 1;
-    unsigned int x = k;
-    unsigned int y = 1;
-    dim3 d;
-
-    if (x > 65535) {
-        x = (unsigned int)ceil(sqrt((float)k));
-        y = (n - 1) / (x * (BCNN_CUDA_THREADS)) + 1;
-    }
-
-    d.x = x;
-    d.y = y;
-    d.z = 1;
-
-    return d;
-}
-
 int *bcnn_cuda_malloc_i32(int n) {
     int *x_gpu;
     size_t size = sizeof(int) * n;

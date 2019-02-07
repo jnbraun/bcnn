@@ -22,8 +22,8 @@
 
 #ifdef BCNN_USE_CUDA
 
-#include "bcnn_softmax_layer.h"
 #include "bcnn_mat.h"
+#include "bcnn_softmax_layer.h"
 #include "bcnn_utils.h"
 
 __global__ void _bcnn_forward_softmax_layer_kernel(int n, int batch,
@@ -55,7 +55,7 @@ void bcnn_forward_softmax_layer_gpu(bcnn_net *net, bcnn_node *node) {
     int src_size = bcnn_tensor_size3d(src_tensor);
     int batch_size = dst_tensor->n;
 
-    _bcnn_forward_softmax_layer_kernel<<<bcnn_cuda_gridsize(batch_size),
+    _bcnn_forward_softmax_layer_kernel<<<bcnn_cuda_blocks(batch_size),
                                          BCNN_CUDA_THREADS>>>(
         src_size, batch_size, src_tensor->data_gpu, dst_tensor->data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());

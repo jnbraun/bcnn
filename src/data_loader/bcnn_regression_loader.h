@@ -20,8 +20,8 @@
  * SOFTWARE.
  */
 
-#ifndef BCNN_DATA_H
-#define BCNN_DATA_H
+#ifndef BCNN_REGRESSION_LOADER_H
+#define BCNN_REGRESSION_LOADER_H
 
 #include "bcnn/bcnn.h"
 
@@ -29,24 +29,15 @@
 extern "C" {
 #endif
 
-typedef bcnn_status (*bcnn_loader_init_func)(bcnn_loader *iter, bcnn_net *net,
-                                             const char *path_data,
-                                             const char *path_extra);
-
-typedef bcnn_status (*bcnn_loader_next_func)(bcnn_loader *iter, bcnn_net *net,
-                                             int idx);
-
-typedef void (*bcnn_loader_terminate_func)(bcnn_loader *iter);
-
-bcnn_status bcnn_data_augmentation(unsigned char *img, int width, int height,
-                                   int depth, bcnn_data_augment *param,
-                                   unsigned char *buffer);
-
-void bcnn_fill_input_tensor(bcnn_net *net, bcnn_loader *iter, char *path_img,
-                            int idx);
+bcnn_status bcnn_loader_list_reg_init(bcnn_loader *iter, bcnn_net *net,
+                                      const char *path_input,
+                                      const char *path_extra);
+void bcnn_loader_list_reg_terminate(bcnn_loader *iter);
+bcnn_status bcnn_loader_list_reg_next(bcnn_loader *iter, bcnn_net *net,
+                                      int idx);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif  // BCNN_DATA_H
+#endif  // BCNN_REGRESSION_LOADER_H

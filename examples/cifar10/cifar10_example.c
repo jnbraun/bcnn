@@ -29,7 +29,7 @@
 typedef enum { SIMPLENET, RESNET18 } model_type;
 
 static int simple_net(bcnn_net *net) {
-    bcnn_net_set_input_shape(net, 32, 32, 3, 128);
+    bcnn_set_input_shape(net, 32, 32, 3, 128);
 
     bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 1, XAVIER, RELU, 0,
                                  "input", "conv1_1");
@@ -61,7 +61,7 @@ static int simple_net(bcnn_net *net) {
 }
 
 static int resnet18(bcnn_net *net) {
-    bcnn_net_set_input_shape(net, 32, 32, 3, 32);
+    bcnn_set_input_shape(net, 32, 32, 3, 32);
 
     bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, 1, XAVIER, RELU, 0,
                                  "input", "conv1");
@@ -154,7 +154,7 @@ int create_network(bcnn_net *net, model_type type) {
     net->data_aug.random_fliph = 1;
 
     // Target
-    net->prediction_type = CLASSIFICATION;
+    // net->prediction_type = CLASSIFICATION;
 
     // Define the network topology
     switch (type) {
@@ -178,14 +178,14 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
     float *out = NULL;
     float err = 0.0f, error_batch = 0.0f;
     FILE *f = NULL;
-    bcnn_iterator data_iter = {0};
+    bcnn_loader data_iter = {0};
     int nb = net->num_nodes;
     int output_size =
         bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
 
     net->mode = VALID;
-    if (bcnn_iterator_initialize(net, &data_iter, test_img, NULL, "cifar10") !=
-        0) {
+    if (bcnn_loader_initialize(&data_iter, BCNN_LOAD_CIFAR10, net, test_img,
+                               NULL) != 0) {
         return -1;
     }
 
@@ -211,7 +211,7 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
     if (f != NULL) {
         fclose(f);
     }
-    bcnn_iterator_terminate(&data_iter);
+    bcnn_loader_terminate(&data_iter);
     return 0;
 }
 
@@ -220,11 +220,11 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
     float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
     int i = 0;
     bh_timer t = {0}, tp = {0};
-    bcnn_iterator data_iter = {0};
+    bcnn_loader data_iter = {0};
 
     net->mode = TRAIN;
-    if (bcnn_iterator_initialize(net, &data_iter, train_img, NULL, "cifar10") !=
-        0) {
+    if (bcnn_loader_initialize(&data_iter, BCNN_LOAD_CIFAR10, net, train_img,
+                               NULL) != 0) {
         return -1;
     }
 
@@ -253,7 +253,7 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
         }
     }
 
-    bcnn_iterator_terminate(&data_iter);
+    bcnn_loader_terminate(&data_iter);
     *error = (float)sum_error / (eval_period * net->batch_size);
 
     return 0;

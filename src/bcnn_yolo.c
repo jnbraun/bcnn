@@ -63,6 +63,13 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     node.forward = bcnn_forward_yolo_layer;
     node.backward = bcnn_backward_yolo_layer;
     node.release_param = bcnn_release_param_yolo_layer;
+
+    // Allocate label tensor
+    if (net->mode != PREDICT && net->tensors[1].data == NULL) {
+        bcnn_tensor_set_shape(&net->tensors[1], net->tensors[node.src[0]].n, 1,
+                              1, BCNN_DETECTION_MAX_BOXES * 5, 0);
+        bcnn_tensor_allocate(&net->tensors[1], net->mode);
+    }
     // Setup output tensor
     bcnn_tensor dst_tensor = {0};
     bcnn_tensor_set_shape(&dst_tensor,

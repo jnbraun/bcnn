@@ -29,7 +29,7 @@
 #include <bip/bip.h>
 
 #include "bcnn/bcnn.h"
-#include "bcnn/bcnn_cl.h"
+#include "bcnn_cl.h"
 #include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
@@ -68,11 +68,6 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
         bh_strstrip(line);
         switch (line[0]) {
             case '{':
-                BCNN_CHECK_AND_LOG(
-                    net->log_ctx, (net->mode != UNKNOWN),
-                    BCNN_INVALID_PARAMETER,
-                    "Unknown value for 'task' field, available parameters: "
-                    "TRAIN, PREDICT");
                 if (nb_layers > 0) {
                     if (nb_layers == 1) {
                         BCNN_CHECK_AND_LOG(
@@ -84,7 +79,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                         BCNN_CHECK_AND_LOG(net->log_ctx, net->batch_size > 0,
                                            BCNN_INVALID_PARAMETER,
                                            "Batch size must be > 0");
-                        bcnn_net_set_input_shape(
+                        bcnn_set_input_shape(
                             net, net->input_width, net->input_height,
                             net->input_channels, net->batch_size);
                     }
@@ -94,7 +89,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                         "Hint: Are you sure that 'src' field is correctly "
                         "setup?");
                     if (strcmp(curr_layer, "{input}") == 0) {
-                        bcnn_net_add_input(net, in_w, in_h, in_c, src_id);
+                        bcnn_add_input(net, in_w, in_h, in_c, src_id);
                     } else if (strcmp(curr_layer, "{conv}") == 0 ||
                                strcmp(curr_layer, "{convolutional}") == 0) {
                         BCNN_CHECK_AND_LOG(
@@ -227,19 +222,40 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                 BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == 2),
                                    BCNN_INVALID_PARAMETER,
                                    "Wrong format option in config file");
-                if (strcmp(tok[0], "task") == 0) {
+                if (strcmp(tok[0], "task") == 0 ||
+                    strcmp(tok[0], "mode") == 0) {
                     if (strcmp(tok[1], "train") == 0)
                         net->mode = TRAIN;
                     else if (strcmp(tok[1], "predict") == 0) {
                         net->mode = PREDICT;
-                    } else
+                    } else if (strcmp(tok[1], "valid") == 0) {
+                        net->mode = PREDICT;
+                    } else {
                         BCNN_ERROR(
                             net->log_ctx, BCNN_INVALID_PARAMETER,
                             "Invalid parameter for task, available parameters: "
-                            "TRAIN, PREDICT");
-                } else if (strcmp(tok[0], "data_format") == 0)
-                    bh_strfill(&param->data_format, tok[1]);
-                else if (strcmp(tok[0], "input_model") == 0)
+                            "TRAIN, PREDICT, VALID");
+                    }
+                } else if (strcmp(tok[0], "data_format") == 0) {
+                    if (strcmp(tok[1], "mnist") == 0) {
+                        param->data_format = BCNN_LOAD_MNIST;
+                    } else if (strcmp(tok[1], "cifar10") == 0) {
+                        param->data_format = BCNN_LOAD_CIFAR10;
+                    } else if (strcmp(tok[1], "classif") == 0 ||
+                               strcmp(tok[1], "classification") == 0) {
+                        param->data_format = BCNN_LOAD_CLASSIFICATION_LIST;
+                    } else if (strcmp(tok[1], "reg") == 0 ||
+                               strcmp(tok[1], "regression") == 0) {
+                        param->data_format = BCNN_LOAD_REGRESSION_LIST;
+                    } else if (strcmp(tok[1], "detection") == 0) {
+                        param->data_format = BCNN_LOAD_DETECTION_LIST;
+                    } else {
+                        BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
+                                   "Invalid parameter for 'data_format', "
+                                   "available parameters: "
+                                   "mnist, cifar10, classif, reg, detection");
+                    }
+                } else if (strcmp(tok[0], "input_model") == 0)
                     bh_strfill(&param->input_model, tok[1]);
                 else if (strcmp(tok[0], "output_model") == 0)
                     bh_strfill(&param->output_model, tok[1]);
@@ -413,8 +429,9 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                             tok[1]);
                         loss = EUCLIDEAN_LOSS;
                     }
-                } else
+                } else {
                     bcnn_set_param(net, tok[0], tok[1]);
+                }
 
                 for (int i = 0; i < n_tok; ++i) {
                     bh_free(tok[i]);
@@ -467,12 +484,12 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
     int i = 0, nb_iter = net->learner.max_batches;
     int batch_size = net->batch_size;
     bh_timer t = {0};
-    bcnn_iterator iter_data = {0};
+    bcnn_loader iter_data = {0};
     char chk_pt_path[1024];
 
-    if (bcnn_iterator_initialize(net, &iter_data, param->train_input,
-                                 param->path_train_label,
-                                 param->data_format) != 0) {
+    if (bcnn_loader_initialize(&iter_data, param->data_format, net,
+                               param->train_input,
+                               param->path_train_label) != 0) {
         return -1;  // TODO: proper error return
     }
 
@@ -506,7 +523,7 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
         }
     }
 
-    bcnn_iterator_terminate(&iter_data);
+    bcnn_loader_terminate(&iter_data);
     *error = (float)sum_error / (param->eval_period * batch_size);
 
     return BCNN_SUCCESS;
@@ -520,7 +537,7 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     FILE *f = NULL;
     int batch_size = net->batch_size;
     char out_pred_name[128] = {0};
-    bcnn_iterator iter_data = {0};
+    bcnn_loader iter_data = {0};
     int out_w = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].w;
     int out_h = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].h;
     int out_c = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].c;
@@ -528,20 +545,18 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     unsigned char *dump_img = (unsigned char *)calloc(
         net->tensors[0].w * net->tensors[0].h * 3, sizeof(unsigned char));
 
-    if (bcnn_iterator_initialize(net, &iter_data, param->test_input,
-                                 param->path_test_label,
-                                 param->data_format) != 0)
+    if (bcnn_loader_initialize(&iter_data, param->data_format, net,
+                               param->test_input,
+                               param->path_test_label) != 0) {
         return -1;
+    }
 
     if (dump_pred) {
-        if (net->prediction_type != HEATMAP_REGRESSION &&
-            net->prediction_type != SEGMENTATION) {
-            f = fopen(param->pred_out, "wt");
-            if (f == NULL) {
-                fprintf(stderr, "[ERROR] bcnn_predict: Can't open file %s",
-                        param->pred_out);
-                return -1;
-            }
+        f = fopen(param->pred_out, "wt");
+        if (f == NULL) {
+            fprintf(stderr, "[ERROR] bcnn_predict: Can't open file %s",
+                    param->pred_out);
+            return -1;
         }
     }
 
@@ -551,19 +566,7 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
         err += error_batch;
         // Dump predictions
         if (dump_pred) {
-            if (net->prediction_type == HEATMAP_REGRESSION ||
-                net->prediction_type == SEGMENTATION) {
-                for (j = 0; j < net->batch_size; ++j) {
-                    for (k = 0; k < out_c; ++k) {
-                        sprintf(out_pred_name, "%d_%d.png",
-                                i * net->batch_size + j, k);
-                        bip_write_float_image(
-                            out_pred_name,
-                            out + j * out_w * out_h * out_c + k * out_w * out_h,
-                            out_w, out_h, 1, out_w * sizeof(float));
-                    }
-                }
-            } else if (net->prediction_type == DETECTION) {
+            if (iter_data.type == BCNN_LOAD_DETECTION_LIST) {
                 for (int b = 0; b < net->batch_size; ++b) {
                     int num_dets = 0;
                     yolo_detection *dets = bcnn_yolo_get_detections(
@@ -639,26 +642,20 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
             err += error_batch;
             // Dump predictions
             if (dump_pred) {
-                if (net->prediction_type == HEATMAP_REGRESSION ||
-                    net->prediction_type == SEGMENTATION) {
-                    for (k = 0; k < out_c; ++k) {
-                        sprintf(out_pred_name, "%d_%d.png", i, k);
-                        bip_write_float_image(out_pred_name,
-                                              out + k * out_w * out_h, out_w,
-                                              out_h, 1, out_w * sizeof(float));
-                    }
-                } else {
-                    for (k = 0; k < output_size; ++k) fprintf(f, "%f ", out[k]);
-                    fprintf(f, "\n");
+                for (k = 0; k < output_size; ++k) {
+                    fprintf(f, "%f ", out[k]);
                 }
+                fprintf(f, "\n");
             }
         }
     }
     *error = err / param->nb_pred;
     bh_free(dump_img);
 
-    if (f != NULL) fclose(f);
-    bcnn_iterator_terminate(&iter_data);
+    if (f != NULL) {
+        fclose(f);
+    }
+    bcnn_loader_terminate(&iter_data);
     return BCNN_SUCCESS;
 }
 
@@ -668,7 +665,6 @@ int bcnncl_free_param(bcnncl_param *param) {
     bh_free(param->pred_out);
     bh_free(param->train_input);
     bh_free(param->test_input);
-    bh_free(param->data_format);
     bh_free(param->path_train_label);
     bh_free(param->path_test_label);
     return BCNN_SUCCESS;

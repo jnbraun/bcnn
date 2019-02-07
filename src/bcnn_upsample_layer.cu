@@ -20,7 +20,6 @@
 * SOFTWARE.
 */
 
-
 #ifdef BCNN_USE_CUDA
 
 #include "bcnn_mat.h"
@@ -59,7 +58,7 @@ void bcnn_forward_upsample_layer_gpu(bcnn_net *net, bcnn_node *node) {
                        1);
     size_t size = src_tensor->w * src_tensor->h * src_tensor->c *
                   src_tensor->n * param->size * param->size;
-    bcnn_forward_upsample_cuda_kernel<<<bcnn_cuda_gridsize(size),
+    bcnn_forward_upsample_cuda_kernel<<<bcnn_cuda_blocks(size),
                                         BCNN_CUDA_THREADS>>>(
         size, src_tensor->data_gpu, src_tensor->w, src_tensor->h, src_tensor->c,
         src_tensor->n, param->size, dst_tensor->data_gpu);
@@ -93,9 +92,9 @@ void bcnn_backward_upsample_layer_gpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     bcnn_upsample_param *param = (bcnn_upsample_param *)node->param;
-    size_t size = src_tensor->w * src_tensor->h * src_tensor->c * src_tensor->n *
-               param->size * param->size;
-    bcnn_backward_upsample_cuda_kernel<<<bcnn_cuda_gridsize(size),
+    size_t size = src_tensor->w * src_tensor->h * src_tensor->c *
+                  src_tensor->n * param->size * param->size;
+    bcnn_backward_upsample_cuda_kernel<<<bcnn_cuda_blocks(size),
                                          BCNN_CUDA_THREADS>>>(
         size, src_tensor->grad_data_gpu, src_tensor->w, src_tensor->h,
         src_tensor->c, src_tensor->n, param->size, dst_tensor->grad_data_gpu);

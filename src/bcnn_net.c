@@ -322,7 +322,7 @@ bcnn_status bcnn_compile_net(bcnn_net *net) {
     return BCNN_SUCCESS;
 }
 
-int bcnn_forward(bcnn_net *net) {
+void bcnn_forward(bcnn_net *net) {
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
         for (int j = 0; j < node->num_dst; ++j) {
@@ -341,15 +341,13 @@ int bcnn_forward(bcnn_net *net) {
         }
         node->forward(net, node);
     }
-    return BCNN_SUCCESS;
 }
 
-int bcnn_backward(bcnn_net *net) {
+void bcnn_backward(bcnn_net *net) {
     for (int i = net->num_nodes - 1; i >= 0; --i) {
         bcnn_node *node = &net->nodes[i];
         node->backward(net, node);
     }
-    return BCNN_SUCCESS;
 }
 
 int bcnn_train_on_batch(bcnn_net *net, bcnn_loader *iter, float *loss) {

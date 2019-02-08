@@ -121,10 +121,9 @@ int predict_mnist(bcnn_net *net, const char *test_img, const char *test_label,
 }
 
 int train_mnist(bcnn_net *net, const char *train_img, const char *train_label,
-                const char *test_img, const char *test_label, int nb_iter,
+                const char *test_img, const char *test_label, int num_iter,
                 int eval_period, float *error) {
     float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
-    int i = 0;
     bh_timer t = {0}, tp = {0};
     bcnn_loader data_mnist = {0};
 
@@ -135,7 +134,7 @@ int train_mnist(bcnn_net *net, const char *train_img, const char *train_label,
     }
 
     bh_timer_start(&t);
-    for (i = 0; i < nb_iter; ++i) {
+    for (int i = 0; i < num_iter; ++i) {
         bcnn_train_on_batch(net, &data_mnist, &error_batch);
         sum_error += error_batch;
 

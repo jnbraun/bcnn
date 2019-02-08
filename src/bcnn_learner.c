@@ -154,7 +154,7 @@ void bcnn_adam_update_gpu(float *weights, float *biases, float *weights_grad,
 }
 #endif
 
-int bcnn_update(bcnn_net *net) {
+void bcnn_update(bcnn_net *net) {
     int i;
     float lr = bcnn_update_learning_rate(net);
 
@@ -164,5 +164,4 @@ int bcnn_update(bcnn_net *net) {
             node->update(net, node);
         }
     }
-    return BCNN_SUCCESS;
 }

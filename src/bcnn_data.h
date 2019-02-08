@@ -39,7 +39,7 @@ typedef bcnn_status (*bcnn_loader_next_func)(bcnn_loader *iter, bcnn_net *net,
 typedef void (*bcnn_loader_terminate_func)(bcnn_loader *iter);
 
 bcnn_status bcnn_data_augmentation(unsigned char *img, int width, int height,
-                                   int depth, bcnn_data_augment *param,
+                                   int depth, bcnn_data_augmenter *param,
                                    unsigned char *buffer);
 
 void bcnn_fill_input_tensor(bcnn_net *net, bcnn_loader *iter, char *path_img,

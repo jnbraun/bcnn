@@ -112,7 +112,7 @@ static bcnn_status bcnn_load_image_from_path(bcnn_net *net, char *path, int w,
 
 /* Data augmentation */
 bcnn_status bcnn_data_augmentation(unsigned char *img, int width, int height,
-                                   int depth, bcnn_data_augment *param,
+                                   int depth, bcnn_data_augmenter *param,
                                    unsigned char *buffer) {
     int sz = width * height * depth;
     unsigned char *img_scale = NULL;

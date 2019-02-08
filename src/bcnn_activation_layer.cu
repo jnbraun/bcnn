@@ -33,25 +33,25 @@ __global__ void bcnn_forward_activation_layer_kernel(float *x, int sz,
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
     if (i < sz) {
         switch (a) {
-            case TANH:
+            case BCNN_ACT_TANH:
                 x[i] = (exp(2 * x[i]) - 1) / (exp(2 * x[i]) + 1);
                 break;
-            case RELU:
+            case BCNN_ACT_RELU:
                 x[i] = x[i] * (x[i] > 0);
                 break;
-            case LRELU:
+            case BCNN_ACT_LRELU:
                 x[i] = (x[i] > 0 ? x[i] : 0.1f * x[i]);
                 break;
-            case RAMP:
+            case BCNN_ACT_RAMP:
                 x[i] = x[i] * (x[i] > 0) + 0.1 * x[i];
                 break;
-            case CLAMP:
+            case BCNN_ACT_CLAMP:
                 x[i] = bh_clamp(x[i], 0, 1);
                 break;
-            case LOGISTIC:
+            case BCNN_ACT_LOGISTIC:
                 x[i] = 1.0f / (1.0f + (float)exp(-x[i]));
                 break;
-            case NONE:
+            case BCNN_ACT_NONE:
                 break;
             default:
                 break;
@@ -85,25 +85,25 @@ __global__ void bcnn_backward_activation_layer_kernel(float *x, float *dx,
     int i = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
     if (i < sz) {
         switch (a) {
-            case TANH:
+            case BCNN_ACT_TANH:
                 dx[i] *= (1 - x[i] * x[i]);
                 break;
-            case RELU:
+            case BCNN_ACT_RELU:
                 dx[i] *= ((float)(x[i] > 0));
                 break;
-            case LRELU:
+            case BCNN_ACT_LRELU:
                 dx[i] *= (x[i] > 0 ? 1.0f : 0.1f);
                 break;
-            case RAMP:
+            case BCNN_ACT_RAMP:
                 dx[i] *= ((float)(x[i] > 0) + 0.1f);
                 break;
-            case CLAMP:
+            case BCNN_ACT_CLAMP:
                 dx[i] *= (float)(x[i] > 0.0f && (x[i] < 1.0f));
                 break;
-            case LOGISTIC:
+            case BCNN_ACT_LOGISTIC:
                 dx[i] *= (1 - x[i]) * x[i];
                 break;
-            case NONE:
+            case BCNN_ACT_NONE:
                 break;
             default:
                 break;

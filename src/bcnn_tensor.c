@@ -53,20 +53,20 @@ void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler) {
     }
     switch (filler.type) {
         float std_init;
-        case XAVIER:
+        case BCNN_FILLER_XAVIER:
             std_init = sqrtf(3.0f / filler.range);
             for (int i = 0; i < bcnn_tensor_size(t); ++i) {
                 t->data[i] = std_init * (2 * ((float)rand() / RAND_MAX) - 1);
             }
             break;
-        case MSRA:
+        case BCNN_FILLER_MSRA:
             std_init = sqrtf(2.0f / filler.range);
             bcnn_gauss_gen g = {0};
             for (int i = 0; i < bcnn_tensor_size(t); ++i) {
                 t->data[i] = std_init * bcnn_rng_gaussian(&g);
             }
             break;
-        case FIXED:
+        case BCNN_FILLER_FIXED:
             for (int i = 0; i < bcnn_tensor_size(t); ++i) {
                 t->data[i] = filler.value;
             }
@@ -113,7 +113,7 @@ bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
     t->data = (float *)bh_align_calloc(size * sizeof(float), align_offset_);
     BCNN_CHECK_ALLOC(t->data);
 #ifndef BCNN_DEPLOY_ONLY
-    if (t->has_grad && net_state == TRAIN) {
+    if (t->has_grad && net_state == BCNN_MODE_TRAIN) {
         t->grad_data =
             (float *)bh_align_calloc(size * sizeof(float), align_offset_);
         BCNN_CHECK_ALLOC(t->grad_data);
@@ -122,7 +122,7 @@ bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
 #ifdef BCNN_USE_CUDA
     t->data_gpu = bcnn_cuda_memcpy_f32(t->data, size);
 #ifndef BCNN_DEPLOY_ONLY
-    if (t->has_grad && net_state == TRAIN) {
+    if (t->has_grad && net_state == BCNN_MODE_TRAIN) {
         t->grad_data_gpu = bcnn_cuda_memcpy_f32(t->grad_data, size);
     }
 #endif

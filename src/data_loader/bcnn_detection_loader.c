@@ -40,9 +40,16 @@ bcnn_status bcnn_loader_list_detection_init(bcnn_loader *iter, bcnn_net *net,
     }
     // Allocate img buffer
     iter->input_uchar = (unsigned char *)calloc(
-        iter->input_width * iter->input_height * iter->input_depth,
+        net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
         sizeof(unsigned char));
-
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx,
+        net->tensors[0].w > 0 && net->tensors[0].h > 0 && net->tensors[0].c > 0,
+        BCNN_INVALID_PARAMETER,
+        "Input's width, height and channels must be > 0");
+    iter->input_net = (uint8_t *)calloc(
+        net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
+        sizeof(uint8_t));
     rewind(f_list);
     iter->f_input = f_list;
     return BCNN_SUCCESS;
@@ -53,6 +60,7 @@ void bcnn_loader_list_detection_terminate(bcnn_loader *iter) {
         fclose(iter->f_input);
     }
     bh_free(iter->input_uchar);
+    bh_free(iter->input_net);
 }
 
 bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
@@ -86,7 +94,7 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
         bh_free(tok);
         return BCNN_INVALID_DATA;
     }
-    if (net->input_channels != c_img) {
+    if (net->tensors[0].c != c_img) {
         bcnn_log(net->log_ctx, BCNN_LOG_WARNING,
                  "Skip image %s: unexpected number of channels");
         bh_free(pimg);
@@ -101,10 +109,10 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
     float wh_ratio = w_img / h_img;
     int nh, nw;
     if (wh_ratio < 1) {
-        nh = net->input_height;
+        nh = net->tensors[0].h;
         nw = nh * wh_ratio;
     } else {
-        nw = net->input_width;
+        nw = net->tensors[0].w;
         nh = nw / wh_ratio;
     }
     unsigned char *buf =
@@ -112,32 +120,32 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
     bip_resize_bilinear(pimg, w_img, h_img, w_img * c_img, buf, nw, nh,
                         nw * c_img, c_img);
     int dx, dy;  // Canvas offsets
-    if (net->mode == TRAIN) {
-        dx = rand_between(0, (net->input_width - nw));
-        dy = rand_between(0, (net->input_height - nh));
+    if (net->mode == BCNN_MODE_TRAIN) {
+        dx = rand_between(0, (net->tensors[0].w - nw));
+        dy = rand_between(0, (net->tensors[0].h - nh));
     } else {
-        dx = (net->input_width - nw) / 2;
-        dy = (net->input_height - nh) / 2;
+        dx = (net->tensors[0].w - nw) / 2;
+        dy = (net->tensors[0].h - nh) / 2;
     }
-    memset(net->input_buffer, 128,
-           net->input_channels * net->input_width * net->input_height);
-    bip_crop_image(buf, nw, nh, nw * c_img, -dx, -dy, net->input_buffer,
-                   net->input_width, net->input_height,
-                   net->input_width * net->input_channels, net->input_channels);
+    memset(iter->input_net, 128,
+           net->tensors[0].c * net->tensors[0].w * net->tensors[0].h);
+    bip_crop_image(buf, nw, nh, nw * c_img, -dx, -dy, iter->input_net,
+                   net->tensors[0].w, net->tensors[0].h,
+                   net->tensors[0].w * net->tensors[0].c, net->tensors[0].c);
     bh_free(buf);
-    if (net->mode == TRAIN) {
+    if (net->mode == BCNN_MODE_TRAIN) {
         // TODO: only brightness / contrast / flip is currently supported for
         // detection
         net->data_aug.apply_fliph = 0;
         if (net->data_aug.random_fliph) {
             net->data_aug.apply_fliph = ((float)rand() / RAND_MAX > 0.5f);
         }
-        bcnn_data_augmentation(net->input_buffer, net->input_width,
-                               net->input_height, net->input_channels,
+        bcnn_data_augmentation(iter->input_net, net->tensors[0].w,
+                               net->tensors[0].h, net->tensors[0].c,
                                &net->data_aug, iter->input_uchar);
     }
-    memcpy(iter->input_uchar, net->input_buffer,
-           net->input_channels * net->input_width * net->input_height);
+    memcpy(iter->input_uchar, iter->input_net,
+           net->tensors[0].c * net->tensors[0].w * net->tensors[0].h);
     // Fill input tensor
     int input_sz = bcnn_tensor_size3d(&net->tensors[0]);
     float *x = net->tensors[0].data + idx * input_sz;
@@ -146,7 +154,7 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
                               net->tensors[0].h, net->tensors[0].c, 1 / 127.5f,
                               net->data_aug.swap_to_bgr, 127.5f, 127.5f, 127.5f,
                               x);
-    if (net->mode != PREDICT) {
+    if (net->mode != BCNN_MODE_PREDICT) {
         // Fill labels
         int label_sz = bcnn_tensor_size3d(&net->tensors[1]);
         float *y = net->tensors[1].data + idx * label_sz;
@@ -156,10 +164,10 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
             num_boxes = BCNN_DETECTION_MAX_BOXES;
         }
         int offset = 1;  // Offset the image path
-        float scale_x = (float)nw / (float)net->input_width;
-        float scale_y = (float)nh / (float)net->input_height;
-        float scale_dx = (float)dx / (float)net->input_width;
-        float scale_dy = (float)dy / (float)net->input_height;
+        float scale_x = (float)nw / (float)net->tensors[0].w;
+        float scale_y = (float)nh / (float)net->tensors[0].h;
+        float scale_dx = (float)dx / (float)net->tensors[0].w;
+        float scale_dy = (float)dy / (float)net->tensors[0].h;
         for (int i = 0; i < num_boxes; ++i) {
             // We encode box center (x, y) and w, h
             y[i * 5 + 0] =

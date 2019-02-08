@@ -45,9 +45,9 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
                 break;
             }
         }
-        BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found,
-                           BCNN_INVALID_PARAMETER,
-                           "LRN layer: invalid input node name %s", src_id);
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
+            "BCNN_LAYER_LRN layer: invalid input node name %s", src_id);
     } else {
         bcnn_node_add_input(net, &node, 0);
     }
@@ -65,7 +65,7 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    node.type = LRN;
+    node.type = BCNN_LAYER_LRN;
     node.param_size = sizeof(bcnn_lrn_param);
     node.param = (bcnn_lrn_param *)calloc(1, node.param_size);
     bcnn_lrn_param *param = (bcnn_lrn_param *)node.param;
@@ -79,10 +79,10 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
     node.backward = bcnn_backward_lrn_layer;
     node.release_param = bcnn_release_param_lrn_layer;
 
-    BCNN_CHECK_AND_LOG(
-        net->log_ctx, local_size < net->tensors[node.src[0]].c,
-        BCNN_INVALID_PARAMETER,
-        "LRN layer: local size must be inferior to the number of channels");
+    BCNN_CHECK_AND_LOG(net->log_ctx, local_size < net->tensors[node.src[0]].c,
+                       BCNN_INVALID_PARAMETER,
+                       "BCNN_LAYER_LRN layer: local size must be inferior to "
+                       "the number of channels");
 
     bcnn_net_add_node(net, node);
 

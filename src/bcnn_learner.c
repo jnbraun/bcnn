@@ -29,24 +29,24 @@
 static float bcnn_update_learning_rate(bcnn_net *net) {
     int iter = net->learner.seen / net->batch_size;
 
-    switch (net->learner.policy) {
-        case CONSTANT:
+    switch (net->learner.decay_type) {
+        case BCNN_LR_DECAY_CONSTANT:
             return net->learner.learning_rate;
-        case STEP:
+        case BCNN_LR_DECAY_STEP:
             return net->learner.learning_rate *
                    (float)pow(net->learner.scale, iter / net->learner.step);
-        case INV:
+        case BCNN_LR_DECAY_INV:
             return net->learner.learning_rate *
                    (float)pow(1.0f + net->learner.gamma * iter,
                               -net->learner.power);
-        case EXP:
+        case BCNN_LR_DECAY_EXP:
             return net->learner.learning_rate *
                    (float)pow(net->learner.gamma, iter);
-        case POLY:
+        case BCNN_LR_DECAY_POLY:
             return net->learner.learning_rate *
                    (float)pow(1 - (float)iter / net->learner.max_batches,
                               net->learner.power);
-        case SIGMOID:
+        case BCNN_LR_DECAY_SIGMOID:
             return net->learner.learning_rate *
                    (1.0f / (1.0f + (float)exp(net->learner.gamma *
                                               (iter - net->learner.step))));

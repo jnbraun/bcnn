@@ -59,22 +59,22 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
     }
     // Compute output size according to padding option
     int out_h =
-        (padding == PADDING_SAME)
+        (padding == BCNN_PADDING_SAME)
             ? (net->tensors[node.src[0]].h + stride - 1) / stride
-            : (padding == PADDING_VALID)
+            : (padding == BCNN_PADDING_VALID)
                   ? (net->tensors[node.src[0]].h - size + stride) / stride
-                  : (padding == PADDING_CAFFE)
+                  : (padding == BCNN_PADDING_CAFFE)
                         ? ((int)(ceil(
                                (float)(net->tensors[node.src[0]].h - size) /
                                stride)) +
                            1)
                         : 0;
     int out_w =
-        (padding == PADDING_SAME)
+        (padding == BCNN_PADDING_SAME)
             ? (net->tensors[node.src[0]].w + stride - 1) / stride
-            : (padding == PADDING_VALID)
+            : (padding == BCNN_PADDING_VALID)
                   ? (net->tensors[node.src[0]].w - size + stride) / stride
-                  : (padding == PADDING_CAFFE)
+                  : (padding == BCNN_PADDING_CAFFE)
                         ? ((int)(ceil(
                                (float)(net->tensors[node.src[0]].w - size) /
                                stride)) +
@@ -94,7 +94,7 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
     sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
-    node.type = MAXPOOL;
+    node.type = BCNN_LAYER_MAXPOOL;
     node.param_size = sizeof(bcnn_maxpool_param);
     node.param = (bcnn_maxpool_param *)calloc(1, node.param_size);
     bcnn_maxpool_param *param = (bcnn_maxpool_param *)node.param;

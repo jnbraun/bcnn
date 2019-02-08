@@ -61,7 +61,7 @@ bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, const char *src_id,
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    node.type = AVGPOOL;
+    node.type = BCNN_LAYER_AVGPOOL;
     node.forward = bcnn_forward_avgpool_layer;
     node.backward = bcnn_backward_avgpool_layer;
 

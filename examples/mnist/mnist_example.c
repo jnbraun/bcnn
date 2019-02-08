@@ -25,12 +25,12 @@
 #include "bcnn/bcnn.h"
 
 int create_network(bcnn_net *net) {
-    net->learner.optimizer = SGD;
+    net->learner.optimizer = BCNN_OPTIM_SGD;
     net->learner.learning_rate = 0.003f;
     net->learner.gamma = 0.00002f;
     net->learner.decay = 0.0005f;
     net->learner.momentum = 0.9f;
-    net->learner.policy = SIGMOID;
+    net->learner.decay_type = BCNN_LR_DECAY_SIGMOID;
     net->learner.step = 40000;
     net->learner.beta1 = 0.9f;
     net->learner.beta2 = 0.999f;
@@ -38,32 +38,31 @@ int create_network(bcnn_net *net) {
 
     bcnn_set_input_shape(net, 28, 28, 1, 16);
 
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 0, XAVIER, RELU, 0,
-                                 "input", "conv1");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 0, BCNN_FILLER_XAVIER,
+                                 BCNN_ACT_RELU, 0, "input", "conv1");
     bcnn_add_batchnorm_layer(net, "conv1", "bn1");
-    bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, "bn1", "pool1");
+    bcnn_add_maxpool_layer(net, 2, 2, BCNN_PADDING_SAME, "bn1", "pool1");
 
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 0, XAVIER, RELU, 0,
-                                 "pool1", "conv2");
+    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 0, BCNN_FILLER_XAVIER,
+                                 BCNN_ACT_RELU, 0, "pool1", "conv2");
     bcnn_add_batchnorm_layer(net, "conv2", "bn2");
-    bcnn_add_maxpool_layer(net, 2, 2, PADDING_SAME, "bn2", "pool2");
+    bcnn_add_maxpool_layer(net, 2, 2, BCNN_PADDING_SAME, "bn2", "pool2");
 
-    bcnn_add_fullc_layer(net, 256, XAVIER, RELU, 0, "pool2", "fc1");
+    bcnn_add_fullc_layer(net, 256, BCNN_FILLER_XAVIER, BCNN_ACT_RELU, 0,
+                         "pool2", "fc1");
     bcnn_add_batchnorm_layer(net, "fc1", "bn3");
 
-    bcnn_add_fullc_layer(net, 10, XAVIER, RELU, 0, "bn3", "fc2");
+    bcnn_add_fullc_layer(net, 10, BCNN_FILLER_XAVIER, BCNN_ACT_RELU, 0, "bn3",
+                         "fc2");
 
     bcnn_add_softmax_layer(net, "fc2", "softmax");
-    bcnn_add_cost_layer(net, EUCLIDEAN_LOSS, COST_ERROR, 1.0f, "softmax",
-                        "label", "cost");
+    bcnn_add_cost_layer(net, BCNN_LOSS_EUCLIDEAN, BCNN_METRIC_ERROR_RATE, 1.0f,
+                        "softmax", "label", "cost");
 
     // Data augmentation
     net->data_aug.range_shift_x = 5;
     net->data_aug.range_shift_y = 5;
     net->data_aug.rotation_range = 30.0f;
-
-    // Target
-    // net->prediction_type = CLASSIFICATION;
 
     bcnn_compile_net(net);
 
@@ -81,7 +80,7 @@ int predict_mnist(bcnn_net *net, const char *test_img, const char *test_label,
     int output_size =
         bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
 
-    net->mode = VALID;
+    net->mode = BCNN_MODE_VALID;
     bcnn_loader_initialize(&data_mnist, BCNN_LOAD_MNIST, net, test_img,
                            test_label);
 
@@ -129,7 +128,7 @@ int train_mnist(bcnn_net *net, const char *train_img, const char *train_label,
     bh_timer t = {0}, tp = {0};
     bcnn_loader data_mnist = {0};
 
-    net->mode = TRAIN;
+    net->mode = BCNN_MODE_TRAIN;
     if (bcnn_loader_initialize(&data_mnist, BCNN_LOAD_MNIST, net, train_img,
                                train_label) != 0) {
         return -1;
@@ -156,7 +155,7 @@ int train_mnist(bcnn_net *net, const char *train_img, const char *train_label,
             bh_timer_start(&t);
             sum_error = 0;
             // Reschedule net for training
-            net->mode = TRAIN;
+            net->mode = BCNN_MODE_TRAIN;
         }
     }
 
@@ -172,7 +171,7 @@ int run(const char *train_img, const char *train_label, const char *test_img,
     bcnn_net *net = NULL;
 
     bcnn_init_net(&net);
-    net->mode = TRAIN;
+    net->mode = BCNN_MODE_TRAIN;
     fprintf(stderr, "Create Network...\n");
     create_network(net);
 
@@ -185,7 +184,7 @@ int run(const char *train_img, const char *train_label, const char *test_img,
     }
 
     fprintf(stderr, "Start prediction...\n");
-    net->mode = VALID;
+    net->mode = BCNN_MODE_VALID;
     predict_mnist(net, test_img, test_label, &error_test, 10000,
                   "pred_mnist.txt");
     fprintf(stderr, "Prediction ended successfully\n");

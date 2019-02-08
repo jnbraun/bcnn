@@ -30,6 +30,17 @@
 extern "C" {
 #endif
 
+#ifdef BCNN_USE_CUDA
+typedef struct bcnn_cuda_context {
+    int workspace_size;
+    float *workspace_gpu;
+} bcnn_cuda_context;
+#endif
+
+bcnn_status bcnn_create_gemm_context(bcnn_net *net);
+#ifdef BCNN_USE_CUDA
+bcnn_status bcnn_create_cuda_context(bcnn_net *net);
+#endif
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node);
 bcnn_status bcnn_node_add_input(bcnn_net *net, bcnn_node *node, int index);
 bcnn_status bcnn_node_add_output(bcnn_net *net, bcnn_node *node, int index);

@@ -94,18 +94,18 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    node.type = FULL_CONNECTED;
+    node.type = BCNN_LAYER_FULL_CONNECTED;
     node.param_size = sizeof(bcnn_fullc_param);
     node.param = (bcnn_fullc_param *)calloc(1, node.param_size);
     bcnn_fullc_param *param = (bcnn_fullc_param *)node.param;
     param->activation = activation;
-    if (net->learner.optimizer == ADAM) {
+    if (net->learner.optimizer == BCNN_OPTIM_ADAM) {
         int weights_size = bcnn_tensor_size(&weights);
         param->adam_m = (float *)calloc(weights_size, sizeof(float));
         param->adam_v = (float *)calloc(weights_size, sizeof(float));
     }
 #ifdef BCNN_USE_CUDA
-    if (net->learner.optimizer == ADAM) {
+    if (net->learner.optimizer == BCNN_OPTIM_ADAM) {
         int weights_size = bcnn_tensor_size(&weights);
         param->adam_m_gpu = bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
         param->adam_v_gpu = bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
@@ -290,7 +290,7 @@ void bcnn_update_fullc_layer(bcnn_net *net, bcnn_node *node) {
     int weights_size = bcnn_tensor_size(weights);
     int biases_size = bcnn_tensor_size(biases);
     switch (net->learner.optimizer) {
-        case ADAM: {
+        case BCNN_OPTIM_ADAM: {
 #ifdef BCNN_USE_CUDA
             bcnn_adam_update_gpu(weights->data_gpu, biases->data_gpu,
                                  weights->grad_data_gpu, biases->grad_data_gpu,
@@ -309,7 +309,7 @@ void bcnn_update_fullc_layer(bcnn_net *net, bcnn_node *node) {
 #endif
             break;
         }
-        case SGD: {
+        case BCNN_OPTIM_SGD: {
 #ifdef BCNN_USE_CUDA
             bcnn_sgd_update_gpu(weights->data_gpu, biases->data_gpu,
                                 weights->grad_data_gpu, biases->grad_data_gpu,

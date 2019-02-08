@@ -37,9 +37,14 @@ bcnn_status bcnn_loader_list_reg_init(bcnn_loader *iter, bcnn_net *net,
         return BCNN_INVALID_PARAMETER;
     }
     // Allocate img buffer
-    iter->input_uchar = (unsigned char *)calloc(
-        iter->input_width * iter->input_height * iter->input_depth,
-        sizeof(unsigned char));
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx,
+        net->tensors[0].w > 0 && net->tensors[0].h > 0 && net->tensors[0].c > 0,
+        BCNN_INVALID_PARAMETER,
+        "Input's width, height and channels must be > 0");
+    iter->input_uchar = (uint8_t *)calloc(
+        net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
+        sizeof(uint8_t));
 
     rewind(f_list);
     iter->f_input = f_list;
@@ -65,7 +70,7 @@ bcnn_status bcnn_loader_list_reg_next(bcnn_loader *iter, bcnn_net *net,
     // Load image, perform data augmentation if required and fill input tensor
     bcnn_fill_input_tensor(net, iter, tok[0], idx);
     // Fill label tensor
-    if (net->mode != PREDICT) {
+    if (net->mode != BCNN_MODE_PREDICT) {
         int label_sz = bcnn_tensor_size3d(&net->tensors[1]);
         BCNN_CHECK_AND_LOG(net->log_ctx, (num_toks - 1 == label_sz),
                            BCNN_INVALID_DATA, "Unexpected label format");

@@ -67,7 +67,7 @@ typedef enum {
 /**
  * \brief Enum of available tasks.
  */
-typedef enum { PREDICT, TRAIN, VALID } bcnn_mode;
+typedef enum { BCNN_MODE_PREDICT, BCNN_MODE_TRAIN, BCNN_MODE_VALID } bcnn_mode;
 
 typedef enum {
     BCNN_LOAD_MNIST,
@@ -79,12 +79,13 @@ typedef enum {
 } bcnn_loader_type;
 
 typedef struct {
-    bcnn_loader_type type;
     int n_samples;
     int input_width;
     int input_height;
     int input_depth;
-    unsigned char *input_uchar;
+    bcnn_loader_type type;
+    uint8_t *input_uchar;
+    uint8_t *input_net;
     FILE *f_input;
     FILE *f_label;
 } bcnn_loader;
@@ -134,14 +135,21 @@ typedef struct {
 } bcnn_data_augment;
 
 /**
- * \brief Enum of learning policies.
+ * \brief Enum of learning rate decay policies.
  */
-typedef enum { CONSTANT, STEP, INV, EXP, POLY, SIGMOID } bcnn_lr_policy;
+typedef enum {
+    BCNN_LR_DECAY_CONSTANT,
+    BCNN_LR_DECAY_STEP,
+    BCNN_LR_DECAY_INV,
+    BCNN_LR_DECAY_EXP,
+    BCNN_LR_DECAY_POLY,
+    BCNN_LR_DECAY_SIGMOID
+} bcnn_lr_decay;
 
 /**
  * \brief Enum of optimization methods.
  */
-typedef enum { SGD, ADAM } bcnn_optimizer;
+typedef enum { BCNN_OPTIM_SGD, BCNN_OPTIM_ADAM } bcnn_optimizer;
 
 /**
  * \brief Structure to handle learner method and parameters.
@@ -159,72 +167,72 @@ typedef struct {
     float beta1;              /**< Parameter for Adam optimizer */
     float beta2;              /**< Parameter for Adam optimizer */
     bcnn_optimizer optimizer; /**< Optimization method */
-    bcnn_lr_policy policy;    /**< Learning rate policy */
+    bcnn_lr_decay decay_type; /**< Learning rate decay type */
 } bcnn_learner;
 
 /**
  * \brief Enum of available layers types.
  */
 typedef enum {
-    CONVOLUTIONAL,
-    DECONVOLUTIONAL,
-    DEPTHWISE_CONV, /**< Depthwise convolution */
-    ACTIVATION,
-    FULL_CONNECTED,
-    MAXPOOL,
-    AVGPOOL,
-    SOFTMAX,
-    DROPOUT,
-    BATCHNORM,
-    LRN,
-    CONCAT,
-    ELTWISE,
-    UPSAMPLE,
-    YOLO,
-    RESHAPE,
-    COST
+    BCNN_LAYER_CONV2D,
+    BCNN_LAYER_TRANSPOSE_CONV2D,
+    BCNN_LAYER_DEPTHWISE_CONV2D, /**< Depthwise convolution */
+    BCNN_LAYER_ACTIVATION,
+    BCNN_LAYER_FULL_CONNECTED,
+    BCNN_LAYER_MAXPOOL,
+    BCNN_LAYER_AVGPOOL,
+    BCNN_LAYER_SOFTMAX,
+    BCNN_LAYER_DROPOUT,
+    BCNN_LAYER_BATCHNORM,
+    BCNN_LAYER_LRN,
+    BCNN_LAYER_CONCAT,
+    BCNN_LAYER_ELTWISE,
+    BCNN_LAYER_UPSAMPLE,
+    BCNN_LAYER_YOLOV3,
+    BCNN_LAYER_RESHAPE,
+    BCNN_LAYER_COST
 } bcnn_layer_type;
 
 /**
  * \brief Enum of available activations functions (non-linearities).
  */
 typedef enum {
-    NONE,
-    TANH,
-    RELU,
-    RAMP,
-    SOFTPLUS,
-    LRELU, /**< Leaky relu (alpha (negative slope) set to 0.01) */
-    ABS,
-    CLAMP,
-    PRELU, /**< Parametric ReLU */
-    LOGISTIC
+    BCNN_ACT_NONE,
+    BCNN_ACT_TANH,
+    BCNN_ACT_RELU,
+    BCNN_ACT_RAMP,
+    BCNN_ACT_SOFTPLUS,
+    BCNN_ACT_LRELU, /**< Leaky relu (alpha (negative slope) set to 0.01) */
+    BCNN_ACT_ABS,
+    BCNN_ACT_CLAMP,
+    BCNN_ACT_PRELU, /**< Parametric ReLU */
+    BCNN_ACT_LOGISTIC
 } bcnn_activation;
 
 /**
  * \brief Enum of available loss functions.
  */
-typedef enum { EUCLIDEAN_LOSS, LIFTED_STRUCT_LOSS } bcnn_loss;
+typedef enum { BCNN_LOSS_EUCLIDEAN, BCNN_LOSS_LIFTED_STRUCT } bcnn_loss;
 
 /**
  * \brief Enum of available error metrics.
  */
 typedef enum {
-    COST_ERROR,   /**< Error rate (classification only) */
-    COST_LOGLOSS, /**< Multi-class Logloss (classification only) */
-    COST_SSE,     /**< Sum-squared error */
-    COST_MSE,     /**< Mean-squared error */
-    COST_CRPS,    /**< Continuous Ranked Probability Score */
-    COST_DICE     /**< Sørensen–Dice index: metric for image segmentation */
+    BCNN_METRIC_ERROR_RATE, /**< Error rate (classification only) */
+    BCNN_METRIC_LOGLOSS,    /**< Multi-class Logloss (classification only) */
+    BCNN_METRIC_SSE,        /**< Sum-squared error */
+    BCNN_METRIC_MSE,        /**< Mean-squared error */
+    BCNN_METRIC_CRPS,       /**< Continuous Ranked Probability Score */
+    BCNN_METRIC_DICE /**< Sørensen–Dice index: metric for image segmentation */
 } bcnn_loss_metric;
 
 /**
  * \brief Available padding types for pooling
  */
 typedef enum {
-    PADDING_SAME,
-    PADDING_VALID,
-    PADDING_CAFFE /**< Caffe-like padding for compatibility purposes */
+    BCNN_PADDING_SAME,
+    BCNN_PADDING_VALID,
+    BCNN_PADDING_CAFFE /**< Caffe-like padding for compatibility purposes */
 } bcnn_padding;
 
 /* Logging */
@@ -276,9 +284,9 @@ int bcnn_tensor_size2d(const bcnn_tensor *t);
 // The different type of tensor initialization.
 // This is ususally used to randomly initialize the weights/bias of one layer
 typedef enum bcnn_filler_type {
-    FIXED,   // Fill with constant set by value
-    XAVIER,  // Xavier init
-    MSRA     // MSRA init
+    BCNN_FILLER_FIXED,   // Fill with constant set by value
+    BCNN_FILLER_XAVIER,  // Xavier init
+    BCNN_FILLER_MSRA     // MSRA init
 } bcnn_filler_type;
 
 /* Forward declaration */
@@ -289,11 +297,11 @@ struct bcnn_net;
  */
 struct bcnn_node {
     int num_src;
-    int *src;  // 'num_src' tensors indexes (net->tensors array)
     int num_dst;
-    int *dst;  // 'num_dst' tensors indexes (net->tensors array)
-    size_t param_size;
     bcnn_layer_type type;
+    size_t param_size;
+    int *src; /* Array of input tensors indexes */
+    int *dst; /* Array of output tensors indexes */
     void *param;
     void (*forward)(struct bcnn_net *net, struct bcnn_node *node);
     void (*backward)(struct bcnn_net *net, struct bcnn_node *node);
@@ -306,25 +314,19 @@ typedef struct bcnn_node bcnn_node;
  * Net definition
  */
 typedef struct bcnn_net {
-    int input_width;
-    int input_height;
-    int input_channels;
     int batch_size;
-    bcnn_learner learner; /**< Learner/optimizer parameters */
     int num_nodes;
+    bcnn_mode mode;
     bcnn_node *nodes;
     int num_tensors;            /**< Number of tensors hold in the network */
     bcnn_tensor *tensors;       /**< Array of tensors hold in the network */
     bcnn_data_augment data_aug; /**< Parameters for online data augmentation */
-    bcnn_mode mode;
-    unsigned char *input_buffer;
-    int workspace_size;
-    // float *workspace;
-#ifdef BCNN_USE_CUDA
-    float *workspace_gpu;
-#endif
+    bcnn_learner learner;       /**< Learner/optimizer parameters */
     bcnn_log_context log_ctx;
     void *gemm_ctx;
+#ifdef BCNN_USE_CUDA
+    void *cuda_ctx;
+#endif
 } bcnn_net;
 
 /* Logging */
@@ -437,29 +439,28 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                                 const char *src_id, const char *label_id,
                                 const char *dst_id);
 
-/* YOLO */
+/* BCNN_LAYER_YOLOV3 */
 #define BCNN_DETECTION_MAX_BOXES 50
 
-typedef struct {
-    float x, y, w, h;
-} yolo_box;
+typedef struct { float x, y, w, h; } bcnn_box;
 
-typedef struct yolo_detection {
-    yolo_box bbox;
+typedef struct bcnn_yolo_detection {
+    bcnn_box bbox;
     int classes;
     float *prob;
     float *mask;
     float objectness;
     int sort_class;
-} yolo_detection;
+} bcnn_yolo_detection;
 
 bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                                 int classes, int coords, int total, int *mask,
                                 float *anchors, const char *src_id,
                                 const char *dst_id);
-yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w, int h,
-                                         int netw, int neth, float thresh,
-                                         int relative, int *num_dets);
+bcnn_yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w,
+                                              int h, int netw, int neth,
+                                              float thresh, int relative,
+                                              int *num_dets);
 
 /* Core network routines */
 int bcnn_update(bcnn_net *net);

@@ -37,7 +37,7 @@ void bcnn_forward_dropout_layer_gpu(bcnn_net *net, bcnn_node *node) {
     bcnn_dropout_param *param = (bcnn_dropout_param *)node->param;
     int size = bcnn_tensor_size(src_tensor);
 
-    if (net->mode != TRAIN) {
+    if (net->mode != BCNN_MODE_TRAIN) {
         return;
     }
     bcnn_cuda_fill_with_random(param->rand_gpu, size);

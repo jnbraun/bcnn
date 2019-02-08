@@ -42,7 +42,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
     bcnn_tensor dst_tensor = {0};
 
     // Fill nodes param
-    node.type = COST;
+    node.type = BCNN_LAYER_COST;
     node.param_size = sizeof(bcnn_cost_param);
     node.param = (bcnn_cost_param *)calloc(1, node.param_size);
     bcnn_cost_param *param = (bcnn_cost_param *)node.param;
@@ -145,7 +145,7 @@ void bcnn_compute_error(bcnn_cost_param *param, bcnn_tensor *src_tensor,
 #endif
 
     switch (param->loss_metric) {
-        case COST_ERROR:
+        case BCNN_METRIC_ERROR_RATE:
             *(dst_tensor->data) = 0.0f;
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_dev2host(src_tensor->data_gpu, src_tensor->data,
@@ -167,16 +167,16 @@ void bcnn_compute_error(bcnn_cost_param *param, bcnn_tensor *src_tensor,
                 }
             }
             break;
-        case COST_SSE:
+        case BCNN_METRIC_SSE:
             *(dst_tensor->data) =
                 bcnn_dot(sz, dst_tensor->grad_data, dst_tensor->grad_data);
             break;
-        case COST_MSE:
+        case BCNN_METRIC_MSE:
             *(dst_tensor->data) =
                 bcnn_dot(sz, dst_tensor->grad_data, dst_tensor->grad_data);
             *(dst_tensor->data) /= input_size;
             break;
-        case COST_CRPS:
+        case BCNN_METRIC_CRPS:
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_dev2host(src_tensor->data_gpu, src_tensor->data,
                                       sz);
@@ -198,7 +198,7 @@ void bcnn_compute_error(bcnn_cost_param *param, bcnn_tensor *src_tensor,
                 bcnn_dot(sz, dst_tensor->grad_data, dst_tensor->grad_data);
             bh_free(input_cpu);
             break;
-        case COST_LOGLOSS:
+        case BCNN_METRIC_LOGLOSS:
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_dev2host(src_tensor->data_gpu, src_tensor->data,
                                       sz);
@@ -215,7 +215,7 @@ void bcnn_compute_error(bcnn_cost_param *param, bcnn_tensor *src_tensor,
                 }
             }
             break;
-        case COST_DICE:
+        case BCNN_METRIC_DICE:
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_dev2host(src_tensor->data_gpu, src_tensor->data,
                                       sz);
@@ -248,10 +248,10 @@ void bcnn_forward_cost_layer(bcnn_net *net, bcnn_node *node) {
         return;
     }
     switch (param->loss) {
-        case EUCLIDEAN_LOSS:
+        case BCNN_LOSS_EUCLIDEAN:
             bcnn_euclidean_loss_forward(src_tensor, label, dst_tensor);
             break;
-        case LIFTED_STRUCT_LOSS:
+        case BCNN_LOSS_LIFTED_STRUCT:
             bcnn_lifted_struct_loss_forward(net, node);
             break;
     }
@@ -266,10 +266,10 @@ void bcnn_backward_cost_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     bcnn_cost_param *param = (bcnn_cost_param *)node->param;
     switch (param->loss) {
-        case EUCLIDEAN_LOSS:
+        case BCNN_LOSS_EUCLIDEAN:
             bcnn_euclidean_loss_backward(src_tensor, dst_tensor, param);
             break;
-        case LIFTED_STRUCT_LOSS:
+        case BCNN_LOSS_LIFTED_STRUCT:
             bcnn_lifted_struct_loss_backward(net, node);
             break;
     }

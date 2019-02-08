@@ -44,6 +44,14 @@ bcnn_status bcnn_loader_cifar10_init(bcnn_loader *iter, bcnn_net *net,
     iter->input_uchar = (unsigned char *)calloc(
         iter->input_width * iter->input_height * iter->input_depth,
         sizeof(unsigned char));
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx,
+        net->tensors[0].w > 0 && net->tensors[0].h > 0 && net->tensors[0].c > 0,
+        BCNN_INVALID_PARAMETER,
+        "Input's width, height and channels must be > 0");
+    iter->input_net = (uint8_t *)calloc(
+        net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
+        sizeof(uint8_t));
     iter->f_input = f_bin;
 
     return BCNN_SUCCESS;
@@ -54,12 +62,13 @@ void bcnn_loader_cifar10_terminate(bcnn_loader *iter) {
         fclose(iter->f_input);
     }
     bh_free(iter->input_uchar);
+    bh_free(iter->input_net);
 }
 
 bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
                                      int idx) {
     unsigned char l;
-    if (net->mode == TRAIN) {
+    if (net->mode == BCNN_MODE_TRAIN) {
         int rand_skip = /*(int)(10.0f * (float)rand() / RAND_MAX) + 1*/ 0;
         for (int i = 0; i < rand_skip; ++i) {
             if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0) {
@@ -103,7 +112,7 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
         iter->input_width * iter->input_depth);*/
 
     // Data augmentation
-    if (net->mode == TRAIN) {
+    if (net->mode == BCNN_MODE_TRAIN) {
         int use_buffer_img = (net->data_aug.range_shift_x != 0 ||
                               net->data_aug.range_shift_y != 0 ||
                               net->data_aug.rotation_range != 0 ||
@@ -131,11 +140,11 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
                        iter->input_width * iter->input_depth,
                        (iter->input_width - net->tensors[0].w) / 2,
                        (iter->input_height - net->tensors[0].h) / 2,
-                       net->input_buffer, net->tensors[0].w, net->tensors[0].h,
+                       iter->input_net, net->tensors[0].w, net->tensors[0].h,
                        net->tensors[0].w * net->tensors[0].c,
                        net->tensors[0].c);
         // Map [0;255] uint8 values to [-1;1] float values
-        bcnn_convert_img_to_float(net->input_buffer, net->tensors[0].w,
+        bcnn_convert_img_to_float(iter->input_net, net->tensors[0].w,
                                   net->tensors[0].h, net->tensors[0].c,
                                   1 / 127.5f, net->data_aug.swap_to_bgr, 127.5f,
                                   127.5f, 127.5f, x);
@@ -149,7 +158,7 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
     // bip_write_image("test1.png", tmp_buf, net->tensors[0].w,
     // net->tensors[0].h, net->tensors[0].c, net->tensors[0].w *
     // net->tensors[0].c);
-    if (net->mode != PREDICT) {
+    if (net->mode != BCNN_MODE_PREDICT) {
         int label_sz = bcnn_tensor_size3d(&net->tensors[1]);
         float *y = net->tensors[1].data + idx * label_sz;
         memset(y, 0, label_sz * sizeof(float));

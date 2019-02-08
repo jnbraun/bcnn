@@ -100,28 +100,6 @@ typedef enum { NEAREST_NEIGHBOR, BILINEAR } bip_interpolation;
 
 const char *bip_status_string(bip_status status);
 
-#define BIP_CHECK_STATUS(err)                                        \
-    do {                                                             \
-        if ((err) != BIP_SUCCESS) {                                  \
-            fprintf(stderr, "[ERROR] %s\n", bip_status_string(err)); \
-            return err;                                              \
-        }                                                            \
-    } while (0)
-
-#define BIP_CHECK_PTR(p)                     \
-    do {                                     \
-        if (((void *)p) == ((void *)NULL)) { \
-            return BIP_INVALID_PTR;          \
-        }                                    \
-    } while (0)
-
-#define BIP_CHECK_SIZE(size)         \
-    do {                             \
-        if (size <= 0) {             \
-            return BIP_INVALID_SIZE; \
-        }                            \
-    } while (0)
-
 /**
  * \brief   Convert a rgb image into a gray image.
  *

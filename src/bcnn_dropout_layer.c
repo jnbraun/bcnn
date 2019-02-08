@@ -47,7 +47,7 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate,
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
                        "Dropout layer: invalid input node name %s", src_id);
 
-    node.type = DROPOUT;
+    node.type = BCNN_LAYER_DROPOUT;
     node.param_size = sizeof(bcnn_dropout_param);
     node.param = (bcnn_dropout_param *)calloc(1, node.param_size);
     bcnn_dropout_param *param = (bcnn_dropout_param *)node.param;
@@ -77,7 +77,7 @@ void bcnn_forward_dropout_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_dropout_param *param = (bcnn_dropout_param *)node->param;
     int sz = bcnn_tensor_size(src_tensor);
 
-    if (net->mode != TRAIN) {
+    if (net->mode != BCNN_MODE_TRAIN) {
         return;
     }
     for (int i = 0; i < sz; ++i) {

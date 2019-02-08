@@ -61,7 +61,7 @@ bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, const char *src_id,
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    node.type = UPSAMPLE;
+    node.type = BCNN_LAYER_UPSAMPLE;
     node.param_size = sizeof(bcnn_upsample_param);
     node.param = (bcnn_upsample_param *)calloc(1, node.param_size);
     bcnn_upsample_param *param = (bcnn_upsample_param *)node.param;

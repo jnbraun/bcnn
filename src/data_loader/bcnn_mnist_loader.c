@@ -65,6 +65,14 @@ bcnn_status bcnn_loader_mnist_init(bcnn_loader *iter, bcnn_net *net,
                        "must be the same");
     iter->input_uchar = (unsigned char *)calloc(
         iter->input_width * iter->input_height, sizeof(unsigned char));
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx,
+        net->tensors[0].w > 0 && net->tensors[0].h > 0 && net->tensors[0].c > 0,
+        BCNN_INVALID_PARAMETER,
+        "Input's width, height and channels must be > 0");
+    iter->input_net = (uint8_t *)calloc(
+        net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
+        sizeof(uint8_t));
     rewind(iter->f_input);
     rewind(iter->f_label);
 
@@ -79,6 +87,7 @@ void bcnn_loader_mnist_terminate(bcnn_loader *iter) {
         fclose(iter->f_label);
     }
     bh_free(iter->input_uchar);
+    bh_free(iter->input_net);
 }
 
 bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
@@ -107,10 +116,11 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            num_img, num_labels);
-        BCNN_CHECK_AND_LOG(
-            net->log_ctx, (net->input_height == iter->input_height &&
-                           net->input_width == iter->input_width),
-            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(net->log_ctx,
+                           (net->tensors[0].h == iter->input_height &&
+                            net->tensors[0].w == iter->input_width),
+                           BCNN_INVALID_DATA,
+                           "MNIST data: incoherent image width and height");
         iter->n_samples = num_img;
     }
 
@@ -122,7 +132,7 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
               iter->f_input);
 
     // Data augmentation
-    if (net->mode == TRAIN) {
+    if (net->mode == BCNN_MODE_TRAIN) {
         int use_buffer_img = (net->data_aug.range_shift_x != 0 ||
                               net->data_aug.range_shift_y != 0 ||
                               net->data_aug.rotation_range != 0 ||
@@ -152,11 +162,11 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
                        iter->input_width * iter->input_depth,
                        (iter->input_width - net->tensors[0].w) / 2,
                        (iter->input_height - net->tensors[0].h) / 2,
-                       net->input_buffer, net->tensors[0].w, net->tensors[0].h,
+                       iter->input_net, net->tensors[0].w, net->tensors[0].h,
                        net->tensors[0].w * net->tensors[0].c,
                        net->tensors[0].c);
         // Map [0;255] uint8 values to [-1;1] float values
-        bcnn_convert_img_to_float(net->input_buffer, net->tensors[0].w,
+        bcnn_convert_img_to_float(iter->input_net, net->tensors[0].w,
                                   net->tensors[0].h, net->tensors[0].c,
                                   1 / 127.5f, net->data_aug.swap_to_bgr, 127.5f,
                                   127.5f, 127.5f, x);
@@ -170,7 +180,7 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
     // bip_write_image("test1.png", tmp_buf, net->tensors[0].w,
     // net->tensors[0].h, net->tensors[0].c, net->tensors[0].w *
     // net->tensors[0].c);
-    if (net->mode != PREDICT) {
+    if (net->mode != BCNN_MODE_PREDICT) {
         int label_sz = bcnn_tensor_size3d(&net->tensors[1]);
         float *y = net->tensors[1].data + idx * label_sz;
         memset(y, 0, label_sz * sizeof(float));

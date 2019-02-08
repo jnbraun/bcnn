@@ -209,7 +209,7 @@ void bcnn_forward_batchnorm_gpu(bcnn_tensor *src_tensor,
     bcnn_cuda_copy_f32(sz * batch_size, dst_tensor->data_gpu, 1, workspace_gpu,
                        1);
 
-    if (mode == TRAIN) {
+    if (mode == BCNN_MODE_TRAIN) {
 #ifdef BCNN_USE_CUDNN
         bcnn_cudnn_check(cudnnBatchNormalizationForwardTraining(
             bcnn_cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &alpha, &beta,
@@ -306,7 +306,7 @@ void bcnn_backward_batchnorm_gpu(
     float a_data = 1.0f, a_param = 1.0f;
     float b_data = 0.0f, b_param = 1.0f;
 #endif
-    if (mode != TRAIN) {
+    if (mode != BCNN_MODE_TRAIN) {
         saved_mean->data_gpu = bn_mean->data_gpu;
         saved_variance->data_gpu = bn_var->data_gpu;
     }

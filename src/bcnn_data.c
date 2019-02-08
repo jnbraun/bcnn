@@ -88,11 +88,10 @@ static bcnn_status bcnn_load_image_from_path(bcnn_net *net, char *path, int w,
     }
 
     if (w_img != w || h_img != h) {
-        if (net->mode == PREDICT ||
-            net->mode == VALID) {  // state predict, always center crop
+        if (net->mode == BCNN_MODE_PREDICT || net->mode == BCNN_MODE_VALID) {
             x_ul = (w_img - w) / 2;
             y_ul = (h_img - h) / 2;
-        } else {  // state train, random crop
+        } else {  // mode train, random crop
             x_ul = rand_between(0, (w_img - w));
             y_ul = rand_between(0, (h_img - h));
         }
@@ -238,7 +237,7 @@ void bcnn_fill_input_tensor(bcnn_net *net, bcnn_loader *iter, char *path_img,
         net, path_img, net->tensors[0].w, net->tensors[0].h, net->tensors[0].c,
         iter->input_uchar, &net->data_aug.shift_x, &net->data_aug.shift_y);
     // Data augmentation
-    if (net->mode == TRAIN) {
+    if (net->mode == BCNN_MODE_TRAIN) {
         int use_buffer_img = (net->data_aug.range_shift_x != 0 ||
                               net->data_aug.range_shift_y != 0 ||
                               net->data_aug.rotation_range != 0 ||
@@ -298,7 +297,7 @@ bcnn_status bcnn_loader_next(bcnn_net *net, bcnn_loader *iter) {
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
                               bcnn_tensor_size(&net->tensors[0]));
-    if (net->mode != PREDICT) {
+    if (net->mode != BCNN_MODE_PREDICT) {
         bcnn_cuda_memcpy_host2dev(net->tensors[1].data_gpu,
                                   net->tensors[1].data,
                                   bcnn_tensor_size(&net->tensors[1]));

@@ -62,7 +62,7 @@ bcnn_status bcnn_add_deconvolutional_layer(
     }
 
     // Fill nodes param
-    node.type = DECONVOLUTIONAL;
+    node.type = BCNN_LAYER_TRANSPOSE_CONV2D;
     node.param_size = sizeof(bcnn_deconv_param);
     node.param = (bcnn_deconv_param *)calloc(1, node.param_size);
     bcnn_deconv_param *param = (bcnn_deconv_param *)node.param;
@@ -114,7 +114,7 @@ bcnn_status bcnn_add_deconvolutional_layer(
     sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
          net->tensors[node.src[0]].c * size * size;
     param->conv_workspace = (float *)calloc(sz, sizeof(float));
-    if (net->learner.optimizer == ADAM) {
+    if (net->learner.optimizer == BCNN_OPTIM_ADAM) {
         int weights_size = bcnn_tensor_size(&weights);
         param->adam_m = (float *)calloc(weights_size, sizeof(float));
         param->adam_v = (float *)calloc(weights_size, sizeof(float));
@@ -123,7 +123,7 @@ bcnn_status bcnn_add_deconvolutional_layer(
     sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
          net->tensors[node.src[0]].c * size * size;
     param->conv_workspace_gpu = bcnn_cuda_memcpy_f32(param->conv_workspace, sz);
-    if (net->learner.optimizer == ADAM) {
+    if (net->learner.optimizer == BCNN_OPTIM_ADAM) {
         int weights_size = bcnn_tensor_size(&weights);
         param->adam_m_gpu = bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
         param->adam_v_gpu = bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
@@ -347,7 +347,7 @@ void bcnn_update_deconv_layer(bcnn_net *net, bcnn_node *node) {
     int weights_size = bcnn_tensor_size(weights);
     int biases_size = bcnn_tensor_size(biases);
     switch (net->learner.optimizer) {
-        case ADAM: {
+        case BCNN_OPTIM_ADAM: {
 #ifdef BCNN_USE_CUDA
             bcnn_adam_update_gpu(weights->data_gpu, biases->data_gpu,
                                  weights->grad_data_gpu, biases->grad_data_gpu,
@@ -366,7 +366,7 @@ void bcnn_update_deconv_layer(bcnn_net *net, bcnn_node *node) {
 #endif
             break;
         }
-        case SGD: {
+        case BCNN_OPTIM_SGD: {
 #ifdef BCNN_USE_CUDA
             bcnn_sgd_update_gpu(weights->data_gpu, biases->data_gpu,
                                 weights->grad_data_gpu, biases->grad_data_gpu,

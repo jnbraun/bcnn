@@ -37,6 +37,11 @@ bcnn_status bcnn_loader_list_classif_init(bcnn_loader *iter, bcnn_net *net,
         return BCNN_INVALID_PARAMETER;
     }
     // Allocate img buffer
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx,
+        net->tensors[0].w > 0 && net->tensors[0].h > 0 && net->tensors[0].c > 0,
+        BCNN_INVALID_PARAMETER,
+        "Input's width, height and channels must be > 0");
     iter->input_uchar = (unsigned char *)calloc(
         net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
         sizeof(unsigned char));
@@ -64,14 +69,14 @@ bcnn_status bcnn_loader_list_classif_next(bcnn_loader *iter, bcnn_net *net,
     }
     char **tok = NULL;
     int num_toks = bh_strsplit(line, ' ', &tok);
-    if (net->mode != PREDICT) {
+    if (net->mode != BCNN_MODE_PREDICT) {
         BCNN_CHECK_AND_LOG(net->log_ctx, num_toks == 2, BCNN_INVALID_DATA,
                            "Wrong data format for classification");
     }
     // Load image, perform data augmentation if required and fill input tensor
     bcnn_fill_input_tensor(net, iter, tok[0], idx);
     // Fill label tensor (one-hot encoding)
-    if (net->mode != PREDICT) {
+    if (net->mode != BCNN_MODE_PREDICT) {
         int label_sz = bcnn_tensor_size3d(&net->tensors[1]);
         float *y = net->tensors[1].data + idx * label_sz;
         memset(y, 0, label_sz * sizeof(float));

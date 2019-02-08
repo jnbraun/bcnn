@@ -40,7 +40,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     char *line = NULL, *curr_layer = NULL;
     char **tok = NULL;
     int nb_lines = 0, nb_layers = 0;
-    bcnn_padding padding_type = PADDING_SAME;
+    bcnn_padding padding_type = BCNN_PADDING_SAME;
     int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0, num_groups = 1,
         batchnorm = 0;
     int in_w = 0, in_h = 0, in_c = 0;
@@ -48,10 +48,10 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     int *anchors_mask = NULL;
     float *anchors = NULL;
     float alpha, beta, k;
-    bcnn_activation a = NONE;
-    bcnn_filler_type init = XAVIER;
-    bcnn_loss_metric cost = COST_SSE;
-    bcnn_loss loss = EUCLIDEAN_LOSS;
+    bcnn_activation a = BCNN_ACT_NONE;
+    bcnn_filler_type init = BCNN_FILLER_XAVIER;
+    bcnn_loss_metric cost = BCNN_METRIC_SSE;
+    bcnn_loss loss = BCNN_LOSS_EUCLIDEAN;
     float rate = 1.0f;
     int n_tok;
     char *src_id = NULL, *dst_id = NULL, *src_id2 = NULL;
@@ -72,16 +72,13 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     if (nb_layers == 1) {
                         BCNN_CHECK_AND_LOG(
                             net->log_ctx,
-                            net->input_width > 0 && net->input_height > 0 &&
-                                net->input_channels > 0,
+                            net->tensors[0].w > 0 && net->tensors[0].h > 0 &&
+                                net->tensors[0].c > 0,
                             BCNN_INVALID_PARAMETER,
                             "Input's width, height and channels must be > 0");
-                        BCNN_CHECK_AND_LOG(net->log_ctx, net->batch_size > 0,
+                        BCNN_CHECK_AND_LOG(net->log_ctx, net->tensors[0].n > 0,
                                            BCNN_INVALID_PARAMETER,
                                            "Batch size must be > 0");
-                        bcnn_set_input_shape(
-                            net, net->input_width, net->input_height,
-                            net->input_channels, net->batch_size);
                     }
                     BCNN_CHECK_AND_LOG(
                         net->log_ctx, src_id, BCNN_INVALID_PARAMETER,
@@ -207,7 +204,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     bh_free(src_id);
                     bh_free(src_id2);
                     bh_free(dst_id);
-                    a = NONE;
+                    a = BCNN_ACT_NONE;
                 }
                 curr_layer = line;
                 nb_layers++;
@@ -225,16 +222,16 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                 if (strcmp(tok[0], "task") == 0 ||
                     strcmp(tok[0], "mode") == 0) {
                     if (strcmp(tok[1], "train") == 0)
-                        net->mode = TRAIN;
+                        net->mode = BCNN_MODE_TRAIN;
                     else if (strcmp(tok[1], "predict") == 0) {
-                        net->mode = PREDICT;
+                        net->mode = BCNN_MODE_PREDICT;
                     } else if (strcmp(tok[1], "valid") == 0) {
-                        net->mode = PREDICT;
+                        net->mode = BCNN_MODE_PREDICT;
                     } else {
                         BCNN_ERROR(
                             net->log_ctx, BCNN_INVALID_PARAMETER,
                             "Invalid parameter for task, available parameters: "
-                            "TRAIN, PREDICT, VALID");
+                            "'train', 'predict', 'valid'");
                     }
                 } else if (strcmp(tok[0], "data_format") == 0) {
                     if (strcmp(tok[1], "mnist") == 0) {
@@ -352,82 +349,82 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     outputs = atoi(tok[1]);
                 else if (strcmp(tok[0], "padding_type") == 0) {
                     if (strcmp(tok[1], "same") == 0)
-                        padding_type = PADDING_SAME;
+                        padding_type = BCNN_PADDING_SAME;
                     else if (strcmp(tok[1], "valid") == 0)
-                        padding_type = PADDING_VALID;
+                        padding_type = BCNN_PADDING_VALID;
                     else if (strcmp(tok[1], "caffe") == 0)
-                        padding_type = PADDING_CAFFE;
+                        padding_type = BCNN_PADDING_CAFFE;
                 } else if (strcmp(tok[0], "function") == 0) {
                     if (strcmp(tok[1], "relu") == 0)
-                        a = RELU;
+                        a = BCNN_ACT_RELU;
                     else if (strcmp(tok[1], "tanh") == 0)
-                        a = TANH;
+                        a = BCNN_ACT_TANH;
                     else if (strcmp(tok[1], "ramp") == 0)
-                        a = RAMP;
+                        a = BCNN_ACT_RAMP;
                     else if (strcmp(tok[1], "clamp") == 0)
-                        a = CLAMP;
+                        a = BCNN_ACT_CLAMP;
                     else if (strcmp(tok[1], "softplus") == 0)
-                        a = SOFTPLUS;
+                        a = BCNN_ACT_SOFTPLUS;
                     else if (strcmp(tok[1], "leaky_relu") == 0 ||
                              strcmp(tok[1], "lrelu") == 0)
-                        a = LRELU;
+                        a = BCNN_ACT_LRELU;
                     else if (strcmp(tok[1], "prelu") == 0)
-                        a = PRELU;
+                        a = BCNN_ACT_PRELU;
                     else if (strcmp(tok[1], "abs") == 0)
-                        a = ABS;
+                        a = BCNN_ACT_ABS;
                     else if (strcmp(tok[1], "none") == 0)
-                        a = NONE;
+                        a = BCNN_ACT_NONE;
                     else {
                         BCNN_WARNING(
                             net->log_ctx,
                             "Unknown activation type %s, going with ReLU",
                             tok[1]);
-                        a = RELU;
+                        a = BCNN_ACT_RELU;
                     }
                 } else if (strcmp(tok[0], "init") == 0) {
                     if (strcmp(tok[1], "xavier") == 0)
-                        init = XAVIER;
+                        init = BCNN_FILLER_XAVIER;
                     else if (strcmp(tok[1], "msra") == 0)
-                        init = MSRA;
+                        init = BCNN_FILLER_MSRA;
                     else {
                         BCNN_WARNING(
                             net->log_ctx,
                             "Unknown init type %s, going with xavier init",
                             tok[1]);
-                        init = XAVIER;
+                        init = BCNN_FILLER_XAVIER;
                     }
                 } else if (strcmp(tok[0], "metric") == 0) {
                     if (strcmp(tok[1], "error") == 0)
-                        cost = COST_ERROR;
+                        cost = BCNN_METRIC_ERROR_RATE;
                     else if (strcmp(tok[1], "logloss") == 0)
-                        cost = COST_LOGLOSS;
+                        cost = BCNN_METRIC_LOGLOSS;
                     else if (strcmp(tok[1], "sse") == 0)
-                        cost = COST_SSE;
+                        cost = BCNN_METRIC_SSE;
                     else if (strcmp(tok[1], "mse") == 0)
-                        cost = COST_MSE;
+                        cost = BCNN_METRIC_MSE;
                     else if (strcmp(tok[1], "crps") == 0)
-                        cost = COST_CRPS;
+                        cost = BCNN_METRIC_CRPS;
                     else if (strcmp(tok[1], "dice") == 0)
-                        cost = COST_DICE;
+                        cost = BCNN_METRIC_DICE;
                     else {
                         BCNN_WARNING(net->log_ctx,
                                      "Unknown cost metric %s, going with sse",
                                      tok[1]);
-                        cost = COST_SSE;
+                        cost = BCNN_METRIC_SSE;
                     }
                 } else if (strcmp(tok[0], "loss") == 0) {
                     if (strcmp(tok[1], "l2") == 0 ||
                         strcmp(tok[1], "euclidean") == 0) {
-                        loss = EUCLIDEAN_LOSS;
+                        loss = BCNN_LOSS_EUCLIDEAN;
                     } else if (strcmp(tok[1], "lifted_struct_similarity") ==
                                0) {
-                        loss = LIFTED_STRUCT_LOSS;
+                        loss = BCNN_LOSS_LIFTED_STRUCT;
                     } else {
                         BCNN_WARNING(
                             net->log_ctx,
                             "Unknown loss %s, going with euclidean loss",
                             tok[1]);
-                        loss = EUCLIDEAN_LOSS;
+                        loss = BCNN_LOSS_EUCLIDEAN;
                     }
                 } else {
                     bcnn_set_param(net, tok[0], tok[1]);
@@ -481,7 +478,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
 
 int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
     float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
-    int i = 0, nb_iter = net->learner.max_batches;
+    int nb_iter = net->learner.max_batches;
     int batch_size = net->batch_size;
     bh_timer t = {0};
     bcnn_loader iter_data = {0};
@@ -494,7 +491,7 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
     }
 
     bh_timer_start(&t);
-    for (i = 0; i < nb_iter; ++i) {
+    for (int i = 0; i < nb_iter; ++i) {
         bcnn_train_on_batch(net, &iter_data, &error_batch);
         sum_error += error_batch;
 
@@ -531,17 +528,13 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
 
 int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
                    int dump_pred) {
-    int i = 0, j = 0, n = 0, k = 0;
-    float *out = NULL;
-    float err = 0.0f, error_batch = 0.0f;
+    float err = 0.0f;
     FILE *f = NULL;
     int batch_size = net->batch_size;
     char out_pred_name[128] = {0};
     bcnn_loader iter_data = {0};
-    int out_w = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].w;
-    int out_h = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].h;
-    int out_c = net->tensors[net->nodes[net->num_nodes - 2].dst[0]].c;
-    int output_size = out_w * out_h * out_c;
+    int output_size = bcnn_tensor_size3d(
+        &net->tensors[net->nodes[net->num_nodes - 2].dst[0]]);
     unsigned char *dump_img = (unsigned char *)calloc(
         net->tensors[0].w * net->tensors[0].h * 3, sizeof(unsigned char));
 
@@ -560,8 +553,10 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
         }
     }
 
-    n = param->nb_pred / batch_size;
-    for (i = 0; i < n; ++i) {
+    int n = param->nb_pred / batch_size;
+    for (int i = 0; i < n; ++i) {
+        float *out = NULL;
+        float error_batch = 0.0f;
         bcnn_predict_on_batch(net, &iter_data, &out, &error_batch);
         err += error_batch;
         // Dump predictions
@@ -569,9 +564,10 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
             if (iter_data.type == BCNN_LOAD_DETECTION_LIST) {
                 for (int b = 0; b < net->batch_size; ++b) {
                     int num_dets = 0;
-                    yolo_detection *dets = bcnn_yolo_get_detections(
-                        net, b, net->input_width, net->input_height,
-                        net->input_width, net->input_height, 0.5, 1, &num_dets);
+                    bcnn_yolo_detection *dets = bcnn_yolo_get_detections(
+                        net, b, net->tensors[0].w, net->tensors[0].h,
+                        net->tensors[0].w, net->tensors[0].h, 0.5, 1,
+                        &num_dets);
                     int sz = bcnn_tensor_size3d(&net->tensors[0]);
                     if (net->tensors[0].c == 3) {
                         memcpy(dump_img, net->tensors[0].data + b * sz, sz);
@@ -587,17 +583,18 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
                         }
                     }
                     int sz_label = bcnn_tensor_size3d(&net->tensors[1]);
-                    if (net->nodes[net->num_nodes - 1].type == YOLO) {
+                    if (net->nodes[net->num_nodes - 1].type ==
+                        BCNN_LAYER_YOLOV3) {
                         bcnn_node *node = &net->nodes[net->num_nodes - 1];
                         bcnn_yolo_param *yolo_param =
                             (bcnn_yolo_param *)node->param;
-                        for (j = 0; j < yolo_param->classes; ++j) {
+                        for (int j = 0; j < yolo_param->classes; ++j) {
                             // truth
                             unsigned char green[3] = {0, 255, 0};
                             for (int t = 0; t < BCNN_DETECTION_MAX_BOXES; ++t) {
                                 bcnn_draw_color_box(
-                                    dump_img, net->input_width,
-                                    net->input_height,
+                                    dump_img, net->tensors[0].w,
+                                    net->tensors[0].h,
                                     net->tensors[1].data[b * sz_label + t * 5],
                                     net->tensors[1]
                                         .data[b * sz_label + t * 5 + 1],
@@ -613,7 +610,7 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
                         if (dets[d].prob[0] > 0) {
                             unsigned char blue[3] = {0, 0, 255};
                             bcnn_draw_color_box(
-                                dump_img, net->input_width, net->input_height,
+                                dump_img, net->tensors[0].w, net->tensors[0].h,
                                 dets[d].bbox.x, dets[d].bbox.y, dets[d].bbox.w,
                                 dets[d].bbox.h, blue);
                         }
@@ -625,8 +622,8 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
                     bh_free(dets);
                 }
             } else {
-                for (j = 0; j < net->batch_size; ++j) {
-                    for (k = 0; k < output_size; ++k)
+                for (int j = 0; j < net->batch_size; ++j) {
+                    for (int k = 0; k < output_size; ++k)
                         fprintf(f, "%f ", out[j * output_size + k]);
                     fprintf(f, "\n");
                 }
@@ -637,12 +634,14 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     // Process last instances
     n = param->nb_pred % net->batch_size;
     if (n > 0) {
-        for (i = 0; i < n; ++i) {
+        for (int i = 0; i < n; ++i) {
+            float *out = NULL;
+            float error_batch = 0.0f;
             bcnn_predict_on_batch(net, &iter_data, &out, &error_batch);
             err += error_batch;
             // Dump predictions
             if (dump_pred) {
-                for (k = 0; k < output_size; ++k) {
+                for (int k = 0; k < output_size; ++k) {
                     fprintf(f, "%f ", out[k]);
                 }
                 fprintf(f, "\n");
@@ -679,7 +678,7 @@ int run(char *config_file) {
     // Initialize network from config file
     BCNN_CHECK_STATUS(bcnncl_init_from_config(net, config_file, &param));
     BCNN_CHECK_STATUS(bcnn_compile_net(net));
-    if (net->mode == TRAIN) {
+    if (net->mode == BCNN_MODE_TRAIN) {
         if (param.input_model != NULL) {
             fprintf(stderr, "[INFO] Loading pre-trained model %s\n",
                     param.input_model);
@@ -688,15 +687,15 @@ int run(char *config_file) {
         BCNN_INFO(net->log_ctx, "Start training...");
         BCNN_CHECK_STATUS(bcnncl_train(net, &param, &error_train));
         if (param.pred_out != NULL) {
-            net->mode = VALID;
+            net->mode = BCNN_MODE_VALID;
             BCNN_CHECK_STATUS(bcnncl_predict(net, &param, &error_valid, 1));
-            net->mode = TRAIN;
+            net->mode = BCNN_MODE_TRAIN;
         }
         if (param.output_model != NULL) {
             bcnn_write_model(net, param.output_model);
         }
         BCNN_INFO(net->log_ctx, "Training ended successfully");
-    } else if (net->mode == PREDICT) {
+    } else if (net->mode == BCNN_MODE_PREDICT) {
         if (param.input_model != NULL)
             bcnn_load_model(net, param.input_model);
         else {

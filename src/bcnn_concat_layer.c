@@ -40,7 +40,7 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
                        BCNN_INVALID_PARAMETER,
                        "Concat layer can't be the first layer of the network");
 
-    node.type = CONCAT;
+    node.type = BCNN_LAYER_CONCAT;
     node.forward = bcnn_forward_concat_layer;
     node.backward = bcnn_backward_concat_layer;
     for (i = net->num_tensors - 1; i >= 0; --i) {

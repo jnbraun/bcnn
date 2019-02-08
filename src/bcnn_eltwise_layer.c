@@ -37,7 +37,7 @@ bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
     bcnn_tensor dst_tensor = {0};
     int is_src_node1_found = 0, is_src_node2_found = 0;
 
-    node.type = ELTWISE;
+    node.type = BCNN_LAYER_ELTWISE;
     node.param_size = sizeof(bcnn_eltwise_param);
     node.param = (bcnn_eltwise_param *)calloc(1, sizeof(node.param_size));
     bcnn_eltwise_param *param = (bcnn_eltwise_param *)node.param;

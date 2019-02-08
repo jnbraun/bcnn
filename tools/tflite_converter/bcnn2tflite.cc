@@ -80,7 +80,7 @@ void add_reshape_node(bcnn_net* net, int dst_n, int dst_c, int dst_h, int dst_w,
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
-    node.type = RESHAPE;
+    node.type = BCNN_LAYER_RESHAPE;
     bcnn_net_add_node(net, node);
     return;
 }
@@ -144,7 +144,7 @@ export_tensors(bcnn_net* net, FlatBufferBuilder* builder,
         std::vector<int> shape = {net->tensors[i].n, net->tensors[i].h,
                                   net->tensors[i].w, net->tensors[i].c};
         for (int n = 0; n < net->num_nodes; ++n) {
-            if (net->nodes[n].type == FULL_CONNECTED) {
+            if (net->nodes[n].type == BCNN_LAYER_FULL_CONNECTED) {
                 if (net->nodes[n].src[1] == i) {
                     // Special case for FullyConnected as TFlite only
                     // supports 2-D tensor as FullyConnected weights shape
@@ -153,16 +153,17 @@ export_tensors(bcnn_net* net, FlatBufferBuilder* builder,
                                                     net->tensors[i].h *
                                                     net->tensors[i].w};
                 }
-            } else if (net->nodes[n].type == ACTIVATION) {
+            } else if (net->nodes[n].type == BCNN_LAYER_ACTIVATION) {
                 bcnn_activation_param* param =
                     (bcnn_activation_param*)net->nodes[n].param;
-                if (param->activation == PRELU) {
+                if (param->activation == BCNN_ACT_PRELU) {
                     if (net->nodes[n].src[1] == i) {
                         // Special case for Prelu as TFlite only
                         // supports 3-D tensor as Prelu slope(=alpha) shape
                         shape.clear();
-                        shape = {1, 1, net->tensors[i].c * net->tensors[i].h *
-                                           net->tensors[i].w};
+                        shape = {1, 1,
+                                 net->tensors[i].c * net->tensors[i].h *
+                                     net->tensors[i].w};
                     }
                 }
             }
@@ -199,24 +200,27 @@ flatbuffers::Offset<flatbuffers::Vector<int32_t>> export_output_tensors(
 
 static const std::map<bcnn_layer_type, tflite::BuiltinOperator>
     bcnn_tflite_ops_map = {
-        {CONVOLUTIONAL, tflite::BuiltinOperator_CONV_2D},
-        {DECONVOLUTIONAL, tflite::BuiltinOperator_TRANSPOSE_CONV},
-        {DEPTHWISE_CONV, tflite::BuiltinOperator_DEPTHWISE_CONV_2D},
-        {FULL_CONNECTED, tflite::BuiltinOperator_FULLY_CONNECTED},
-        {MAXPOOL, tflite::BuiltinOperator_MAX_POOL_2D},
-        {AVGPOOL, tflite::BuiltinOperator_AVERAGE_POOL_2D},
-        {SOFTMAX, tflite::BuiltinOperator_SOFTMAX},
-        {CONCAT, tflite::BuiltinOperator_CONCATENATION},
-        {RESHAPE, tflite::BuiltinOperator_RESHAPE}};
+        {BCNN_LAYER_CONV2D, tflite::BuiltinOperator_CONV_2D},
+        {BCNN_LAYER_TRANSPOSE_CONV2D, tflite::BuiltinOperator_TRANSPOSE_CONV},
+        {BCNN_LAYER_DEPTHWISE_CONV2D,
+         tflite::BuiltinOperator_DEPTHWISE_CONV_2D},
+        {BCNN_LAYER_FULL_CONNECTED, tflite::BuiltinOperator_FULLY_CONNECTED},
+        {BCNN_LAYER_MAXPOOL, tflite::BuiltinOperator_MAX_POOL_2D},
+        {BCNN_LAYER_AVGPOOL, tflite::BuiltinOperator_AVERAGE_POOL_2D},
+        {BCNN_LAYER_SOFTMAX, tflite::BuiltinOperator_SOFTMAX},
+        {BCNN_LAYER_CONCAT, tflite::BuiltinOperator_CONCATENATION},
+        {BCNN_LAYER_RESHAPE, tflite::BuiltinOperator_RESHAPE}};
 
 static const std::map<bcnn_activation, tflite::BuiltinOperator>
-    bcnn_tflite_act_map = {{RELU, tflite::BuiltinOperator_RELU},
-                           {LOGISTIC, tflite::BuiltinOperator_LOGISTIC},
-                           {PRELU, tflite::BuiltinOperator_PRELU}};
+    bcnn_tflite_act_map = {
+        {BCNN_ACT_RELU, tflite::BuiltinOperator_RELU},
+        {BCNN_ACT_LOGISTIC, tflite::BuiltinOperator_LOGISTIC},
+        {BCNN_ACT_PRELU, tflite::BuiltinOperator_PRELU}};
 
 static const std::map<bcnn_activation, tflite::ActivationFunctionType>
-    bcnn_tflite_fused_act_map = {{NONE, tflite::ActivationFunctionType_NONE},
-                                 {RELU, tflite::ActivationFunctionType_RELU}};
+    bcnn_tflite_fused_act_map = {
+        {BCNN_ACT_NONE, tflite::ActivationFunctionType_NONE},
+        {BCNN_ACT_RELU, tflite::ActivationFunctionType_RELU}};
 
 flatbuffers::Offset<
     flatbuffers::Vector<flatbuffers::Offset<tflite::OperatorCode>>>
@@ -224,7 +228,7 @@ export_operator_codes(bcnn_net* net, FlatBufferBuilder* builder) {
     std::vector<flatbuffers::Offset<tflite::OperatorCode>> opcode_vector;
     opcode_vector.reserve(net->num_nodes);
     for (int i = 0; i < net->num_nodes; ++i) {
-        if (net->nodes[i].type != ACTIVATION) {
+        if (net->nodes[i].type != BCNN_LAYER_ACTIVATION) {
             if (bcnn_tflite_ops_map.count(net->nodes[i].type) > 0) {
                 opcode_vector.push_back(tflite::CreateOperatorCode(
                     *builder, bcnn_tflite_ops_map.at(net->nodes[i].type), 0,
@@ -266,9 +270,9 @@ tflite::Padding resolve_padding(bcnn_net* net, int i, int size, int stride) {
             out_w_valid);
     if (out_w_valid == out_w && out_h_valid == out_h) {
         pad = tflite::Padding_VALID;
-        fprintf(stderr, "Going with VALID padding\n");
+        fprintf(stderr, "Going with Padding_VALID\n");
     } else {
-        fprintf(stderr, "Going with SAME padding\n");
+        fprintf(stderr, "Going with Padding_SAME\n");
     }
     return pad;
 }
@@ -288,17 +292,17 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
                     net->tensors[net->nodes[i].src[j]].h,
                     net->tensors[net->nodes[i].src[j]].c);
             inputs.push_back(net->nodes[i].src[j]);
-            if (net->nodes[i].type == CONVOLUTIONAL ||
-                net->nodes[i].type == DECONVOLUTIONAL ||
-                net->nodes[i].type == DEPTHWISE_CONV ||
-                net->nodes[i].type == FULL_CONNECTED) {
+            if (net->nodes[i].type == BCNN_LAYER_CONV2D ||
+                net->nodes[i].type == BCNN_LAYER_TRANSPOSE_CONV2D ||
+                net->nodes[i].type == BCNN_LAYER_DEPTHWISE_CONV2D ||
+                net->nodes[i].type == BCNN_LAYER_FULL_CONNECTED) {
                 // Set the weights and bias buffer writable
                 buffers_to_write->at(net->nodes[i].src[1]).need_to_write = true;
                 buffers_to_write->at(net->nodes[i].src[2]).need_to_write = true;
-            } else if (net->nodes[i].type == ACTIVATION) {
+            } else if (net->nodes[i].type == BCNN_LAYER_ACTIVATION) {
                 bcnn_activation_param* param =
                     (bcnn_activation_param*)net->nodes[i].param;
-                if (param->activation == PRELU) {
+                if (param->activation == BCNN_ACT_PRELU) {
                     buffers_to_write->at(net->nodes[i].src[1]).need_to_write =
                         true;
                 }
@@ -311,9 +315,9 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
         }
         tflite::BuiltinOptions type;
         flatbuffers::Offset<void> offset;
-        if (net->nodes[i].type != ACTIVATION) {
+        if (net->nodes[i].type != BCNN_LAYER_ACTIVATION) {
             switch (net->nodes[i].type) {
-                case CONVOLUTIONAL: {
+                case BCNN_LAYER_CONV2D: {
                     bcnn_conv_param* param = (bcnn_conv_param*)param;
                     tflite::Padding pad =
                         resolve_padding(net, i, param->size, param->stride);
@@ -327,7 +331,7 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
                     offset = conv2d_options.Union();
                     break;
                 }
-                case DECONVOLUTIONAL: {
+                case BCNN_LAYER_TRANSPOSE_CONV2D: {
                     bcnn_deconv_param* param = (bcnn_deconv_param*)param;
                     flatbuffers::Offset<tflite::TransposeConvOptions>
                         trans_conv_options = tflite::CreateTransposeConvOptions(
@@ -337,7 +341,7 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
                     offset = trans_conv_options.Union();
                     break;
                 }
-                case DEPTHWISE_CONV: {
+                case BCNN_LAYER_DEPTHWISE_CONV2D: {
                     bcnn_depthwise_conv_param* param =
                         (bcnn_depthwise_conv_param*)param;
                     flatbuffers::Offset<tflite::DepthwiseConv2DOptions>
@@ -350,7 +354,7 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
                     offset = dw_conv_options.Union();
                     break;
                 }
-                case FULL_CONNECTED: {
+                case BCNN_LAYER_FULL_CONNECTED: {
                     bcnn_fullc_param* param = (bcnn_fullc_param*)param;
                     flatbuffers::Offset<tflite::FullyConnectedOptions>
                         fc_options = tflite::CreateFullyConnectedOptions(
@@ -360,7 +364,7 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
                     offset = fc_options.Union();
                     break;
                 }
-                case MAXPOOL: {
+                case BCNN_LAYER_MAXPOOL: {
                     bcnn_maxpool_param* param = (bcnn_maxpool_param*)param;
                     tflite::Padding pad =
                         resolve_padding(net, i, param->size, param->stride);
@@ -368,12 +372,12 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
                         tflite::CreatePool2DOptions(
                             *builder, pad, param->stride, param->stride,
                             param->size, param->size,
-                            bcnn_tflite_fused_act_map.at(NONE));
+                            bcnn_tflite_fused_act_map.at(BCNN_ACT_NONE));
                     type = tflite::BuiltinOptions_Pool2DOptions;
                     offset = maxpool_options.Union();
                     break;
                 }
-                case AVGPOOL: {
+                case BCNN_LAYER_AVGPOOL: {
                     tflite::Padding pad = resolve_padding(
                         net, i, /*size=*/net->tensors[net->nodes[i].dst[0]].w,
                         /*stride=*/net->tensors[net->nodes[i].dst[0]].w);
@@ -383,12 +387,12 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
                             net->tensors[net->nodes[i].dst[0]].h,
                             net->tensors[net->nodes[i].dst[0]].w,
                             net->tensors[net->nodes[i].dst[0]].h,
-                            bcnn_tflite_fused_act_map.at(NONE));
+                            bcnn_tflite_fused_act_map.at(BCNN_ACT_NONE));
                     type = tflite::BuiltinOptions_Pool2DOptions;
                     offset = avgpool_options.Union();
                     break;
                 }
-                case SOFTMAX: {
+                case BCNN_LAYER_SOFTMAX: {
                     flatbuffers::Offset<tflite::SoftmaxOptions> options =
                         tflite::CreateSoftmaxOptions(*builder,
                                                      /*beta=*/1.0f);
@@ -396,7 +400,7 @@ export_operators(bcnn_net* net, std::vector<buffer_to_write>* buffers_to_write,
                     offset = options.Union();
                     break;
                 }
-                case RESHAPE: {
+                case BCNN_LAYER_RESHAPE: {
                     std::vector<int32_t> new_shape = {
                         net->tensors[net->nodes[i].dst[0]].n,
                         net->tensors[net->nodes[i].dst[0]].h,
@@ -595,10 +599,10 @@ int init_from_config(bcnn_net* net, char* config_file, config_param* param) {
     bcnn_padding padding_type;
     int num_groups = 1;
     int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0;
-    bcnn_activation a = NONE;
-    bcnn_filler_type init = XAVIER;
-    bcnn_loss_metric cost = COST_SSE;
-    bcnn_loss loss = EUCLIDEAN_LOSS;
+    bcnn_activation a = BCNN_ACT_NONE;
+    bcnn_filler_type init = BCNN_FILLER_XAVIER;
+    bcnn_loss_metric cost = BCNN_METRIC_SSE;
+    bcnn_loss loss = BCNN_LOSS_EUCLIDEAN;
     float rate = 1.0f;
     int n_tok;
     char *src_id = NULL, *dst_id = NULL;
@@ -619,16 +623,13 @@ int init_from_config(bcnn_net* net, char* config_file, config_param* param) {
                     if (nb_layers == 1) {
                         BCNN_CHECK_AND_LOG(
                             net->log_ctx,
-                            net->input_width > 0 && net->input_height > 0 &&
-                                net->input_channels > 0,
+                            net->tensors[0].w > 0 && net->tensors[0].h > 0 &&
+                                net->tensors[0].c > 0,
                             BCNN_INVALID_PARAMETER,
                             "Input's width, height and channels must be > 0");
-                        BCNN_CHECK_AND_LOG(net->log_ctx, net->batch_size > 0,
+                        BCNN_CHECK_AND_LOG(net->log_ctx, net->tensors[0].n > 0,
                                            BCNN_INVALID_PARAMETER,
                                            "Batch size must be > 0");
-                        bcnn_set_input_shape(
-                            net, net->input_width, net->input_height,
-                            net->input_channels, net->batch_size);
                     }
                     add_layer(net, curr_layer, stride, pad, num_groups,
                               padding_type, n_filts, size, outputs, a, rate,
@@ -636,7 +637,7 @@ int init_from_config(bcnn_net* net, char* config_file, config_param* param) {
                     bh_free(curr_layer);
                     bh_free(src_id);
                     bh_free(dst_id);
-                    a = NONE;
+                    a = BCNN_ACT_NONE;
                 }
                 curr_layer = line;
                 nb_layers++;
@@ -653,14 +654,14 @@ int init_from_config(bcnn_net* net, char* config_file, config_param* param) {
                                    "Wrong format option in config file");
                 if (strcmp(tok[0], "task") == 0) {
                     if (strcmp(tok[1], "train") == 0)
-                        net->mode = TRAIN;
+                        net->mode = BCNN_MODE_TRAIN;
                     else if (strcmp(tok[1], "predict") == 0) {
-                        net->mode = PREDICT;
+                        net->mode = BCNN_MODE_PREDICT;
                     } else
                         BCNN_ERROR(
                             net->log_ctx, BCNN_INVALID_PARAMETER,
                             "Invalid parameter for task, available parameters: "
-                            "TRAIN, PREDICT");
+                            "BCNN_MODE_TRAIN, BCNN_MODE_PREDICT");
                 } else if (strcmp(tok[0], "data_format") == 0) {
                     if (strcmp(tok[1], "mnist") == 0) {
                         param->data_format = BCNN_LOAD_MNIST;
@@ -717,11 +718,11 @@ int init_from_config(bcnn_net* net, char* config_file, config_param* param) {
                     pad = atoi(tok[1]);
                 else if (strcmp(tok[0], "padding_type") == 0) {
                     if (strcmp(tok[1], "same") == 0)
-                        padding_type = PADDING_SAME;
+                        padding_type = BCNN_PADDING_SAME;
                     else if (strcmp(tok[1], "valid") == 0)
-                        padding_type = PADDING_VALID;
+                        padding_type = BCNN_PADDING_VALID;
                     else if (strcmp(tok[1], "caffe") == 0)
-                        padding_type = PADDING_CAFFE;
+                        padding_type = BCNN_PADDING_CAFFE;
                 } else if (strcmp(tok[0], "src") == 0)
                     bh_strfill(&src_id, tok[1]);
                 else if (strcmp(tok[0], "dst") == 0)
@@ -730,75 +731,75 @@ int init_from_config(bcnn_net* net, char* config_file, config_param* param) {
                     outputs = atoi(tok[1]);
                 else if (strcmp(tok[0], "function") == 0) {
                     if (strcmp(tok[1], "relu") == 0)
-                        a = RELU;
+                        a = BCNN_ACT_RELU;
                     else if (strcmp(tok[1], "tanh") == 0)
-                        a = TANH;
+                        a = BCNN_ACT_TANH;
                     else if (strcmp(tok[1], "ramp") == 0)
-                        a = RAMP;
+                        a = BCNN_ACT_RAMP;
                     else if (strcmp(tok[1], "clamp") == 0)
-                        a = CLAMP;
+                        a = BCNN_ACT_CLAMP;
                     else if (strcmp(tok[1], "softplus") == 0)
-                        a = SOFTPLUS;
+                        a = BCNN_ACT_SOFTPLUS;
                     else if (strcmp(tok[1], "leaky_relu") == 0 ||
                              strcmp(tok[1], "lrelu") == 0)
-                        a = LRELU;
+                        a = BCNN_ACT_LRELU;
                     else if (strcmp(tok[1], "prelu") == 0)
-                        a = PRELU;
+                        a = BCNN_ACT_PRELU;
                     else if (strcmp(tok[1], "abs") == 0)
-                        a = ABS;
+                        a = BCNN_ACT_ABS;
                     else if (strcmp(tok[1], "none") == 0)
-                        a = NONE;
+                        a = BCNN_ACT_NONE;
                     else {
                         BCNN_WARNING(
                             net->log_ctx,
                             "Unknown activation type %s, going with ReLU",
                             tok[1]);
-                        a = RELU;
+                        a = BCNN_ACT_RELU;
                     }
                 } else if (strcmp(tok[0], "init") == 0) {
                     if (strcmp(tok[1], "xavier") == 0)
-                        init = XAVIER;
+                        init = BCNN_FILLER_XAVIER;
                     else if (strcmp(tok[1], "msra") == 0)
-                        init = MSRA;
+                        init = BCNN_FILLER_MSRA;
                     else {
                         BCNN_WARNING(
                             net->log_ctx,
                             "Unknown init type %s, going with xavier init",
                             tok[1]);
-                        init = XAVIER;
+                        init = BCNN_FILLER_XAVIER;
                     }
                 } else if (strcmp(tok[0], "metric") == 0) {
                     if (strcmp(tok[1], "error") == 0)
-                        cost = COST_ERROR;
+                        cost = BCNN_METRIC_ERROR_RATE;
                     else if (strcmp(tok[1], "logloss") == 0)
-                        cost = COST_LOGLOSS;
+                        cost = BCNN_METRIC_LOGLOSS;
                     else if (strcmp(tok[1], "sse") == 0)
-                        cost = COST_SSE;
+                        cost = BCNN_METRIC_SSE;
                     else if (strcmp(tok[1], "mse") == 0)
-                        cost = COST_MSE;
+                        cost = BCNN_METRIC_MSE;
                     else if (strcmp(tok[1], "crps") == 0)
-                        cost = COST_CRPS;
+                        cost = BCNN_METRIC_CRPS;
                     else if (strcmp(tok[1], "dice") == 0)
-                        cost = COST_DICE;
+                        cost = BCNN_METRIC_DICE;
                     else {
                         BCNN_WARNING(net->log_ctx,
                                      "Unknown cost metric %s, going with sse",
                                      tok[1]);
-                        cost = COST_SSE;
+                        cost = BCNN_METRIC_SSE;
                     }
                 } else if (strcmp(tok[0], "loss") == 0) {
                     if (strcmp(tok[1], "l2") == 0 ||
                         strcmp(tok[1], "euclidean") == 0) {
-                        loss = EUCLIDEAN_LOSS;
+                        loss = BCNN_LOSS_EUCLIDEAN;
                     } else if (strcmp(tok[1], "lifted_struct_similarity") ==
                                0) {
-                        loss = LIFTED_STRUCT_LOSS;
+                        loss = BCNN_LOSS_LIFTED_STRUCT;
                     } else {
                         BCNN_WARNING(
                             net->log_ctx,
                             "Unknown loss %s, going with euclidean loss",
                             tok[1]);
-                        loss = EUCLIDEAN_LOSS;
+                        loss = BCNN_LOSS_EUCLIDEAN;
                     }
                 } else
                     bcnn_set_param(net, tok[0], tok[1]);

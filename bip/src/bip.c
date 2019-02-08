@@ -31,6 +31,29 @@
 
 #include "bip/bip.h"
 
+/* Convenient macros */
+#define BIP_CHECK_STATUS(err)                                        \
+    do {                                                             \
+        if ((err) != BIP_SUCCESS) {                                  \
+            fprintf(stderr, "[ERROR] %s\n", bip_status_string(err)); \
+            return err;                                              \
+        }                                                            \
+    } while (0)
+
+#define BIP_CHECK_PTR(p)                     \
+    do {                                     \
+        if (((void *)p) == ((void *)NULL)) { \
+            return BIP_INVALID_PTR;          \
+        }                                    \
+    } while (0)
+
+#define BIP_CHECK_SIZE(size)         \
+    do {                             \
+        if (size <= 0) {             \
+            return BIP_INVALID_SIZE; \
+        }                            \
+    } while (0)
+
 /* Color space conversions */
 bip_status bip_rgb2gray(uint8_t *src, size_t width, size_t height,
                         size_t src_stride, uint8_t *dst, size_t dst_stride) {
@@ -126,9 +149,8 @@ bip_status bip_image_brightness(uint8_t *src, size_t src_stride, size_t width,
 static float _bip_noise2d(int x, int y, int octave, int seed) {
     int i = x * 1619 + y * 31337 + octave * 3463 + seed * 13397;
     int n = (i << 13) ^ i;
-    return (1.0f -
-            ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) /
-                1073741824.0f);
+    return (1.0f - ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) /
+                       1073741824.0f);
 }
 
 static float _bip_interpolate(float v1, float v2, float x) {
@@ -195,15 +217,13 @@ bip_status bip_image_perlin_distortion(uint8_t *src, size_t src_stride,
         for (x = 0; x < width; ++x) {
             x_norm = (float)x / width;
             y_norm = (float)y / height;
-            px = (x_norm +
-                  _bip_perlin_noise2d(x_norm + kx, y_norm + ky, persistence, 1,
-                                      seed) *
-                      distortion) *
+            px = (x_norm + _bip_perlin_noise2d(x_norm + kx, y_norm + ky,
+                                               persistence, 1, seed) *
+                               distortion) *
                  width;
-            py = (y_norm +
-                  _bip_perlin_noise2d(x_norm + kx, y_norm + ky, persistence, 1,
-                                      seed) *
-                      distortion) *
+            py = (y_norm + _bip_perlin_noise2d(x_norm + kx, y_norm + ky,
+                                               persistence, 1, seed) *
+                               distortion) *
                  height;
             x_map = (int)(px);
             y_map = (int)(py);

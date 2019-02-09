@@ -600,90 +600,6 @@ void free_detection_results(bcnn_yolo_detection *dets, int num_dets) {
     }
 }
 
-static int nms_comparator(const void *pa, const void *pb) {
-    bcnn_yolo_detection a = *(bcnn_yolo_detection *)pa;
-    bcnn_yolo_detection b = *(bcnn_yolo_detection *)pb;
-    float diff = 0;
-    if (b.sort_class >= 0) {
-        diff = a.prob[b.sort_class] - b.prob[b.sort_class];
-    } else {
-        diff = a.objectness - b.objectness;
-    }
-    if (diff < 0)
-        return 1;
-    else if (diff > 0)
-        return -1;
-    return 0;
-}
-
-static float overlap(float x1, float w1, float x2, float w2) {
-    float l1 = x1 - w1 / 2;
-    float l2 = x2 - w2 / 2;
-    float left = l1 > l2 ? l1 : l2;
-    float r1 = x1 + w1 / 2;
-    float r2 = x2 + w2 / 2;
-    float right = r1 < r2 ? r1 : r2;
-    return right - left;
-}
-
-static float box_intersection(bcnn_box a, bcnn_box b) {
-    float w = overlap(a.x, a.w, b.x, b.w);
-    float h = overlap(a.y, a.h, b.y, b.h);
-    if (w < 0 || h < 0) return 0;
-    float area = w * h;
-    return area;
-}
-
-static float box_union(bcnn_box a, bcnn_box b) {
-    float i = box_intersection(a, b);
-    float u = a.w * a.h + b.w * b.h - i;
-    return u;
-}
-
-static float box_iou(bcnn_box a, bcnn_box b) {
-    return box_intersection(a, b) / box_union(a, b);
-}
-
-static void do_nms_obj(bcnn_yolo_detection *dets, int total, int classes,
-                       float thresh) {
-    int i, j, k;
-    k = total - 1;
-    for (i = 0; i <= k; ++i) {
-        if (dets[i].objectness == 0) {
-            bcnn_yolo_detection swap = dets[i];
-            dets[i] = dets[k];
-            dets[k] = swap;
-            --k;
-            --i;
-        }
-    }
-    total = k + 1;
-
-    for (i = 0; i < total; ++i) {
-        dets[i].sort_class = -1;
-    }
-
-    qsort(dets, total, sizeof(bcnn_yolo_detection), nms_comparator);
-    for (i = 0; i < total; ++i) {
-        if (dets[i].objectness == 0) {
-            continue;
-        }
-        bcnn_box a = dets[i].bbox;
-        for (j = i + 1; j < total; ++j) {
-            if (dets[j].objectness == 0) {
-                continue;
-            }
-            bcnn_box b = dets[j].bbox;
-            if (box_iou(a, b) > thresh) {
-                dets[j].objectness = 0;
-                for (k = 0; k < classes; ++k) {
-                    dets[j].prob[k] = 0;
-                }
-            }
-        }
-    }
-}
-
 bcnn_yolo_detection *run_inference(int w_frame, int h_frame, bcnn_net *net,
                                    int *num_dets) {
     float nms_tresh = 0.45f;
@@ -701,11 +617,6 @@ bcnn_yolo_detection *run_inference(int w_frame, int h_frame, bcnn_net *net,
     bcnn_yolo_detection *dets =
         bcnn_yolo_get_detections(net, 0, w_frame, h_frame, net->tensors[0].w,
                                  net->tensors[0].h, 0.5, 1, &ndets);
-    // Non max suppression
-    bcnn_yolo_param *param =
-        (bcnn_yolo_param *)net->nodes[net->num_nodes - 1].param;
-    int num_classes = param->classes;
-    do_nms_obj(dets, ndets, num_classes, nms_tresh);
     *num_dets = ndets;
     return dets;
 }

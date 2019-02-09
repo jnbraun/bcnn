@@ -184,11 +184,11 @@ int create_network(bcnn_net *net, model_type type) {
     return 0;
 }
 
-int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
+int predict_cifar10(bcnn_net *net, char *test_img, int nb_pred, float *avg_loss,
                     char *pred_out) {
     int i = 0, j = 0, n = 0, k = 0;
     float *out = NULL;
-    float err = 0.0f, error_batch = 0.0f;
+    float loss = 0.0f;
     FILE *f = NULL;
     bcnn_loader data_iter = {0};
     int nb = net->num_nodes;
@@ -209,8 +209,7 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
 
     n = nb_pred / net->batch_size;
     for (i = 0; i < n; ++i) {
-        bcnn_predict_on_batch(net, &data_iter, &out, &error_batch);
-        err += error_batch;
+        loss += bcnn_predict_on_batch(net, &data_iter, &out);
         // Save predictions
         for (j = 0; j < net->batch_size; ++j) {
             for (k = 0; k < output_size; ++k)
@@ -218,7 +217,7 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
             fprintf(f, "\n");
         }
     }
-    *error = err / nb_pred;
+    *avg_loss = loss / nb_pred;
 
     if (f != NULL) {
         fclose(f);
@@ -229,8 +228,7 @@ int predict_cifar10(bcnn_net *net, char *test_img, float *error, int nb_pred,
 
 int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
                   int eval_period, float *error) {
-    float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
-    int i = 0;
+    float sum_error = 0.0f, error_valid = 0.0f;
     bh_timer t = {0}, tp = {0};
     bcnn_loader data_iter = {0};
 
@@ -241,14 +239,13 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
     }
 
     bh_timer_start(&t);
-    for (i = 0; i < nb_iter; ++i) {
-        bcnn_train_on_batch(net, &data_iter, &error_batch);
-        sum_error += error_batch;
+    for (int i = 0; i < nb_iter; ++i) {
+        sum_error += bcnn_train_on_batch(net, &data_iter);
 
         if (i % eval_period == 0 && i > 0) {
             bh_timer_stop(&t);
             bh_timer_start(&tp);
-            predict_cifar10(net, test_img, &error_valid, 10000,
+            predict_cifar10(net, test_img, 10000, &error_valid,
                             "predictions_cifar10.txt");
             bh_timer_stop(&tp);
             fprintf(stderr,
@@ -290,7 +287,7 @@ int run(char *train_data, char *test_data, model_type model) {
 
     fprintf(stderr, "Start prediction...\n");
     net->mode = BCNN_MODE_VALID;
-    predict_cifar10(net, test_data, &error_test, 10000,
+    predict_cifar10(net, test_data, 10000, &error_test,
                     "predictions_cifar10.txt");
     fprintf(stderr, "Prediction ended successfully\n");
 

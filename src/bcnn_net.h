@@ -45,6 +45,7 @@ bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node);
 bcnn_status bcnn_node_add_input(bcnn_net *net, bcnn_node *node, int index);
 bcnn_status bcnn_node_add_output(bcnn_net *net, bcnn_node *node, int index);
 bcnn_status bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor);
+int bcnn_get_tensor_index_with_name(bcnn_net *net, const char *name);
 
 #ifdef __cplusplus
 }

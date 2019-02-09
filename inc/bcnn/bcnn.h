@@ -594,10 +594,10 @@ void bcnn_update(bcnn_net *net);
  * - Update the model parameters
  * - Return the loss according to the error metric
  *
- * The common use-case for this function is to be used inside a training loop
- * See: examples/mnist/mnist_example.c for a real-case example
+ * The common use-case for this function is to be called inside a training loop
+ * See: examples/mnist/mnist_example.c for a real-case example.
  */
-int bcnn_train_on_batch(bcnn_net *net, bcnn_loader *data_load, float *error);
+float bcnn_train_on_batch(bcnn_net *net, bcnn_loader *data_load);
 
 /**
  * Wrapper function to compute the inference pass only on a data batch.
@@ -605,10 +605,10 @@ int bcnn_train_on_batch(bcnn_net *net, bcnn_loader *data_load, float *error);
  * - Load the next data batch (and performs data augmentation if required)
  * - Compute the forward pass given the loaded data batch
  *
- * Return the error value and the output raw data values.
+ * Return the loss value and the output raw data values.
  */
-int bcnn_predict_on_batch(bcnn_net *net, bcnn_loader *data_load, float **pred,
-                          float *error);
+float bcnn_predict_on_batch(bcnn_net *net, bcnn_loader *data_load,
+                            float **pred);
 
 #ifdef __cplusplus
 }

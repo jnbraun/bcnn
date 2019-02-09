@@ -27,6 +27,7 @@
 #include "bcnn_mat.h"
 
 static float bcnn_update_learning_rate(bcnn_net *net) {
+    net->learner.seen += net->batch_size;
     int iter = net->learner.seen / net->batch_size;
 
     switch (net->learner.decay_type) {
@@ -155,7 +156,6 @@ void bcnn_adam_update_gpu(float *weights, float *biases, float *weights_grad,
 #endif
 
 void bcnn_update(bcnn_net *net) {
-    int i;
     float lr = bcnn_update_learning_rate(net);
 
     for (int i = 0; i < net->num_nodes; ++i) {

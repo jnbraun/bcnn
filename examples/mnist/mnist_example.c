@@ -70,10 +70,10 @@ int create_network(bcnn_net *net) {
 }
 
 int predict_mnist(bcnn_net *net, const char *test_img, const char *test_label,
-                  float *error, int nb_pred, const char *pred_out) {
+                  int nb_pred, float *avg_loss, const char *pred_out) {
     int i = 0, j = 0, n = 0, k = 0;
     float *out = NULL;
-    float err = 0.0f, error_batch = 0.0f;
+    float loss = 0.0f;
     FILE *f = NULL;
     bcnn_loader data_mnist = {0};
     int nb = net->num_nodes;
@@ -92,8 +92,7 @@ int predict_mnist(bcnn_net *net, const char *test_img, const char *test_label,
 
     n = nb_pred / net->batch_size;
     for (i = 0; i < n; ++i) {
-        bcnn_predict_on_batch(net, &data_mnist, &out, &error_batch);
-        err += error_batch;
+        loss += bcnn_predict_on_batch(net, &data_mnist, &out);
         // Save predictions
         for (j = 0; j < net->batch_size; ++j) {
             for (k = 0; k < output_size; ++k)
@@ -101,21 +100,11 @@ int predict_mnist(bcnn_net *net, const char *test_img, const char *test_label,
             fprintf(f, "\n");
         }
     }
-    // Last predictions (Have to do this because batch_size is set to 16 yet the
-    // number of samples of mnist test data is not a multiple of 16)
-    n = nb_pred % net->batch_size;
-    if (n > 0) {
-        for (i = 0; i < n; ++i) {
-            bcnn_predict_on_batch(net, &data_mnist, &out, &error_batch);
-            err += error_batch;
-            // Save predictions
-            for (k = 0; k < output_size; ++k) fprintf(f, "%f ", out[k]);
-            fprintf(f, "\n");
-        }
-    }
-    *error = err / nb_pred;
+    *avg_loss = loss / nb_pred;
 
-    if (f != NULL) fclose(f);
+    if (f != NULL) {
+        fclose(f);
+    }
     bcnn_loader_terminate(&data_mnist);
     return 0;
 }
@@ -135,13 +124,12 @@ int train_mnist(bcnn_net *net, const char *train_img, const char *train_label,
 
     bh_timer_start(&t);
     for (int i = 0; i < num_iter; ++i) {
-        bcnn_train_on_batch(net, &data_mnist, &error_batch);
-        sum_error += error_batch;
+        sum_error += bcnn_train_on_batch(net, &data_mnist);
 
         if (i % eval_period == 0 && i > 0) {
             bh_timer_stop(&t);
             bh_timer_start(&tp);
-            predict_mnist(net, test_img, test_label, &error_valid, 10000,
+            predict_mnist(net, test_img, test_label, 10000, &error_valid,
                           "pred_mnist.txt");
             bh_timer_stop(&tp);
             fprintf(stderr,
@@ -184,7 +172,7 @@ int run(const char *train_img, const char *train_label, const char *test_img,
 
     fprintf(stderr, "Start prediction...\n");
     net->mode = BCNN_MODE_VALID;
-    predict_mnist(net, test_img, test_label, &error_test, 10000,
+    predict_mnist(net, test_img, test_label, 10000, &error_test,
                   "pred_mnist.txt");
     fprintf(stderr, "Prediction ended successfully\n");
     bcnn_end_net(&net);

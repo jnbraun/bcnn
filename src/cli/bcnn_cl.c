@@ -477,7 +477,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
 }
 
 int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
-    float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
+    float sum_error = 0.0f, error_valid = 0.0f;
     int nb_iter = net->learner.max_batches;
     int batch_size = net->batch_size;
     bh_timer t = {0};
@@ -492,8 +492,7 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
 
     bh_timer_start(&t);
     for (int i = 0; i < nb_iter; ++i) {
-        bcnn_train_on_batch(net, &iter_data, &error_batch);
-        sum_error += error_batch;
+        sum_error += bcnn_train_on_batch(net, &iter_data);
 
         if (i % param->eval_period == 0 && i > 0) {
             bh_timer_stop(&t);
@@ -556,9 +555,7 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     int n = param->nb_pred / batch_size;
     for (int i = 0; i < n; ++i) {
         float *out = NULL;
-        float error_batch = 0.0f;
-        bcnn_predict_on_batch(net, &iter_data, &out, &error_batch);
-        err += error_batch;
+        err += bcnn_predict_on_batch(net, &iter_data, &out);
         // Dump predictions
         if (dump_pred) {
             if (iter_data.type == BCNN_LOAD_DETECTION_LIST) {
@@ -636,9 +633,7 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     if (n > 0) {
         for (int i = 0; i < n; ++i) {
             float *out = NULL;
-            float error_batch = 0.0f;
-            bcnn_predict_on_batch(net, &iter_data, &out, &error_batch);
-            err += error_batch;
+            err += bcnn_predict_on_batch(net, &iter_data, &out);
             // Dump predictions
             if (dump_pred) {
                 for (int k = 0; k < output_size; ++k) {

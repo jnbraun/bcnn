@@ -322,22 +322,36 @@ bcnn_status bcnn_compile_net(bcnn_net *net) {
     return BCNN_SUCCESS;
 }
 
+static void bcnn_reset_node_gradients(bcnn_net *net, bcnn_node *node) {
+    for (int i = 0; i < node->num_dst; ++i) {
+        int sz = bcnn_tensor_size(&net->tensors[node->dst[i]]);
+#ifdef BCNN_USE_CUDA
+        if (net->tensors[node->dst[i]].grad_data_gpu != NULL) {
+            bcnn_cuda_fill_f32(sz, 0.0f,
+                               net->tensors[node->dst[i]].grad_data_gpu, 1);
+        }
+#else
+        if (net->tensors[node->dst[i]].grad_data != NULL) {
+            memset(net->tensors[node->dst[i]].grad_data, 0, sz * sizeof(float));
+        }
+#endif
+    }
+}
+
+int bcnn_get_tensor_index_with_name(bcnn_net *net, const char *name) {
+    for (int i = net->num_tensors - 1; i >= 0; --i) {
+        if (strcmp(net->tensors[i].name, name) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void bcnn_forward(bcnn_net *net) {
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
-        for (int j = 0; j < node->num_dst; ++j) {
-            int output_size = bcnn_tensor_size(&net->tensors[node->dst[j]]);
-#ifdef BCNN_USE_CUDA
-            if (net->tensors[node->dst[j]].grad_data_gpu != NULL) {
-                bcnn_cuda_fill_f32(output_size, 0.0f,
-                                   net->tensors[node->dst[j]].grad_data_gpu, 1);
-            }
-#else
-            if (net->tensors[node->dst[j]].grad_data != NULL) {
-                memset(net->tensors[node->dst[j]].grad_data, 0,
-                       output_size * sizeof(float));
-            }
-#endif
+        if (net->mode == BCNN_MODE_TRAIN) {
+            bcnn_reset_node_gradients(net, node);
         }
         node->forward(net, node);
     }
@@ -350,74 +364,57 @@ void bcnn_backward(bcnn_net *net) {
     }
 }
 
-int bcnn_train_on_batch(bcnn_net *net, bcnn_loader *iter, float *loss) {
+static float bcnn_get_loss(bcnn_net *net) {
+    float loss = 0;
+    int n = 0;
+    for (int i = 0; i < net->num_nodes; ++i) {
+        if (net->nodes[i].type == BCNN_LAYER_COST) {
+            bcnn_cost_param *param = (bcnn_cost_param *)(net->nodes[i].param);
+            loss += net->tensors[net->nodes[i].dst[0]].data[0];
+            ++n;
+        } else if (net->nodes[i].type == BCNN_LAYER_YOLOV3) {
+            bcnn_yolo_param *param = (bcnn_yolo_param *)(net->nodes[i].param);
+            if (param->cost) {
+                loss += param->cost[0];
+                ++n;
+            }
+        }
+    }
+    if (n > 0) {
+        loss /= n;
+    }
+    return loss;
+}
+
+float bcnn_train_on_batch(bcnn_net *net, bcnn_loader *iter) {
     bcnn_loader_next(net, iter);
-    net->learner.seen += net->batch_size;
     // Forward
     bcnn_forward(net);
     // Back prop
     bcnn_backward(net);
     // Update network weight
     bcnn_update(net);
-    if (iter->type == BCNN_LOAD_DETECTION_LIST) {
-        *loss = 0;
-        int n = 0;
-        for (int i = 0; i < net->num_nodes; ++i) {
-            if (net->nodes[i].type == BCNN_LAYER_YOLOV3) {
-                bcnn_yolo_param *param =
-                    (bcnn_yolo_param *)(net->nodes[i].param);
-                if (param->cost) {
-                    *loss += param->cost[0];
-                    ++n;
-                }
-            }
-        }
-        if (n > 0) {
-            *loss /= n;
-        }
-    } else {
-        *loss = net->tensors[net->nodes[net->num_nodes - 1].dst[0]].data[0];
-    }
-    return BCNN_SUCCESS;
+    // Return the loss value
+    return bcnn_get_loss(net);
 }
 
-int bcnn_predict_on_batch(bcnn_net *net, bcnn_loader *iter, float **pred,
-                          float *error) {
-    int nb = net->num_nodes;
-    int output_size =
-        bcnn_tensor_size(&net->tensors[net->nodes[nb - 1].src[0]]);
-
+float bcnn_predict_on_batch(bcnn_net *net, bcnn_loader *iter, float **pred) {
+    // Get next data batch
     bcnn_loader_next(net, iter);
-
+    // Forward
     bcnn_forward(net);
 
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_dev2host(net->tensors[net->nodes[nb - 1].src[0]].data_gpu,
-                              net->tensors[net->nodes[nb - 1].src[0]].data,
-                              output_size);
+    int sz =
+        bcnn_tensor_size(&net->tensors[net->nodes[net->num_nodes - 1].src[0]]);
+    bcnn_cuda_memcpy_dev2host(
+        net->tensors[net->nodes[net->num_nodes - 1].src[0]].data_gpu,
+        net->tensors[net->nodes[net->num_nodes - 1].src[0]].data, sz);
 #endif
-    (*pred) = net->tensors[net->nodes[nb - 1].src[0]].data;
-    if (net->nodes[net->num_nodes - 1].type == BCNN_LAYER_YOLOV3) {
-        *error = 0;
-        int n = 0;
-        for (int i = 0; i < net->num_nodes; ++i) {
-            if (net->nodes[i].type == BCNN_LAYER_YOLOV3) {
-                bcnn_yolo_param *param =
-                    (bcnn_yolo_param *)(net->nodes[i].param);
-                if (param->cost) {
-                    *error += param->cost[0];
-                    ++n;
-                }
-            }
-        }
-        if (n > 0) {
-            *error /= n;
-        }
-    } else {
-        *error = *(net->tensors[net->nodes[nb - 1].dst[0]].data);
-    }
-
-    return BCNN_SUCCESS;
+    // Extract output data
+    (*pred) = net->tensors[net->nodes[net->num_nodes - 1].src[0]].data;
+    // Return the loss value
+    return bcnn_get_loss(net);
 }
 
 bcnn_status bcnn_write_model(bcnn_net *net, char *filename) {
@@ -732,43 +729,3 @@ bcnn_status bcnn_load_model_legacy(bcnn_net *net, char *filename) {
 
     return BCNN_SUCCESS;
 }
-#if 0
-int bcnn_free_layer(bcnn_layer **layer) {
-    bcnn_layer *p_layer = (*layer);
-    bh_free(p_layer->indexes);
-    bcnn_tensor_destroy(&p_layer->weights);
-    bcnn_tensor_destroy(&p_layer->biases);
-    bcnn_tensor_destroy(&p_layer->scales);
-    bcnn_tensor_destroy(&p_layer->saved_mean);
-    bcnn_tensor_destroy(&p_layer->saved_variance);
-    bcnn_tensor_destroy(&p_layer->running_mean);
-    bcnn_tensor_destroy(&p_layer->running_variance);
-    bh_free(p_layer->conv_workspace);
-    bh_free(p_layer->x_norm);
-    bh_free(p_layer->workspace);
-    bh_free(p_layer->rand);
-    bh_free(p_layer->adam_m);
-    bh_free(p_layer->adam_v);
-    bh_free(p_layer->binary_weight);
-    bh_free(p_layer->binary_workspace);
-    bh_free(p_layer->cost);
-    bh_free(p_layer->mask);
-#ifdef BCNN_USE_CUDA
-    if (p_layer->indexes_gpu) bcnn_cuda_free(p_layer->indexes_gpu);
-    if (p_layer->x_norm_gpu) bcnn_cuda_free(p_layer->x_norm_gpu);
-    if (p_layer->bn_workspace_gpu) bcnn_cuda_free(p_layer->bn_workspace_gpu);
-    if (p_layer->rand_gpu) bcnn_cuda_free(p_layer->rand_gpu);
-    if (p_layer->adam_m_gpu) bcnn_cuda_free(p_layer->adam_m_gpu);
-    if (p_layer->adam_v_gpu) bcnn_cuda_free(p_layer->adam_v_gpu);
-#ifdef BCNN_USE_CUDNN
-    cudnnDestroyTensorDescriptor(p_layer->src_tensor_desc);
-    cudnnDestroyTensorDescriptor(p_layer->dst_tensor_desc);
-    cudnnDestroyTensorDescriptor(p_layer->bias_desc);
-    cudnnDestroyFilterDescriptor(p_layer->filter_desc);
-    cudnnDestroyConvolutionDescriptor(p_layer->conv_desc);
-#endif
-#endif
-    bh_free(*layer);
-    return BCNN_SUCCESS;
-}
-#endif

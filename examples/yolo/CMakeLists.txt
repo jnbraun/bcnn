@@ -1,17 +1,7 @@
 cmake_minimum_required (VERSION 2.9)
 project (yolo-example)
 
-if (USE_CUDA)
-add_definitions(-DBCNN_USE_CUDA)
-endif()
-
-if (USE_SSE2)
-add_definitions(-DBCNN_USE_SSE2)
-endif()
-
-if (USE_CUDNN)
-add_definitions(-DBCNN_USE_CUDNN)
-endif()
+option(USE_OPENCV "Use OpenCV for display" ON)
 
 add_definitions(-DBIP_USE_STB_IMAGE)
 
@@ -42,7 +32,7 @@ file(GLOB SRC *.cc *.c)
 add_executable(yolo-example ${SRC})
 
 find_package(OpenCV 3.0.0)
-if (OpenCV_FOUND)
+if (OpenCV_FOUND AND USE_OPENCV)
     message(STATUS "[bcnn] [examples/yolo] Found OpenCV")
     add_definitions(-DUSE_OPENCV)
     include_directories(${OpenCV_INCLUDE_DIRS})

@@ -685,6 +685,26 @@ void display_detections(cv::Mat &frame, bcnn_yolo_detection *dets, int num_dets,
         }
     }
 }
+#else
+void display_detections(unsigned char *img, int w, int h, int c,
+                        bcnn_yolo_detection *dets, int num_dets, float thresh,
+                        int num_classes, std::string outname) {
+    uint8_t *dump_img = (uint8_t *)calloc(w * h * c, sizeof(uint8_t));
+    memcpy(dump_img, img, w * h * c);
+    for (int d = 0; d < num_dets; ++d) {
+        for (int j = 0; j < num_classes; ++j) {
+            if (dets[d].prob[j] > thresh) {
+                unsigned char color[3] = {(j % 6) * 51, ((80 - j) % 11) * 25,
+                                          (j % 4) * 70 + 45};
+                bcnn_draw_color_box(dump_img, w, h, dets[d].bbox.x,
+                                    dets[d].bbox.y, dets[d].bbox.w,
+                                    dets[d].bbox.h, color);
+            }
+        }
+    }
+    bip_write_image((char *)(outname.c_str()), dump_img, w, h, c, c * w);
+    bh_free(dump_img);
+}
 #endif
 
 void print_detections(int w, int h, bcnn_yolo_detection *dets, int num_dets,
@@ -803,13 +823,14 @@ int run(int argc, char **argv) {
         bcnn_yolo_detection *dets =
             run_inference(w_frame, h_frame, net, &num_dets);
 #endif
-#ifdef USE_OPENCV
-        display_detections(img, dets, num_dets, 0.45, 80);
         std::string in_path = argv[2];
         std::string out_path = in_path + "_dets.png";
+#ifdef USE_OPENCV
+        display_detections(img, dets, num_dets, 0.45, 80);
         cv::imwrite(out_path, img);
 #else
-        print_detections(w_frame, h_frame, dets, num_dets, 0.45, 80);
+        display_detections(img, w_frame, h_frame, c_frame, dets, num_dets, 0.45,
+                           80, out_path);
 #endif
         free_detection_results(dets, num_dets);
         free(dets);

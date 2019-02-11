@@ -541,7 +541,7 @@ bcnn_yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w,
 
 /**
  * Convert an image (represented as an array of unsigned char) to floating point
- * values. Perform in the same a mean substraction and rescale the values
+ * values. Also perform a mean substraction and rescale the values
  * according to the following formula:
  * output_val = (input_pixel - mean) * norm_coeff
  *
@@ -554,13 +554,13 @@ bcnn_yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w,
  * @param[in]   c               Number of channels of input image.
  * @param[in]   norm_coeff      Multiplicative factor to rescale input values
  * @param[in]   swap_to_bgr     Swap Red and Blue channels (Default layout is
- * RGB).
+ *                              RGB).
  * @param[in]   mean_r          Value to be substracted to first channel pixels
- * (red).
+ *                              (red).
  * @param[in]   mean_g          Value to be substracted to second channel pixels
- * (green).
+ *                              (green).
  * @param[in]   mean_b          Value to be substracted to third channel pixels
- * (blue).
+ * `                            (blue).
  * @param[out]  dst             Pointer to output float values array.
  */
 void bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c,

@@ -412,8 +412,6 @@ bcnn_status bcnn_init_net(bcnn_net **net);
 void bcnn_end_net(bcnn_net **net);
 
 /* Logging */
-void bcnn_log(bcnn_log_context ctx, bcnn_log_level level, const char *fmt, ...);
-
 void bcnn_set_log_context(bcnn_net *net, bcnn_log_callback fct,
                           bcnn_log_level level);
 

@@ -24,8 +24,6 @@
 
 #include <math.h>
 
-#include "bcnn/bcnn.h"
-
 #include <bh/bh_log.h>
 #include <bh/bh_string.h>
 

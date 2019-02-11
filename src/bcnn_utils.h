@@ -23,6 +23,8 @@
 #ifndef BCNN_UTILS_H
 #define BCNN_UTILS_H
 
+#include "bcnn/bcnn.h"
+
 /* Cuda include */
 #ifdef BCNN_USE_CUDA
 #include <cublas_v2.h>
@@ -88,6 +90,8 @@ typedef struct {
 } bcnn_gauss_gen;
 
 float bcnn_rng_gaussian(bcnn_gauss_gen *g);
+
+void bcnn_log(bcnn_log_context ctx, bcnn_log_level level, const char *fmt, ...);
 
 void bcnn_draw_color_box(unsigned char *img, int w_img, int h_img, float cx_box,
                          float cy_box, float w_box, float h_box,

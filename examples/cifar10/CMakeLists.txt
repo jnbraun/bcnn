@@ -1,23 +1,6 @@
 cmake_minimum_required (VERSION 2.9)
 project (cifar10-example)
 
-#set(USE_SSE2 1)
-#set(USE_CUDA 0)
-
-if (USE_CUDA)
-add_definitions(-DBCNN_USE_CUDA)
-endif()
-
-if (USE_SSE2)
-add_definitions(-DBCNN_USE_SSE2)
-endif()
-
-if (USE_CUDNN)
-add_definitions(-DBCNN_USE_CUDNN)
-endif()
-
-add_definitions(-DBIP_USE_STB_IMAGE)
-
 if(MSVC)
     set(variables
         CMAKE_C_FLAGS_DEBUG
@@ -46,12 +29,11 @@ add_executable(cifar10-example ${SRC})
 #target_link_libraries(cifar10-example bcnn)
 
 if(NOT MSVC)
-    #target_link_libraries(cifar10-example bcnn bip -lstdc++ -lm)
     if (USE_CUDA) 
-        target_link_libraries(cifar10-example bcnn bip -lstdc++ -lm)
+        target_link_libraries(cifar10-example bcnn -lstdc++ -lm)
     else()
-        target_link_libraries(cifar10-example bcnn bip -lm)
+        target_link_libraries(cifar10-example bcnn -lm)
     endif()
 else()
-    target_link_libraries(cifar10-example bcnn bip)
+    target_link_libraries(cifar10-example bcnn)
 endif()

@@ -20,8 +20,8 @@
  * SOFTWARE.
  */
 
-/* include bip image processing lib */
-#include <bip/bip.h>
+#include <math.h>
+#include <string.h>
 
 #include "bcnn/bcnn.h"
 #include "bcnn_mat.h"

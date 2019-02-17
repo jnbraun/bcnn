@@ -27,52 +27,8 @@
 extern "C" {
 #endif
 
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-//#include <stdint.h>
-#include <assert.h>
-#include <float.h>
-#include <limits.h>
-#include <math.h>
 #include <stddef.h>
-#if (defined(_WIN32) || defined(_WIN64))
-#include <windows.h>
-#elif defined(__linux__)
-#include <sys/time.h>
-#include <time.h>
-#endif
-
-#if defined(_MSC_VER) && (_MSC_VER > 1000)
-#pragma once
-#endif
-
-#ifdef BIP_USE_SSE2
-#include <emmintrin.h>  // SSE2
-#endif
-
-#if defined(__GNUC__) || (defined(_MSC_VER) && (_MSC_VER >= 1600))
 #include <stdint.h>
-#else
-#if (_MSC_VER < 1300)
-typedef signed char int8_t;
-typedef signed short int16_t;
-typedef signed int int32_t;
-typedef unsigned char uint8_t;
-typedef unsigned short uint16_t;
-typedef unsigned int uint32_t;
-#else
-typedef signed __int8 int8_t;
-typedef signed __int16 int16_t;
-typedef signed __int32 int32_t;
-typedef unsigned __int8 uint8_t;
-typedef unsigned __int16 uint16_t;
-typedef unsigned __int32 uint32_t;
-#endif
-typedef signed __int64 int64_t;
-typedef unsigned __int64 uint64_t;
-#endif
 
 #define BIP_PI 3.14159265358979f
 #define BIP_2PI 6.28318530717958f

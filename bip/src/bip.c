@@ -20,6 +20,11 @@
  * SOFTWARE.
  */
 
+#include "bip/bip.h"
+
+#include <float.h>
+#include <limits.h>
+
 #ifdef BIP_USE_STB_IMAGE
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image/stb_image.h>
@@ -28,8 +33,6 @@
 #endif
 
 #include <bh/bh_macros.h>
-
-#include "bip/bip.h"
 
 /* Convenient macros */
 #define BIP_CHECK_STATUS(err)                                        \

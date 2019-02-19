@@ -30,8 +30,10 @@
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_loader_list_detection_init(bcnn_loader *iter, bcnn_net *net,
-                                            const char *path_input,
-                                            const char *path_extra) {
+                                            const char *train_path,
+                                            const char *train_path_extra,
+                                            const char *test_path,
+                                            const char *test_path_extra) {
     FILE *f_list = NULL;
     f_list = fopen(path_input, "rb");
     if (f_list == NULL) {
@@ -51,13 +53,16 @@ bcnn_status bcnn_loader_list_detection_init(bcnn_loader *iter, bcnn_net *net,
         net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
         sizeof(uint8_t));
     rewind(f_list);
-    iter->f_input = f_list;
+    iter->f_train = f_list;
     return BCNN_SUCCESS;
 }
 
 void bcnn_loader_list_detection_terminate(bcnn_loader *iter) {
-    if (iter->f_input != NULL) {
-        fclose(iter->f_input);
+    if (iter->f_train != NULL) {
+        fclose(iter->f_train);
+    }
+    if (iter->f_test != NULL) {
+        fclose(iter->f_test);
     }
     bh_free(iter->input_uchar);
     bh_free(iter->input_net);
@@ -67,10 +72,10 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
                                             int idx) {
     char *line = NULL;
     char **tok = NULL;
-    line = bh_fgetline(iter->f_input);
+    line = bh_fgetline(iter->f_train);
     if (line == NULL) {
-        rewind(iter->f_input);
-        line = bh_fgetline(iter->f_input);
+        rewind(iter->f_train);
+        line = bh_fgetline(iter->f_train);
     }
     int num_toks = bh_strsplit(line, ' ', &tok);
     if (((num_toks - 1) % 5 != 0)) {
@@ -136,9 +141,9 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
     if (net->mode == BCNN_MODE_TRAIN) {
         // TODO: only brightness / contrast / flip is currently supported for
         // detection
-        net->data_aug.apply_fliph = 0;
-        if (net->data_aug.random_fliph) {
-            net->data_aug.apply_fliph = ((float)rand() / RAND_MAX > 0.5f);
+        net->data_aug->apply_fliph = 0;
+        if (net->data_aug->random_fliph) {
+            net->data_aug->apply_fliph = ((float)rand() / RAND_MAX > 0.5f);
         }
         bcnn_data_augmentation(iter->input_net, net->tensors[0].w,
                                net->tensors[0].h, net->tensors[0].c,
@@ -152,8 +157,8 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
     // Map [0;255] uint8 values to [-1;1] float values
     bcnn_convert_img_to_float(iter->input_uchar, net->tensors[0].w,
                               net->tensors[0].h, net->tensors[0].c, 1 / 127.5f,
-                              net->data_aug.swap_to_bgr, 127.5f, 127.5f, 127.5f,
-                              x);
+                              net->data_aug->swap_to_bgr, 127.5f, 127.5f,
+                              127.5f, x);
     if (net->mode != BCNN_MODE_PREDICT) {
         // Fill labels
         int label_sz = bcnn_tensor_size3d(&net->tensors[1]);
@@ -176,7 +181,7 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
                 (float)atof(tok[5 * i + 2 + offset]) * scale_y + scale_dy;
             y[i * 5 + 2] = (float)atof(tok[5 * i + 3 + offset]) * scale_x;
             y[i * 5 + 3] = (float)atof(tok[5 * i + 4 + offset]) * scale_y;
-            if (net->data_aug.apply_fliph) {
+            if (net->data_aug->apply_fliph) {
                 y[i * 5 + 0] = 1.0f - y[i * 5 + 0];
             }
             // Class

@@ -30,8 +30,10 @@ extern "C" {
 #endif
 
 bcnn_status bcnn_loader_mnist_init(bcnn_loader *iter, bcnn_net *net,
-                                   const char *path_input,
-                                   const char *path_extra);
+                                   const char *train_path_img,
+                                   const char *train_path_label,
+                                   const char *test_path_img,
+                                   const char *test_path_label);
 void bcnn_loader_mnist_terminate(bcnn_loader *iter);
 bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx);
 

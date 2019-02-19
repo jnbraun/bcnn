@@ -39,32 +39,59 @@ static uint32_t read_uint32(char *v) {
 }
 
 bcnn_status bcnn_loader_mnist_init(bcnn_loader *iter, bcnn_net *net,
-                                   const char *path_img,
-                                   const char *path_label) {
-    FILE *f_img = NULL, *f_label = NULL;
-    f_img = fopen(path_img, "rb");
-    BCNN_CHECK_AND_LOG(net->log_ctx, f_img, BCNN_INVALID_PARAMETER,
-                       "Cound not open file %s", path_img);
-    f_label = fopen(path_label, "rb");
-    BCNN_CHECK_AND_LOG(net->log_ctx, f_label, BCNN_INVALID_PARAMETER,
-                       "Cound not open file %s", path_label);
+                                   const char *train_path_img,
+                                   const char *train_path_label,
+                                   const char *test_path_img,
+                                   const char *test_path_label) {
+    // Open the files handles according to each dataset path
+    if (train_path_img != NULL) {
+        iter->f_train = fopen(train_path_img, "rb");
+        BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_train, BCNN_INVALID_PARAMETER,
+                           "Cound not open file %s", train_path_img);
+    }
+    if (test_path_img != NULL) {
+        iter->f_train_extra = fopen(iter->f_train_extra, "rb");
+        BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_train_extra,
+                           BCNN_INVALID_PARAMETER, "Cound not open file %s",
+                           train_path_label);
+    }
+    if (test_path_img != NULL) {
+        iter->f_test = fopen(test_path_img, "rb");
+        BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_test, BCNN_INVALID_PARAMETER,
+                           "Cound not open file %s", test_path_img);
+    }
+    if (test_path_label != NULL) {
+        iter->f_test_extra = fopen(test_path_label, "rb");
+        BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_test_extra,
+                           BCNN_INVALID_PARAMETER, "Cound not open file %s",
+                           test_path_label);
+    }
+    if (net->mode == BCNN_MODE_TRAIN) {
+        iter->f_current = iter->f_train;
+        iter->f_current_extra = iter->f_train_extra;
+    } else {
+        iter->f_current = iter->f_test;
+        iter->f_current_extra = iter->f_test_extra;
+    }
+    BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_current && iter->f_current_extra,
+                       BCNN_INVALID_PARAMETER,
+                       "[Mnist loader] Dataset paths are not consistent with "
+                       "the current network mode");
 
-    iter->f_input = f_img;
-    iter->f_label = f_label;
     // Read header
     char tmp[16] = {0};
-    size_t nr = fread(tmp, 1, 16, iter->f_input);
+    size_t nr = fread(tmp, 1, 16, iter->f_current);
     uint32_t num_img = read_uint32(tmp + 4);
     iter->input_height = read_uint32(tmp + 8);
     iter->input_width = read_uint32(tmp + 12);
     iter->input_depth = 1;
-    nr = fread(tmp, 1, 8, iter->f_label);
+    nr = fread(tmp, 1, 8, iter->f_current_extra);
     uint32_t num_labels = read_uint32(tmp + 4);
     BCNN_CHECK_AND_LOG(net->log_ctx, num_img == num_labels, BCNN_INVALID_DATA,
                        "Inconsistent MNIST data: number of images and labels "
                        "must be the same");
-    iter->input_uchar = (unsigned char *)calloc(
-        iter->input_width * iter->input_height, sizeof(unsigned char));
+    iter->input_uchar = (uint8_t *)calloc(
+        iter->input_width * iter->input_height, sizeof(uint8_t));
     BCNN_CHECK_AND_LOG(
         net->log_ctx,
         net->tensors[0].w > 0 && net->tensors[0].h > 0 && net->tensors[0].c > 0,
@@ -73,18 +100,24 @@ bcnn_status bcnn_loader_mnist_init(bcnn_loader *iter, bcnn_net *net,
     iter->input_net = (uint8_t *)calloc(
         net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
         sizeof(uint8_t));
-    rewind(iter->f_input);
-    rewind(iter->f_label);
+    rewind(iter->f_current);
+    rewind(iter->f_current_extra);
 
     return BCNN_SUCCESS;
 }
 
 void bcnn_loader_mnist_terminate(bcnn_loader *iter) {
-    if (iter->f_input != NULL) {
-        fclose(iter->f_input);
+    if (iter->f_train != NULL) {
+        fclose(iter->f_train);
     }
-    if (iter->f_label != NULL) {
-        fclose(iter->f_label);
+    if (iter->f_train_extra != NULL) {
+        fclose(iter->f_train_extra);
+    }
+    if (iter->f_test != NULL) {
+        fclose(iter->f_test);
+    }
+    if (iter->f_test_extra != NULL) {
+        fclose(iter->f_test_extra);
     }
     bh_free(iter->input_uchar);
     bh_free(iter->input_net);
@@ -92,24 +125,25 @@ void bcnn_loader_mnist_terminate(bcnn_loader *iter) {
 
 bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
     unsigned char l;
-    if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0) {
-        rewind(iter->f_input);
+    FILE *f_data_hdl = NULL, *f_label_hdl = NULL;
+    if (fread((char *)&l, 1, sizeof(char), iter->f_current) == 0) {
+        rewind(iter->f_current);
     } else {
-        fseek(iter->f_input, -1, SEEK_CUR);
+        fseek(iter->f_current, -1, SEEK_CUR);
     }
-    if (fread((char *)&l, 1, sizeof(char), iter->f_label) == 0) {
-        rewind(iter->f_label);
+    if (fread((char *)&l, 1, sizeof(char), iter->f_current_extra) == 0) {
+        rewind(iter->f_current_extra);
     } else {
-        fseek(iter->f_label, -1, SEEK_CUR);
+        fseek(iter->f_current_extra, -1, SEEK_CUR);
     }
 
-    if (ftell(iter->f_input) == 0 && ftell(iter->f_label) == 0) {
+    if (ftell(iter->f_current) == 0 && ftell(iter->f_current_extra) == 0) {
         char tmp[16];
-        size_t n = fread(tmp, 1, 16, iter->f_input);
+        size_t n = fread(tmp, 1, 16, iter->f_current);
         unsigned int num_img = read_uint32(tmp + 4);
         iter->input_height = read_uint32(tmp + 8);
         iter->input_width = read_uint32(tmp + 12);
-        n = fread(tmp, 1, 8, iter->f_label);
+        n = fread(tmp, 1, 8, iter->f_current_extra);
         unsigned int num_labels = read_uint32(tmp + 4);
         BCNN_CHECK_AND_LOG(net->log_ctx, (num_img == num_labels),
                            BCNN_INVALID_DATA,
@@ -121,22 +155,21 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
                             net->tensors[0].w == iter->input_width),
                            BCNN_INVALID_DATA,
                            "MNIST data: incoherent image width and height");
-        iter->n_samples = num_img;
     }
 
     // Read label
-    size_t n = fread((char *)&l, 1, sizeof(char), iter->f_label);
+    size_t n = fread((char *)&l, 1, sizeof(char), iter->f_current_extra);
     int class_label = (int)l;
     // Read img
     n = fread(iter->input_uchar, 1, iter->input_width * iter->input_height,
-              iter->f_input);
+              iter->f_current);
 
     // Data augmentation
     if (net->mode == BCNN_MODE_TRAIN) {
-        int use_buffer_img = (net->data_aug.range_shift_x != 0 ||
-                              net->data_aug.range_shift_y != 0 ||
-                              net->data_aug.rotation_range != 0 ||
-                              net->data_aug.random_fliph != 0);
+        int use_buffer_img = (net->data_aug->range_shift_x != 0 ||
+                              net->data_aug->range_shift_y != 0 ||
+                              net->data_aug->rotation_range != 0 ||
+                              net->data_aug->random_fliph != 0);
         unsigned char *img_tmp = NULL;
         if (use_buffer_img) {
             int sz_img =
@@ -168,14 +201,14 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
         // Map [0;255] uint8 values to [-1;1] float values
         bcnn_convert_img_to_float(iter->input_net, net->tensors[0].w,
                                   net->tensors[0].h, net->tensors[0].c,
-                                  1 / 127.5f, net->data_aug.swap_to_bgr, 127.5f,
-                                  127.5f, 127.5f, x);
+                                  1 / 127.5f, net->data_aug->swap_to_bgr,
+                                  127.5f, 127.5f, 127.5f, x);
     } else {
         // Map [0;255] uint8 values to [-1;1] float values
         bcnn_convert_img_to_float(iter->input_uchar, net->tensors[0].w,
                                   net->tensors[0].h, net->tensors[0].c,
-                                  1 / 127.5f, net->data_aug.swap_to_bgr, 127.5f,
-                                  127.5f, 127.5f, x);
+                                  1 / 127.5f, net->data_aug->swap_to_bgr,
+                                  127.5f, 127.5f, 127.5f, x);
     }
     // bip_write_image("test1.png", tmp_buf, net->tensors[0].w,
     // net->tensors[0].h, net->tensors[0].c, net->tensors[0].w *

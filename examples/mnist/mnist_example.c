@@ -60,9 +60,9 @@ int create_network(bcnn_net *net) {
                         "softmax", "label", "cost");
 
     // Data augmentation
-    net->data_aug.range_shift_x = 5;
-    net->data_aug.range_shift_y = 5;
-    net->data_aug.rotation_range = 30.0f;
+    net->data_aug->range_shift_x = 5;
+    net->data_aug->range_shift_y = 5;
+    net->data_aug->rotation_range = 30.0f;
 
     bcnn_compile_net(net);
 

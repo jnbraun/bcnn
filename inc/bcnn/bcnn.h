@@ -254,77 +254,33 @@ typedef enum bcnn_filler_type {
  * Online data augmentation parameters struct
  */
 struct bcnn_data_augment_param {
-    int range_shift_x;    /* X-shift allowed range (chosen between
-                             [-range_shift_x / 2; range_shift_x / 2]). */
-    int range_shift_y;    /* Y-shift allowed range (chosen between
-                             [-range_shift_y / 2; range_shift_y / 2]). */
-    int random_fliph;     /* If !=0, randomly (with probability of 0.5) apply
-                             horizontal flip to image. */
-    float min_scale;      /* Minimum scale factor allowed. */
-    float max_scale;      /* Maximum scale factor allowed. */
-    float rotation_range; /* Rotation angle allowed range (chosen between
-                             [-rotation_range / 2; rotation_range / 2]).
-                             Expressed in degree. */
-    int min_brightness;   /* Minimum brightness factor allowed (additive factor,
-                             range [-255;255]). */
-    int max_brightness;   /* Maximum brightness factor allowed (additive factor,
-                             range [-255;255]). */
-    float min_contrast;   /* Minimum contrast allowed (mult factor). */
-    float max_contrast;   /* Maximum contrast allowed (mult factor). */
-    float max_distortion; /* Maximum distortion factor allowed. */
-    float mean_r;         /* 1st channel mean value to substract */
-    float mean_g;         /* 2nd channel mean value to substract */
-    float mean_b;         /* 3rd channel mean value to substract */
+    int range_shift_x;  /* X-shift allowed range (chosen between
+                           [-range_shift_x / 2; range_shift_x / 2]). */
+    int range_shift_y;  /* Y-shift allowed range (chosen between
+                           [-range_shift_y / 2; range_shift_y / 2]). */
+    int random_fliph;   /* If !=0, randomly (with probability of 0.5) apply
+                           horizontal flip to image. */
+    int min_brightness; /* Minimum brightness factor allowed (additive factor,
+                           range [-255;255]). */
+    int max_brightness; /* Maximum brightness factor allowed (additive factor,
+                           range [-255;255]). */
     int swap_to_bgr; /* Swap 1st and 3rd channel. Bcnn default image IO has RGB
                         layout */
     int no_input_norm;    /* If set to 1, Input data range is *not* normalized
                              between [-1;1] */
     int max_random_spots; /* Add a random number between [0;max_random_spots]
                              of saturated blobs. */
-};
-
-/**
- *  Structure for online data augmentation parameters.
- */
-struct bcnn_data_augmenter {
-    int range_shift_x;    /* X-shift allowed range (chosen between
-                             [-range_shift_x / 2; range_shift_x / 2]). */
-    int range_shift_y;    /* Y-shift allowed range (chosen between
-                             [-range_shift_y / 2; range_shift_y / 2]). */
-    int random_fliph;     /* If !=0, randomly (with probability of 0.5) apply
-                             horizontal flip to image. */
     float min_scale;      /* Minimum scale factor allowed. */
     float max_scale;      /* Maximum scale factor allowed. */
     float rotation_range; /* Rotation angle allowed range (chosen between
                              [-rotation_range / 2; rotation_range / 2]).
                              Expressed in degree. */
-    int min_brightness;   /* Minimum brightness factor allowed (additive factor,
-                             range [-255;255]). */
-    int max_brightness;   /* Maximum brightness factor allowed (additive factor,
-                             range [-255;255]). */
     float min_contrast;   /* Minimum contrast allowed (mult factor). */
     float max_contrast;   /* Maximum contrast allowed (mult factor). */
-    int use_precomputed;  /* Flag set to 1 if the parameters to be applied are
-                             those already set. */
-    float scale;          /* Current scale factor. */
-    int shift_x;          /* Current x-shift. */
-    int shift_y;          /* Current y-shift. */
-    float rotation;       /* Current rotation angle. */
-    int brightness;       /* Current brightness factor. */
-    float contrast;       /* Current contrast factor. */
     float max_distortion; /* Maximum distortion factor allowed. */
-    float distortion;     /* Current distortion factor. */
-    float distortion_kx;  /* Current distortion x kernel. */
-    float distortion_ky;  /* Current distortion y kernel. */
-    int apply_fliph;      /* Current flip flag. */
-    float mean_r;
-    float mean_g;
-    float mean_b;
-    int swap_to_bgr;
-    int no_input_norm;    /* If set to 1, Input data range is *not* normalized
-                             between [-1;1] */
-    int max_random_spots; /* Add a random number between [0;max_random_spots]
-                             of saturated blobs. */
+    float mean_r;         /* 1st channel mean value to substract */
+    float mean_g;         /* 2nd channel mean value to substract */
+    float mean_b;         /* 3rd channel mean value to substract */
 };
 
 /**
@@ -397,24 +353,6 @@ struct bcnn_node {
 /**
  * Net definition
  */
-#if 0
-struct bcnn_net {
-    int batch_size;
-    int num_nodes;
-    bcnn_mode mode;
-    bcnn_node *nodes;
-    int num_tensors;              /* Number of tensors hold in the network */
-    bcnn_tensor *tensors;         /* Array of tensors hold in the network */
-    bcnn_data_augmenter data_aug; /* Parameters for online data augmentation */
-    bcnn_learner learner;         /* Learner/optimizer parameters */
-    bcnn_log_context log_ctx;
-    void *gemm_ctx;
-#ifdef BCNN_USE_CUDA
-    void *cuda_ctx;
-#endif
-};
-#endif
-
 struct bcnn_net {
     int batch_size;
     int num_nodes;
@@ -425,6 +363,7 @@ struct bcnn_net {
     bcnn_learner *learner; /* Learner/optimizer parameters */
     bcnn_log_context log_ctx;
     bcnn_loader *data_loader;
+    bcnn_data_augmenter *data_aug; /* Parameters for online data augmentation */
     void *gemm_ctx;
 #ifdef BCNN_USE_CUDA
     void *cuda_ctx;
@@ -676,9 +615,26 @@ BCNN_API float bcnn_train_on_batch(bcnn_net *net, bcnn_loader *data_load);
 BCNN_API float bcnn_predict_on_batch(bcnn_net *net, bcnn_loader *data_load,
                                      float **pred);
 
-BCNN_API bcnn_status bcnn_setup_data_augmentation(
-    bcnn_net *net, bcnn_loader *data_load, bcnn_data_augment_param params);
+/**
+ * Setup the dataset loader given the paths to training and testing dataset and
+ * according to the data type.
+ */
+BCNN_API bcnn_status bcnn_set_data_loader(bcnn_net *net, bcnn_loader_type type,
+                                          const char *train_path_data,
+                                          const char *train_path_extra,
+                                          const char *test_path_data,
+                                          const char *test_path_extra);
+/**
+ * Set the online data augmentation parameters that will be applied on the
+ * training data.
+ */
+BCNN_API bcnn_status bcnn_set_data_augmentation(bcnn_net *net,
+                                                bcnn_data_augment_param params);
 
+/**
+ * Set the learning parameters that will be used during training phase to update
+ * the model weights.
+ */
 BCNN_API bcnn_status bcnn_set_learner(bcnn_net *net, bcnn_learner_param params);
 
 #ifdef __cplusplus

@@ -28,8 +28,10 @@
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_loader_list_classif_init(bcnn_loader *iter, bcnn_net *net,
-                                          const char *path_input,
-                                          const char *path_extra) {
+                                          const char *train_path,
+                                          const char *train_path_extra,
+                                          const char *test_path,
+                                          const char *test_path_extra) {
     FILE *f_list = NULL;
     f_list = fopen(path_input, "rb");
     if (f_list == NULL) {
@@ -47,13 +49,16 @@ bcnn_status bcnn_loader_list_classif_init(bcnn_loader *iter, bcnn_net *net,
         sizeof(unsigned char));
 
     rewind(f_list);
-    iter->f_input = f_list;
+    iter->f_train = f_list;
     return BCNN_SUCCESS;
 }
 
 void bcnn_loader_list_classif_terminate(bcnn_loader *iter) {
-    if (iter->f_input != NULL) {
-        fclose(iter->f_input);
+    if (iter->f_train != NULL) {
+        fclose(iter->f_train);
+    }
+    if (iter->f_test != NULL) {
+        fclose(iter->f_test);
     }
     bh_free(iter->input_uchar);
 }
@@ -62,10 +67,10 @@ bcnn_status bcnn_loader_list_classif_next(bcnn_loader *iter, bcnn_net *net,
                                           int idx) {
     // nb_lines_skipped = (int)((float)rand() / RAND_MAX * net->batch_size);
     // bh_fskipline(f, nb_lines_skipped);
-    char *line = bh_fgetline(iter->f_input);
+    char *line = bh_fgetline(iter->f_train);
     if (line == NULL) {
-        rewind(iter->f_input);
-        line = bh_fgetline(iter->f_input);
+        rewind(iter->f_train);
+        line = bh_fgetline(iter->f_train);
     }
     char **tok = NULL;
     int num_toks = bh_strsplit(line, ' ', &tok);

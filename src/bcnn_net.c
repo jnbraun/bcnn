@@ -99,7 +99,9 @@ static void bcnn_free_workload(bcnn_net *net) {
 }
 
 static void bcnn_free_net(bcnn_net *net) {
+    // Free workload
     bcnn_free_workload(net);
+    // Destroy nodes
     for (int i = 0; i < net->num_nodes; ++i) {
         if (net->nodes[i].release_param) {
             net->nodes[i].release_param(&net->nodes[i]);
@@ -107,12 +109,18 @@ static void bcnn_free_net(bcnn_net *net) {
         bcnn_free_node(&net->nodes[i]);
     }
     bh_free(net->nodes);
+    // Free tensors
     bcnn_destroy_tensors(net);
+    // Free data loader
+    bcnn_destroy_data_loader(net);
+    // Free data augmenter
+    bh_free(net->data_aug);
 #ifdef BCNN_USE_CUDA
+    // Free cuda context
     bh_free(net->cuda_ctx);
 #endif
 #ifndef BCNN_USE_BLAS
-    // Gemm context
+    // Free gemm context
     bh_align_free(net->gemm_ctx);
 #endif
 }
@@ -198,39 +206,39 @@ int bcnn_set_param(bcnn_net *net, const char *name, const char *val) {
     } else if (strcmp(name, "gamma") == 0) {
         net->learner.gamma = (float)atof(val);
     } else if (strcmp(name, "range_shift_x") == 0) {
-        net->data_aug.range_shift_x = atoi(val);
+        net->data_aug->range_shift_x = atoi(val);
     } else if (strcmp(name, "range_shift_y") == 0) {
-        net->data_aug.range_shift_y = atoi(val);
+        net->data_aug->range_shift_y = atoi(val);
     } else if (strcmp(name, "min_scale") == 0) {
-        net->data_aug.min_scale = (float)atof(val);
+        net->data_aug->min_scale = (float)atof(val);
     } else if (strcmp(name, "max_scale") == 0) {
-        net->data_aug.max_scale = (float)atof(val);
+        net->data_aug->max_scale = (float)atof(val);
     } else if (strcmp(name, "rotation_range") == 0) {
-        net->data_aug.rotation_range = (float)atof(val);
+        net->data_aug->rotation_range = (float)atof(val);
     } else if (strcmp(name, "min_contrast") == 0) {
-        net->data_aug.min_contrast = (float)atof(val);
+        net->data_aug->min_contrast = (float)atof(val);
     } else if (strcmp(name, "max_contrast") == 0) {
-        net->data_aug.max_contrast = (float)atof(val);
+        net->data_aug->max_contrast = (float)atof(val);
     } else if (strcmp(name, "min_brightness") == 0) {
-        net->data_aug.min_brightness = atoi(val);
+        net->data_aug->min_brightness = atoi(val);
     } else if (strcmp(name, "max_brightness") == 0) {
-        net->data_aug.max_brightness = atoi(val);
+        net->data_aug->max_brightness = atoi(val);
     } else if (strcmp(name, "max_distortion") == 0) {
-        net->data_aug.max_distortion = (float)atof(val);
+        net->data_aug->max_distortion = (float)atof(val);
     } else if (strcmp(name, "max_spots") == 0) {
-        net->data_aug.max_random_spots = (float)atof(val);
+        net->data_aug->max_random_spots = (float)atof(val);
     } else if (strcmp(name, "flip_h") == 0) {
-        net->data_aug.random_fliph = 1;
+        net->data_aug->random_fliph = 1;
     } else if (strcmp(name, "mean_r") == 0) {
-        net->data_aug.mean_r = (float)atof(val) / 255.0f;
+        net->data_aug->mean_r = (float)atof(val) / 255.0f;
     } else if (strcmp(name, "mean_g") == 0) {
-        net->data_aug.mean_g = (float)atof(val) / 255.0f;
+        net->data_aug->mean_g = (float)atof(val) / 255.0f;
     } else if (strcmp(name, "mean_b") == 0) {
-        net->data_aug.mean_b = (float)atof(val) / 255.0f;
+        net->data_aug->mean_b = (float)atof(val) / 255.0f;
     } else if (strcmp(name, "swap_to_bgr") == 0) {
-        net->data_aug.swap_to_bgr = atoi(val);
+        net->data_aug->swap_to_bgr = atoi(val);
     } else if (strcmp(name, "no_input_norm") == 0) {
-        net->data_aug.no_input_norm = atoi(val);
+        net->data_aug->no_input_norm = atoi(val);
     }
     return BCNN_SUCCESS;
 }

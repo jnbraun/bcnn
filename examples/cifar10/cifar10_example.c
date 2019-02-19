@@ -156,14 +156,14 @@ int create_network(bcnn_net *net, model_type type) {
     net->learner.beta2 = 0.999f;
 
     // Data augmentation
-    net->data_aug.range_shift_x = 6;
-    net->data_aug.range_shift_y = 6;
-    net->data_aug.rotation_range = 15.0f;
-    net->data_aug.max_brightness = 60;
-    net->data_aug.min_brightness = -60;
-    net->data_aug.max_contrast = 1.5f;
-    net->data_aug.min_contrast = 0.6f;
-    net->data_aug.random_fliph = 1;
+    net->data_aug->range_shift_x = 6;
+    net->data_aug->range_shift_y = 6;
+    net->data_aug->rotation_range = 15.0f;
+    net->data_aug->max_brightness = 60;
+    net->data_aug->min_brightness = -60;
+    net->data_aug->max_contrast = 1.5f;
+    net->data_aug->min_contrast = 0.6f;
+    net->data_aug->random_fliph = 1;
 
     // Target
     // net->prediction_type = CLASSIFICATION;

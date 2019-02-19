@@ -29,6 +29,7 @@
 /* include bip image processing lib */
 #include <bip/bip.h>
 
+#include "bcnn/bcnn.h"
 #include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 #include "data_loader/bcnn_cifar10_loader.h"
@@ -235,13 +236,13 @@ void bcnn_fill_input_tensor(bcnn_net *net, bcnn_loader *iter, char *path_img,
                             int idx) {
     bcnn_load_image_from_path(
         net, path_img, net->tensors[0].w, net->tensors[0].h, net->tensors[0].c,
-        iter->input_uchar, &net->data_aug.shift_x, &net->data_aug.shift_y);
+        iter->input_uchar, &net->data_aug->shift_x, &net->data_aug->shift_y);
     // Data augmentation
     if (net->mode == BCNN_MODE_TRAIN) {
-        int use_buffer_img = (net->data_aug.range_shift_x != 0 ||
-                              net->data_aug.range_shift_y != 0 ||
-                              net->data_aug.rotation_range != 0 ||
-                              net->data_aug.random_fliph != 0);
+        int use_buffer_img = (net->data_aug->range_shift_x != 0 ||
+                              net->data_aug->range_shift_y != 0 ||
+                              net->data_aug->rotation_range != 0 ||
+                              net->data_aug->random_fliph != 0);
         unsigned char *img_tmp = NULL;
         if (use_buffer_img) {
             int sz_img = bcnn_tensor_size3d(&net->tensors[0]);
@@ -258,8 +259,8 @@ void bcnn_fill_input_tensor(bcnn_net *net, bcnn_loader *iter, char *path_img,
     // Map [0;255] uint8 values to [-1;1] float values
     bcnn_convert_img_to_float(iter->input_uchar, net->tensors[0].w,
                               net->tensors[0].h, net->tensors[0].c, 1 / 127.5f,
-                              net->data_aug.swap_to_bgr, 127.5f, 127.5f, 127.5f,
-                              x);
+                              net->data_aug->swap_to_bgr, 127.5f, 127.5f,
+                              127.5f, x);
 }
 
 bcnn_loader_init_func bcnn_iterator_init_lut[BCNN_NUM_LOADERS] = {
@@ -278,22 +279,13 @@ bcnn_loader_terminate_func bcnn_iterator_terminate_lut[BCNN_NUM_LOADERS] = {
     bcnn_loader_list_detection_terminate};
 
 bcnn_status bcnn_loader_initialize(bcnn_loader *iter, bcnn_loader_type type,
-                                   bcnn_net *net, const char *path_data,
-                                   const char *path_extra) {
+                                   bcnn_net *net, const char *train_path,
+                                   const char *train_path_extra,
+                                   const char *test_path,
+                                   const char *test_path_extra) {
     iter->type = type;
-    return bcnn_iterator_init_lut[iter->type](iter, net, path_data, path_extra);
-}
-
-int bcnn_setup_loader(bcnn_net *net, bcnn_loader_type type,
-                      const char *train_path_data, const char *train_path_extra,
-                      const char *test_path_data, const char *test_path_extra) {
-    if (net->data_loader != NULL) {
-        bcnn_loader_terminate(net->data_loader);
-        bh_free(data_loader);
-    }
-    net->loader = (bcnn_loader *)calloc(1, sizeof(bcnn_loader));
-    // bcnn_loader_initialize(&net->loader, type, net, train_path_data,
-    // test_path_data);
+    return bcnn_iterator_init_lut[iter->type](
+        iter, net, train_path, train_path_extra, test_path, test_path_extra);
 }
 
 bcnn_status bcnn_loader_next(bcnn_net *net, bcnn_loader *iter) {
@@ -320,4 +312,58 @@ bcnn_status bcnn_loader_next(bcnn_net *net, bcnn_loader *iter) {
 
 void bcnn_loader_terminate(bcnn_loader *iter) {
     return bcnn_iterator_terminate_lut[iter->type](iter);
+}
+
+bcnn_status bcnn_set_data_loader(bcnn_net *net, bcnn_loader_type type,
+                                 const char *train_path_data,
+                                 const char *train_path_extra,
+                                 const char *test_path_data,
+                                 const char *test_path_extra) {
+    if (net->data_loader != NULL) {
+        bcnn_loader_terminate(net->data_loader);
+        bh_free(data_loader);
+    }
+    net->loader = (bcnn_loader *)calloc(1, sizeof(bcnn_loader));
+    if (net->loader == NULL) {
+        return BCNN_FAILED_ALLOC;
+    }
+    return bcnn_loader_initialize(&net->loader, type, net, train_path_data,
+                                  train_path_extra, test_path_data,
+                                  test_path_extra);
+}
+
+void bcnn_destroy_data_loader(bcnn_net *net) {
+    bcnn_loader_terminate(net->loader);
+    bh_free(net->loader);
+}
+
+bcnn_status bcnn_set_data_augmentation(bcnn_net *net,
+                                       bcnn_data_augment_param param) {
+    if (net->data_aug != NULL) {
+        bh_free(net->data_aug);
+    }
+    net->data_aug =
+        (bcnn_data_augmenter *)calloc(1, sizeof(bcnn_data_augmenter));
+    if (net->data_aug == NULL) {
+        return BCNN_FAILED_ALLOC;
+    }
+    net->data_aug->range_shift_x = param.range_shift_x;
+    net->data_aug->range_shift_y = param.range_shift_y;
+    net->data_aug->random_fliph = param.random_fliph;
+    net->data_aug->min_brightness = param.min_brightness;
+    net->data_aug->max_brightness = param.max_brightness;
+    net->data_aug->swap_to_bgr = param.swap_to_bgr;
+    net->data_aug->no_input_norm = param.no_input_norm;
+    net->data_aug->max_random_spots = param.max_random_spots;
+    net->data_aug->min_scale = param.min_scale;
+    net->data_aug->max_scale = param.max_scale;
+    net->data_aug->rotation_range = param.rotation_range;
+    net->data_aug->min_contrast = param.min_contrast;
+    net->data_aug->max_contrast = param.max_contrast;
+    net->data_aug->max_distortion = param.max_distortion;
+    net->data_aug->mean_r = param.mean_r;
+    net->data_aug->mean_g = param.mean_g;
+    net->data_aug->mean_b = param.mean_b;
+
+    return BCNN_SUCCESS;
 }

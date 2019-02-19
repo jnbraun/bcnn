@@ -30,8 +30,10 @@
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_loader_cifar10_init(bcnn_loader *iter, bcnn_net *net,
-                                     const char *path_input,
-                                     const char *path_extra) {
+                                     const char *train_path,
+                                     const char *train_path_extra,
+                                     const char *test_path,
+                                     const char *test_path_extra) {
     FILE *f_bin = NULL;
     f_bin = fopen(path_input, "rb");
     if (f_bin == NULL) {
@@ -52,14 +54,17 @@ bcnn_status bcnn_loader_cifar10_init(bcnn_loader *iter, bcnn_net *net,
     iter->input_net = (uint8_t *)calloc(
         net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
         sizeof(uint8_t));
-    iter->f_input = f_bin;
+    iter->f_train = f_bin;
 
     return BCNN_SUCCESS;
 }
 
 void bcnn_loader_cifar10_terminate(bcnn_loader *iter) {
-    if (iter->f_input != NULL) {
-        fclose(iter->f_input);
+    if (iter->f_train != NULL) {
+        fclose(iter->f_train);
+    }
+    if (iter->f_test != NULL) {
+        fclose(iter->f_test);
     }
     bh_free(iter->input_uchar);
     bh_free(iter->input_net);
@@ -71,31 +76,31 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
     if (net->mode == BCNN_MODE_TRAIN) {
         int rand_skip = /*(int)(10.0f * (float)rand() / RAND_MAX) + 1*/ 0;
         for (int i = 0; i < rand_skip; ++i) {
-            if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0) {
-                rewind(iter->f_input);
+            if (fread((char *)&l, 1, sizeof(char), iter->f_train) == 0) {
+                rewind(iter->f_train);
             } else {
-                fseek(iter->f_input, -1, SEEK_CUR);
+                fseek(iter->f_train, -1, SEEK_CUR);
             }
             fseek(
-                iter->f_input,
+                iter->f_train,
                 iter->input_width * iter->input_height * iter->input_depth + 1,
                 SEEK_CUR);
         }
     }
-    if (fread((char *)&l, 1, sizeof(char), iter->f_input) == 0) {
-        rewind(iter->f_input);
+    if (fread((char *)&l, 1, sizeof(char), iter->f_train) == 0) {
+        rewind(iter->f_train);
     } else {
-        fseek(iter->f_input, -1, SEEK_CUR);
+        fseek(iter->f_train, -1, SEEK_CUR);
     }
 
     // Read label
-    size_t n = fread((char *)&l, 1, sizeof(char), iter->f_input);
+    size_t n = fread((char *)&l, 1, sizeof(char), iter->f_train);
     int class_label = (int)l;
     // Read img
     char tmp[3072];
     n = fread(tmp, 1,
               iter->input_width * iter->input_height * iter->input_depth,
-              iter->f_input);
+              iter->f_train);
     // Swap depth <-> spatial dim arrangement
     for (int k = 0; k < iter->input_depth; ++k) {
         for (int y = 0; y < iter->input_height; ++y) {
@@ -113,10 +118,10 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
 
     // Data augmentation
     if (net->mode == BCNN_MODE_TRAIN) {
-        int use_buffer_img = (net->data_aug.range_shift_x != 0 ||
-                              net->data_aug.range_shift_y != 0 ||
-                              net->data_aug.rotation_range != 0 ||
-                              net->data_aug.random_fliph != 0);
+        int use_buffer_img = (net->data_aug->range_shift_x != 0 ||
+                              net->data_aug->range_shift_y != 0 ||
+                              net->data_aug->rotation_range != 0 ||
+                              net->data_aug->random_fliph != 0);
         unsigned char *img_tmp = NULL;
         if (use_buffer_img) {
             int sz_img =
@@ -146,14 +151,14 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
         // Map [0;255] uint8 values to [-1;1] float values
         bcnn_convert_img_to_float(iter->input_net, net->tensors[0].w,
                                   net->tensors[0].h, net->tensors[0].c,
-                                  1 / 127.5f, net->data_aug.swap_to_bgr, 127.5f,
-                                  127.5f, 127.5f, x);
+                                  1 / 127.5f, net->data_aug->swap_to_bgr,
+                                  127.5f, 127.5f, 127.5f, x);
     } else {
         // Map [0;255] uint8 values to [-1;1] float values
         bcnn_convert_img_to_float(iter->input_uchar, net->tensors[0].w,
                                   net->tensors[0].h, net->tensors[0].c,
-                                  1 / 127.5f, net->data_aug.swap_to_bgr, 127.5f,
-                                  127.5f, 127.5f, x);
+                                  1 / 127.5f, net->data_aug->swap_to_bgr,
+                                  127.5f, 127.5f, 127.5f, x);
     }
     // bip_write_image("test1.png", tmp_buf, net->tensors[0].w,
     // net->tensors[0].h, net->tensors[0].c, net->tensors[0].w *

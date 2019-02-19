@@ -284,6 +284,18 @@ bcnn_status bcnn_loader_initialize(bcnn_loader *iter, bcnn_loader_type type,
     return bcnn_iterator_init_lut[iter->type](iter, net, path_data, path_extra);
 }
 
+int bcnn_setup_loader(bcnn_net *net, bcnn_loader_type type,
+                      const char *train_path_data, const char *train_path_extra,
+                      const char *test_path_data, const char *test_path_extra) {
+    if (net->data_loader != NULL) {
+        bcnn_loader_terminate(net->data_loader);
+        bh_free(data_loader);
+    }
+    net->loader = (bcnn_loader *)calloc(1, sizeof(bcnn_loader));
+    // bcnn_loader_initialize(&net->loader, type, net, train_path_data,
+    // test_path_data);
+}
+
 bcnn_status bcnn_loader_next(bcnn_net *net, bcnn_loader *iter) {
     for (int i = 0; i < net->batch_size; ++i) {
         if (bcnn_iterator_next_lut[iter->type](iter, net, i) != BCNN_SUCCESS) {

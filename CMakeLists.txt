@@ -10,7 +10,7 @@ option(USE_NEON "Build with Neon instructions" OFF)
 # Building examples
 option(BUILD_EXAMPLES "Build examples" ON)
 # Building tools
-option(BUILD_TOOLS "Build tools" OFF)
+option(BUILD_TOOLS "Build tools" ON)
 # Set OFF to turn off logging
 set(ENABLE_LOG ON)
 
@@ -204,5 +204,6 @@ endif()
 if (BUILD_TOOLS)
     #add_subdirectory(tools/caffe_converter)
     add_subdirectory(tools/tflite_converter)
+    add_subdirectory(tools/tensorflow_converter)
 endif()
 

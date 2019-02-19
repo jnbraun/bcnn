@@ -236,13 +236,13 @@ int bcnn_set_param(bcnn_net *net, const char *name, const char *val) {
 }
 
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node) {
-    bcnn_node *p_conn = NULL;
+    bcnn_node *p_node = NULL;
     net->num_nodes++;
-    p_conn =
+    p_node =
         (bcnn_node *)realloc(net->nodes, net->num_nodes * sizeof(bcnn_node));
-    BCNN_CHECK_AND_LOG(net->log_ctx, (p_conn != NULL), BCNN_FAILED_ALLOC,
+    BCNN_CHECK_AND_LOG(net->log_ctx, (p_node != NULL), BCNN_FAILED_ALLOC,
                        "Internal allocation error");
-    net->nodes = p_conn;
+    net->nodes = p_node;
     net->nodes[net->num_nodes - 1] = node;
     return BCNN_SUCCESS;
 }
@@ -415,6 +415,11 @@ float bcnn_predict_on_batch(bcnn_net *net, bcnn_loader *iter, float **pred) {
     (*pred) = net->tensors[net->nodes[net->num_nodes - 1].src[0]].data;
     // Return the loss value
     return bcnn_get_loss(net);
+}
+
+void bcnn_set_learner(bcnn_net *net, bcnn_optimizer type, bcnn_learner params) {
+    net->learner.optimizer = type;
+    return;
 }
 
 bcnn_status bcnn_write_model(bcnn_net *net, char *filename) {

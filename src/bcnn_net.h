@@ -37,6 +37,21 @@ typedef struct bcnn_cuda_context {
 } bcnn_cuda_context;
 #endif
 
+struct bcnn_loader {
+    int n_samples;
+    int input_width;
+    int input_height;
+    int input_depth;
+    bcnn_loader_type type;
+    uint8_t *input_uchar;
+    uint8_t *input_net;
+    FILE *f_input;
+    FILE *f_label;
+    FILE *f_test;
+    FILE *f_test_extra;
+    bcnn_data_augmenter *data_aug; /* Parameters for online data augmentation */
+};
+
 bcnn_status bcnn_create_gemm_context(bcnn_net *net);
 #ifdef BCNN_USE_CUDA
 bcnn_status bcnn_create_cuda_context(bcnn_net *net);

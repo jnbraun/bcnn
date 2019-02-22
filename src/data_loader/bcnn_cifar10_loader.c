@@ -34,12 +34,9 @@ bcnn_status bcnn_loader_cifar10_init(bcnn_loader *iter, bcnn_net *net,
                                      const char *train_path_extra,
                                      const char *test_path,
                                      const char *test_path_extra) {
-    FILE *f_bin = NULL;
-    f_bin = fopen(path_input, "rb");
-    if (f_bin == NULL) {
-        fprintf(stderr, "[ERROR] Can not open file %s\n", path_input);
-        return BCNN_INVALID_PARAMETER;
-    }
+    // Open the files handles according to each dataset path
+    BCNN_CHECK_STATUS(bcnn_open_dataset(iter, net, train_path, train_path_extra,
+                                        test_path, test_path_extra, false));
     iter->input_width = 32;
     iter->input_height = 32;
     iter->input_depth = 3;
@@ -54,7 +51,6 @@ bcnn_status bcnn_loader_cifar10_init(bcnn_loader *iter, bcnn_net *net,
     iter->input_net = (uint8_t *)calloc(
         net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
         sizeof(uint8_t));
-    iter->f_train = f_bin;
 
     return BCNN_SUCCESS;
 }
@@ -76,31 +72,31 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
     if (net->mode == BCNN_MODE_TRAIN) {
         int rand_skip = /*(int)(10.0f * (float)rand() / RAND_MAX) + 1*/ 0;
         for (int i = 0; i < rand_skip; ++i) {
-            if (fread((char *)&l, 1, sizeof(char), iter->f_train) == 0) {
-                rewind(iter->f_train);
+            if (fread((char *)&l, 1, sizeof(char), iter->f_current) == 0) {
+                rewind(iter->f_current);
             } else {
-                fseek(iter->f_train, -1, SEEK_CUR);
+                fseek(iter->f_current, -1, SEEK_CUR);
             }
             fseek(
-                iter->f_train,
+                iter->f_current,
                 iter->input_width * iter->input_height * iter->input_depth + 1,
                 SEEK_CUR);
         }
     }
-    if (fread((char *)&l, 1, sizeof(char), iter->f_train) == 0) {
-        rewind(iter->f_train);
+    if (fread((char *)&l, 1, sizeof(char), iter->f_current) == 0) {
+        rewind(iter->f_current);
     } else {
-        fseek(iter->f_train, -1, SEEK_CUR);
+        fseek(iter->f_current, -1, SEEK_CUR);
     }
 
     // Read label
-    size_t n = fread((char *)&l, 1, sizeof(char), iter->f_train);
+    size_t n = fread((char *)&l, 1, sizeof(char), iter->f_current);
     int class_label = (int)l;
     // Read img
     char tmp[3072];
     n = fread(tmp, 1,
               iter->input_width * iter->input_height * iter->input_depth,
-              iter->f_train);
+              iter->f_current);
     // Swap depth <-> spatial dim arrangement
     for (int k = 0; k < iter->input_depth; ++k) {
         for (int y = 0; y < iter->input_height; ++y) {

@@ -32,12 +32,9 @@ bcnn_status bcnn_loader_list_classif_init(bcnn_loader *iter, bcnn_net *net,
                                           const char *train_path_extra,
                                           const char *test_path,
                                           const char *test_path_extra) {
-    FILE *f_list = NULL;
-    f_list = fopen(path_input, "rb");
-    if (f_list == NULL) {
-        fprintf(stderr, "[ERROR] Can not open file %s\n", path_input);
-        return BCNN_INVALID_PARAMETER;
-    }
+    // Open the files handles according to each dataset path
+    BCNN_CHECK_STATUS(bcnn_open_dataset(iter, net, train_path, train_path_extra,
+                                        test_path, test_path_extra, false));
     // Allocate img buffer
     BCNN_CHECK_AND_LOG(
         net->log_ctx,
@@ -48,8 +45,6 @@ bcnn_status bcnn_loader_list_classif_init(bcnn_loader *iter, bcnn_net *net,
         net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
         sizeof(unsigned char));
 
-    rewind(f_list);
-    iter->f_train = f_list;
     return BCNN_SUCCESS;
 }
 
@@ -67,10 +62,10 @@ bcnn_status bcnn_loader_list_classif_next(bcnn_loader *iter, bcnn_net *net,
                                           int idx) {
     // nb_lines_skipped = (int)((float)rand() / RAND_MAX * net->batch_size);
     // bh_fskipline(f, nb_lines_skipped);
-    char *line = bh_fgetline(iter->f_train);
+    char *line = bh_fgetline(iter->f_current);
     if (line == NULL) {
-        rewind(iter->f_train);
-        line = bh_fgetline(iter->f_train);
+        rewind(iter->f_current);
+        line = bh_fgetline(iter->f_current);
     }
     char **tok = NULL;
     int num_toks = bh_strsplit(line, ' ', &tok);

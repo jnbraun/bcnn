@@ -367,3 +367,84 @@ bcnn_status bcnn_set_data_augmentation(bcnn_net *net,
 
     return BCNN_SUCCESS;
 }
+
+bcnn_status bcnn_open_dataset(bcnn_loader *iter, bcnn_net *net,
+                              const char *train_path,
+                              const char *train_path_extra,
+                              const char *test_path,
+                              const char *test_path_extra, bool has_extra) {
+    // Open the files handles according to each dataset path
+    if (train_path_img != NULL) {
+        iter->f_train = fopen(train_path_img, "rb");
+        BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_train, BCNN_INVALID_PARAMETER,
+                           "Could not open file %s", train_path_img);
+    }
+    if (test_path_img != NULL) {
+        iter->f_test = fopen(test_path_img, "rb");
+        BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_test, BCNN_INVALID_PARAMETER,
+                           "Could not open file %s", test_path_img);
+    }
+    if (has_extra) {
+        if (train_path_extra != NULL) {
+            iter->f_train_extra = fopen(iter->f_train_extra, "rb");
+            BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_train_extra,
+                               BCNN_INVALID_PARAMETER, "Could not open file %s",
+                               train_path_extra);
+        }
+        if (test_path_extra != NULL) {
+            iter->f_test_extra = fopen(test_path_extra, "rb");
+            BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_test_extra,
+                               BCNN_INVALID_PARAMETER, "Could not open file %s",
+                               test_path_extra);
+        }
+    }
+    // Check that the provided dataset are consistent with the network mode
+    if (net->mode == BCNN_MODE_TRAIN) {
+        iter->f_current = iter->f_train;
+        bool valid = (iter->f_current != NULL);
+        if (has_extra) {
+            iter->f_current_extra = iter->f_train_extra;
+            valid = valid && (iter->f_current_extra != NULL);
+        }
+        BCNN_CHECK_AND_LOG(net->log_ctx, valid, BCNN_INVALID_DATA,
+                           "A training dataset must be provided");
+    } else {
+        iter->f_current = iter->f_test;
+        bool valid = (iter->f_current != NULL);
+        if (has_extra) {
+            iter->f_current_extra = iter->f_test_extra;
+            valid = valid && (iter->f_current_extra != NULL);
+        }
+        BCNN_CHECK_AND_LOG(net->log_ctx, valid, BCNN_INVALID_DATA,
+                           "A testing dataset must be provided");
+    }
+    iter->has_extra_data = has_extra;
+    return BCNN_SUCCESS;
+}
+
+bcnn_status bcnn_switch_data_handles(bcnn_net *net, bcnn_loader *iter) {
+    if (mode == BCNN_MODE_TRAIN) {
+        iter->f_current = iter->f_train;
+        bool valid = (iter->f_current != NULL);
+        if (iter->has_extra_data) {
+            iter->f_current_extra = iter->f_train_extra;
+            valid = valid && (iter->f_current_extra != NULL);
+        }
+        BCNN_CHECK_AND_LOG(net->log_ctx, valid, BCNN_INVALID_DATA,
+                           "A training dataset must be provided");
+    } else {
+        // We need to ensure that each time a prediction run is done, the same
+        // data samples are being processed.
+        rewind(iter->f_test);
+        iter->f_current = iter->f_test;
+        bool valid = (iter->f_current != NULL);
+        if (has_extra) {
+            iter->f_current_extra = iter->f_test_extra;
+            valid = valid && (iter->f_current_extra != NULL);
+        }
+        BCNN_CHECK_AND_LOG(net->log_ctx, valid, BCNN_INVALID_DATA,
+                           "A testing dataset must be provided");
+    }
+
+    return BCNN_SUCCESS;
+}

@@ -637,6 +637,14 @@ BCNN_API bcnn_status bcnn_set_data_augmentation(bcnn_net *net,
  */
 BCNN_API bcnn_status bcnn_set_learner(bcnn_net *net, bcnn_learner_param params);
 
+/**
+ * Set the network mode.
+ * This function can be called on the same bcnn_net object with different modes
+ * and will check internally if the requested mode is compatible with the
+ * network current state.
+ */
+BCNN_API bcnn_status bcnn_set_mode(bcnn_net *net, bcnn_mode mode);
+
 #ifdef __cplusplus
 }
 #endif

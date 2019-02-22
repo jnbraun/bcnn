@@ -430,6 +430,23 @@ void bcnn_set_learner(bcnn_net *net, bcnn_optimizer type, bcnn_learner params) {
     return;
 }
 
+bcnn_status bcnn_set_mode(bcnn_net *net, bcnn_mode mode) {
+    if (net->mode == mode) {
+        // Nothing changes
+        return BCNN_SUCCESS;
+    } else if (net->mode == BCNN_MODE_PREDICT) {
+        BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
+                   "Can not switch from 'predict' mode to another mode");
+    } else {
+        // TODO: Still needs to ensure that the network allocation have been
+        // done while in 'train' mode
+        net->mode = mode;
+        // Switch the dataset handles
+        bcnn_switch_data_handles(net, net->data_loader);
+    }
+    return BCNN_SUCCESS;
+}
+
 bcnn_status bcnn_write_model(bcnn_net *net, char *filename) {
     FILE *fp = NULL;
     fp = fopen(filename, "wb");

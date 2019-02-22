@@ -44,40 +44,9 @@ bcnn_status bcnn_loader_mnist_init(bcnn_loader *iter, bcnn_net *net,
                                    const char *test_path_img,
                                    const char *test_path_label) {
     // Open the files handles according to each dataset path
-    if (train_path_img != NULL) {
-        iter->f_train = fopen(train_path_img, "rb");
-        BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_train, BCNN_INVALID_PARAMETER,
-                           "Cound not open file %s", train_path_img);
-    }
-    if (test_path_img != NULL) {
-        iter->f_train_extra = fopen(iter->f_train_extra, "rb");
-        BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_train_extra,
-                           BCNN_INVALID_PARAMETER, "Cound not open file %s",
-                           train_path_label);
-    }
-    if (test_path_img != NULL) {
-        iter->f_test = fopen(test_path_img, "rb");
-        BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_test, BCNN_INVALID_PARAMETER,
-                           "Cound not open file %s", test_path_img);
-    }
-    if (test_path_label != NULL) {
-        iter->f_test_extra = fopen(test_path_label, "rb");
-        BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_test_extra,
-                           BCNN_INVALID_PARAMETER, "Cound not open file %s",
-                           test_path_label);
-    }
-    if (net->mode == BCNN_MODE_TRAIN) {
-        iter->f_current = iter->f_train;
-        iter->f_current_extra = iter->f_train_extra;
-    } else {
-        iter->f_current = iter->f_test;
-        iter->f_current_extra = iter->f_test_extra;
-    }
-    BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_current && iter->f_current_extra,
-                       BCNN_INVALID_PARAMETER,
-                       "[Mnist loader] Dataset paths are not consistent with "
-                       "the current network mode");
-
+    BCNN_CHECK_STATUS(bcnn_open_dataset(iter, net, train_path_img,
+                                        train_path_label, test_path_img,
+                                        test_path_label, true));
     // Read header
     char tmp[16] = {0};
     size_t nr = fread(tmp, 1, 16, iter->f_current);
@@ -150,11 +119,10 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            num_img, num_labels);
-        BCNN_CHECK_AND_LOG(net->log_ctx,
-                           (net->tensors[0].h == iter->input_height &&
-                            net->tensors[0].w == iter->input_width),
-                           BCNN_INVALID_DATA,
-                           "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, (net->tensors[0].h == iter->input_height &&
+                           net->tensors[0].w == iter->input_width),
+            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
     }
 
     // Read label

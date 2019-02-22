@@ -23,6 +23,7 @@
 #ifndef BCNN_DATA_H
 #define BCNN_DATA_H
 
+#include <stdbool.h>
 #include "bcnn/bcnn.h"
 
 #ifdef __cplusplus
@@ -30,10 +31,10 @@ extern "C" {
 #endif
 
 struct bcnn_loader {
-    int has_test_data;
     int input_width;
     int input_height;
     int input_depth;
+    bool has_extra_data;
     bcnn_loader_type type;
     uint8_t *input_uchar;
     uint8_t *input_net;
@@ -105,6 +106,14 @@ typedef void (*bcnn_loader_terminate_func)(bcnn_loader *iter);
 bcnn_status bcnn_data_augmentation(unsigned char *img, int width, int height,
                                    int depth, bcnn_data_augmenter *param,
                                    unsigned char *buffer);
+
+bcnn_status bcnn_open_dataset(bcnn_loader *iter, bcnn_net *net,
+                              const char *train_path,
+                              const char *train_path_extra,
+                              const char *test_path,
+                              const char *test_path_extra, bool has_extra);
+
+bcnn_status bcnn_switch_data_handles(bcnn_net *net, bcnn_loader *iter);
 
 void bcnn_fill_input_tensor(bcnn_net *net, bcnn_loader *iter, char *path_img,
                             int idx);

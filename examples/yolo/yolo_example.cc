@@ -43,13 +43,14 @@ void load_yolo_weights(bcnn_net *net, char *model) {
     if ((major * 10 + minor) >= 2 && major < 1000 && minor < 1000) {
         size_t lseen = 0;
         nr = fread(&lseen, sizeof(uint64_t), 1, fp);
-        net->learner.seen = lseen;
+        net->learner->seen = lseen;
     } else {
         int iseen = 0;
         nr = fread(&iseen, sizeof(int), 1, fp);
-        net->learner.seen = iseen;
+        net->learner->seen = iseen;
     }
-    fprintf(stderr, "version %d.%d seen %d\n", major, minor, net->learner.seen);
+    fprintf(stderr, "version %d.%d seen %d\n", major, minor,
+            net->learner->seen);
     int transpose = (major > 1000) || (minor > 1000);
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
@@ -593,15 +594,15 @@ void prepare_frame(unsigned char *frame, int w_frame, int h_frame, float *img,
     return;
 }
 
-void free_detection_results(bcnn_yolo_detection *dets, int num_dets) {
+void free_detection_results(bcnn_output_detection *dets, int num_dets) {
     for (int i = 0; i < num_dets; ++i) {
         free(dets[i].prob);
         free(dets[i].mask);
     }
 }
 
-bcnn_yolo_detection *run_inference(int w_frame, int h_frame, bcnn_net *net,
-                                   int *num_dets) {
+bcnn_output_detection *run_inference(int w_frame, int h_frame, bcnn_net *net,
+                                     int *num_dets) {
     float nms_tresh = 0.45f;
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
@@ -612,12 +613,12 @@ bcnn_yolo_detection *run_inference(int w_frame, int h_frame, bcnn_net *net,
     bcnn_forward(net);
     bh_timer_stop(&t);
     fprintf(stderr, "time= %lf msec\n", bh_timer_get_msec(&t));
-    // Get bcnn_yolo_detection boxes
-    int ndets = 0;
-    bcnn_yolo_detection *dets =
+    // Get bcnn_output_detection boxes
+    int nd = 0;
+    bcnn_output_detection *dets =
         bcnn_yolo_get_detections(net, 0, w_frame, h_frame, net->tensors[0].w,
-                                 net->tensors[0].h, 0.5, 1, &ndets);
-    *num_dets = ndets;
+                                 net->tensors[0].h, 0.5, 1, &nd);
+    *num_dets = nd;
     return dets;
 }
 
@@ -658,21 +659,15 @@ static std::string str_objs[80] = {
     "vase",        "scissors",   "teddy",        "hair",        "toothbrush"};
 
 #ifdef USE_OPENCV
-void display_detections(cv::Mat &frame, bcnn_yolo_detection *dets, int num_dets,
-                        float thresh, int num_classes) {
+void display_detections(cv::Mat &frame, bcnn_output_detection *dets,
+                        int num_dets, float thresh, int num_classes) {
     for (int i = 0; i < num_dets; ++i) {
         for (int j = 0; j < num_classes; ++j) {
             if (dets[i].prob[j] > thresh) {
-                int x_tl = (dets[i].bbox.x - dets[i].bbox.w / 2) * frame.cols;
-                int y_tl = (dets[i].bbox.y - dets[i].bbox.h / 2) * frame.rows;
-                /*fprintf(stderr,
-                        "det %d class %d bbox x %f y %f w %f h %f x_tl %d y_tl "
-                        "%d wimg %f himg %f\n",
-                        i, j, dets[i].bbox.x, dets[i].bbox.y, dets[i].bbox.w,
-                        dets[i].bbox.h, x_tl, y_tl, dets[i].bbox.w * frame.cols,
-                        dets[i].bbox.h * frame.rows);*/
-                cv::Rect box = cv::Rect(x_tl, y_tl, dets[i].bbox.w * frame.cols,
-                                        dets[i].bbox.h * frame.rows);
+                int x_tl = (dets[i].x - dets[i].w / 2) * frame.cols;
+                int y_tl = (dets[i].y - dets[i].h / 2) * frame.rows;
+                cv::Rect box = cv::Rect(x_tl, y_tl, dets[i].w * frame.cols,
+                                        dets[i].h * frame.rows);
                 int r, g, b;
                 b = (j % 6) * 51;
                 g = ((80 - j) % 11) * 25;
@@ -687,7 +682,7 @@ void display_detections(cv::Mat &frame, bcnn_yolo_detection *dets, int num_dets,
 }
 #else
 void display_detections(unsigned char *img, int w, int h, int c,
-                        bcnn_yolo_detection *dets, int num_dets, float thresh,
+                        bcnn_output_detection *dets, int num_dets, float thresh,
                         int num_classes, std::string outname) {
     uint8_t *dump_img = (uint8_t *)calloc(w * h * c, sizeof(uint8_t));
     memcpy(dump_img, img, w * h * c);
@@ -696,9 +691,8 @@ void display_detections(unsigned char *img, int w, int h, int c,
             if (dets[d].prob[j] > thresh) {
                 unsigned char color[3] = {(j % 6) * 51, ((80 - j) % 11) * 25,
                                           (j % 4) * 70 + 45};
-                bcnn_draw_color_box(dump_img, w, h, dets[d].bbox.x,
-                                    dets[d].bbox.y, dets[d].bbox.w,
-                                    dets[d].bbox.h, color);
+                bcnn_draw_color_box(dump_img, w, h, dets[d].x, dets[d].y,
+                                    dets[d].w, dets[d].h, color);
             }
         }
     }
@@ -706,23 +700,6 @@ void display_detections(unsigned char *img, int w, int h, int c,
     bh_free(dump_img);
 }
 #endif
-
-void print_detections(int w, int h, bcnn_yolo_detection *dets, int num_dets,
-                      float thresh, int num_classes) {
-    for (int i = 0; i < num_dets; ++i) {
-        for (int j = 0; j < num_classes; ++j) {
-            if (dets[i].prob[j] > thresh) {
-                int x_tl = (dets[i].bbox.x - dets[i].bbox.w / 2) * w;
-                int y_tl = (dets[i].bbox.y - dets[i].bbox.h / 2) * h;
-                fprintf(stderr,
-                        "det %d class %s bbox x %f y %f w %f h %f x_tl %d y_tl "
-                        "%d\n",
-                        i, str_objs[j].c_str(), dets[i].bbox.x, dets[i].bbox.y,
-                        dets[i].bbox.w, dets[i].bbox.h, x_tl, y_tl);
-            }
-        }
-    }
-}
 
 void show_usage(int argc, char **argv) {
     fprintf(stderr, "Usage: ./%s <mode> <video path/source> <model>\n",
@@ -738,7 +715,7 @@ int run(int argc, char **argv) {
     // Init net
     bcnn_net *net = NULL;
     bcnn_init_net(&net);
-    net->mode = BCNN_MODE_PREDICT;
+    bcnn_set_mode(net, BCNN_MODE_PREDICT);
     // net->prediction_type = DETECTION;
     // Setup net and weights
     char **toks = NULL;
@@ -777,7 +754,7 @@ int run(int argc, char **argv) {
             cap >> frame;
             prepare_frame(frame, net->tensors[0].data, w, h);
             int num_dets = 0;
-            bcnn_yolo_detection *dets =
+            bcnn_output_detection *dets =
                 run_inference(frame.cols, frame.rows, net, &num_dets);
             display_detections(frame, dets, num_dets, 0.45, 80);
             cv::imshow("yolov3-tiny example", frame);
@@ -816,11 +793,11 @@ int run(int argc, char **argv) {
         int num_dets = 0;
 #ifdef USE_OPENCV
         prepare_frame(img, net->tensors[0].data, w, h);
-        bcnn_yolo_detection *dets =
+        bcnn_output_detection *dets =
             run_inference(img.cols, img.rows, net, &num_dets);
 #else
         prepare_frame(img, w_frame, h_frame, net->tensors[0].data, w, h);
-        bcnn_yolo_detection *dets =
+        bcnn_output_detection *dets =
             run_inference(w_frame, h_frame, net, &num_dets);
 #endif
         std::string in_path = argv[2];

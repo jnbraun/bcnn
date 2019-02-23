@@ -25,16 +25,16 @@
 #include "bcnn/bcnn.h"
 
 int create_network(bcnn_net *net) {
-    net->learner.optimizer = BCNN_OPTIM_SGD;
-    net->learner.learning_rate = 0.003f;
-    net->learner.gamma = 0.00002f;
-    net->learner.decay = 0.0005f;
-    net->learner.momentum = 0.9f;
-    net->learner.decay_type = BCNN_LR_DECAY_SIGMOID;
-    net->learner.step = 40000;
-    net->learner.beta1 = 0.9f;
-    net->learner.beta2 = 0.999f;
-    net->learner.max_batches = 50000;
+    net->learner->optimizer = BCNN_OPTIM_SGD;
+    net->learner->learning_rate = 0.003f;
+    net->learner->gamma = 0.00002f;
+    net->learner->decay = 0.0005f;
+    net->learner->momentum = 0.9f;
+    net->learner->decay_type = BCNN_LR_DECAY_SIGMOID;
+    net->learner->step = 40000;
+    net->learner->beta1 = 0.9f;
+    net->learner->beta2 = 0.999f;
+    net->learner->max_batches = 50000;
 
     bcnn_set_input_shape(net, 28, 28, 1, 16);
 
@@ -75,14 +75,11 @@ int predict_mnist(bcnn_net *net, const char *test_img, const char *test_label,
     float *out = NULL;
     float loss = 0.0f;
     FILE *f = NULL;
-    bcnn_loader data_mnist = {0};
     int nb = net->num_nodes;
     int output_size =
         bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
 
-    net->mode = BCNN_MODE_VALID;
-    bcnn_loader_initialize(&data_mnist, BCNN_LOAD_MNIST, net, test_img,
-                           test_label);
+    bcnn_set_mode(net, BCNN_MODE_VALID);
 
     f = fopen(pred_out, "wt");
     if (f == NULL) {
@@ -92,7 +89,7 @@ int predict_mnist(bcnn_net *net, const char *test_img, const char *test_label,
 
     n = nb_pred / net->batch_size;
     for (i = 0; i < n; ++i) {
-        loss += bcnn_predict_on_batch(net, &data_mnist, &out);
+        loss += bcnn_predict_on_batch(net, &out);
         // Save predictions
         for (j = 0; j < net->batch_size; ++j) {
             for (k = 0; k < output_size; ++k)
@@ -105,7 +102,6 @@ int predict_mnist(bcnn_net *net, const char *test_img, const char *test_label,
     if (f != NULL) {
         fclose(f);
     }
-    bcnn_loader_terminate(&data_mnist);
     return 0;
 }
 
@@ -114,17 +110,12 @@ int train_mnist(bcnn_net *net, const char *train_img, const char *train_label,
                 int eval_period, float *error) {
     float error_batch = 0.0f, sum_error = 0.0f, error_valid = 0.0f;
     bh_timer t = {0}, tp = {0};
-    bcnn_loader data_mnist = {0};
 
-    net->mode = BCNN_MODE_TRAIN;
-    if (bcnn_loader_initialize(&data_mnist, BCNN_LOAD_MNIST, net, train_img,
-                               train_label) != 0) {
-        return -1;
-    }
+    bcnn_set_mode(net, BCNN_MODE_TRAIN);
 
     bh_timer_start(&t);
     for (int i = 0; i < num_iter; ++i) {
-        sum_error += bcnn_train_on_batch(net, &data_mnist);
+        sum_error += bcnn_train_on_batch(net);
 
         if (i % eval_period == 0 && i > 0) {
             bh_timer_stop(&t);
@@ -142,11 +133,10 @@ int train_mnist(bcnn_net *net, const char *train_img, const char *train_label,
             bh_timer_start(&t);
             sum_error = 0;
             // Reschedule net for training
-            net->mode = BCNN_MODE_TRAIN;
+            bcnn_set_mode(net, BCNN_MODE_TRAIN);
         }
     }
 
-    bcnn_loader_terminate(&data_mnist);
     *error = (float)sum_error / (eval_period * net->batch_size);
 
     return 0;
@@ -158,7 +148,7 @@ int run(const char *train_img, const char *train_label, const char *test_img,
     bcnn_net *net = NULL;
 
     bcnn_init_net(&net);
-    net->mode = BCNN_MODE_TRAIN;
+    bcnn_set_mode(net, BCNN_MODE_TRAIN);
     fprintf(stderr, "Create Network...\n");
     create_network(net);
 
@@ -171,7 +161,7 @@ int run(const char *train_img, const char *train_label, const char *test_img,
     }
 
     fprintf(stderr, "Start prediction...\n");
-    net->mode = BCNN_MODE_VALID;
+    bcnn_set_mode(net, BCNN_MODE_VALID);
     predict_mnist(net, test_img, test_label, 10000, &error_test,
                   "pred_mnist.txt");
     fprintf(stderr, "Prediction ended successfully\n");

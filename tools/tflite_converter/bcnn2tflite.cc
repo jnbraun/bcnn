@@ -16,6 +16,7 @@
 #include "bcnn_depthwise_conv_layer.h"
 #include "bcnn_fc_layer.h"
 #include "bcnn_maxpool_layer.h"
+#include "cli/bcnn_cl.h"
 
 /* tflite generated flatbuffers */
 #include "schema_generated.h"

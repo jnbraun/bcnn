@@ -23,6 +23,25 @@
 #ifndef BCNN_LEARNER_H
 #define BCNN_LEARNER_H
 
+/**
+ *  Structure to handle learner method and parameters.
+ */
+typedef struct {
+    int step;
+    int seen;            /* Number of instances seen by the network */
+    int max_batches;     /* Maximum number of batches for training */
+    float momentum;      /* Momentum parameter */
+    float decay;         /* Decay parameter */
+    float learning_rate; /* Base learning rate */
+    float gamma;
+    float scale;
+    float power;
+    float beta1;              /* Parameter for Adam optimizer */
+    float beta2;              /* Parameter for Adam optimizer */
+    bcnn_optimizer optimizer; /* Optimization method */
+    bcnn_lr_decay decay_type; /* Learning rate decay type */
+} bcnn_learner;
+
 void bcnn_sgd_update_cpu(float *weights, float *biases, float *weights_grad,
                          float *biases_grad, int weights_size, int biases_size,
                          int batch_size, float learning_rate, float momentum,

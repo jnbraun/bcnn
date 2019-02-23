@@ -145,15 +145,15 @@ static int resnet18(bcnn_net *net) {
 }
 
 int create_network(bcnn_net *net, model_type type) {
-    net->learner.optimizer = BCNN_OPTIM_ADAM;
-    net->learner.learning_rate = 0.005f;
-    net->learner.gamma = 0.00002f;
-    net->learner.decay = 0.0005f;
-    net->learner.momentum = 0.9f;
-    net->learner.decay_type = BCNN_LR_DECAY_SIGMOID;
-    net->learner.step = 40000;
-    net->learner.beta1 = 0.9f;
-    net->learner.beta2 = 0.999f;
+    net->learner->optimizer = BCNN_OPTIM_ADAM;
+    net->learner->learning_rate = 0.005f;
+    net->learner->gamma = 0.00002f;
+    net->learner->decay = 0.0005f;
+    net->learner->momentum = 0.9f;
+    net->learner->decay_type = BCNN_LR_DECAY_SIGMOID;
+    net->learner->step = 40000;
+    net->learner->beta1 = 0.9f;
+    net->learner->beta2 = 0.999f;
 
     // Data augmentation
     net->data_aug->range_shift_x = 6;
@@ -195,11 +195,7 @@ int predict_cifar10(bcnn_net *net, char *test_img, int nb_pred, float *avg_loss,
     int output_size =
         bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
 
-    net->mode = BCNN_MODE_VALID;
-    if (bcnn_loader_initialize(&data_iter, BCNN_LOAD_CIFAR10, net, test_img,
-                               NULL) != 0) {
-        return -1;
-    }
+    bcnn_set_mode(net, BCNN_MODE_VALID);
 
     f = fopen(pred_out, "wt");
     if (f == NULL) {
@@ -209,7 +205,7 @@ int predict_cifar10(bcnn_net *net, char *test_img, int nb_pred, float *avg_loss,
 
     n = nb_pred / net->batch_size;
     for (i = 0; i < n; ++i) {
-        loss += bcnn_predict_on_batch(net, &data_iter, &out);
+        loss += bcnn_predict_on_batch(net, &out);
         // Save predictions
         for (j = 0; j < net->batch_size; ++j) {
             for (k = 0; k < output_size; ++k)
@@ -222,7 +218,6 @@ int predict_cifar10(bcnn_net *net, char *test_img, int nb_pred, float *avg_loss,
     if (f != NULL) {
         fclose(f);
     }
-    bcnn_loader_terminate(&data_iter);
     return 0;
 }
 
@@ -230,17 +225,12 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
                   int eval_period, float *error) {
     float sum_error = 0.0f, error_valid = 0.0f;
     bh_timer t = {0}, tp = {0};
-    bcnn_loader data_iter = {0};
 
-    net->mode = BCNN_MODE_TRAIN;
-    if (bcnn_loader_initialize(&data_iter, BCNN_LOAD_CIFAR10, net, train_img,
-                               NULL) != 0) {
-        return -1;
-    }
+    bcnn_set_mode(net, BCNN_MODE_TRAIN);
 
     bh_timer_start(&t);
     for (int i = 0; i < nb_iter; ++i) {
-        sum_error += bcnn_train_on_batch(net, &data_iter);
+        sum_error += bcnn_train_on_batch(net);
 
         if (i % eval_period == 0 && i > 0) {
             bh_timer_stop(&t);
@@ -258,11 +248,10 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
             bh_timer_start(&t);
             sum_error = 0;
             // Reschedule net for training
-            net->mode = BCNN_MODE_TRAIN;
+            bcnn_set_mode(net, BCNN_MODE_TRAIN);
         }
     }
 
-    bcnn_loader_terminate(&data_iter);
     *error = (float)sum_error / (eval_period * net->batch_size);
 
     return 0;
@@ -273,7 +262,7 @@ int run(char *train_data, char *test_data, model_type model) {
     bcnn_net *net = NULL;
 
     bcnn_init_net(&net);
-    net->mode = BCNN_MODE_TRAIN;
+    bcnn_set_mode(net, BCNN_MODE_TRAIN);
     fprintf(stderr, "Create Network...\n");
     create_network(net, model);
 
@@ -286,7 +275,7 @@ int run(char *train_data, char *test_data, model_type model) {
     }
 
     fprintf(stderr, "Start prediction...\n");
-    net->mode = BCNN_MODE_VALID;
+    bcnn_set_mode(net, BCNN_MODE_VALID);
     predict_cifar10(net, test_data, 10000, &error_test,
                     "predictions_cifar10.txt");
     fprintf(stderr, "Prediction ended successfully\n");

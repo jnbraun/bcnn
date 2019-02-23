@@ -98,6 +98,8 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     return 0;
 }
 
+typedef struct bbox { float x, y, w, h; } bbox;
+
 static float overlap(float x1, float w1, float x2, float w2) {
     float l1 = x1 - w1 / 2;
     float l2 = x2 - w2 / 2;
@@ -108,7 +110,7 @@ static float overlap(float x1, float w1, float x2, float w2) {
     return right - left;
 }
 
-static float box_intersection(bcnn_box a, bcnn_box b) {
+static float box_intersection(bbox a, bbox b) {
     float w = overlap(a.x, a.w, b.x, b.w);
     float h = overlap(a.y, a.h, b.y, b.h);
     if (w < 0 || h < 0) return 0;
@@ -116,19 +118,19 @@ static float box_intersection(bcnn_box a, bcnn_box b) {
     return area;
 }
 
-static float box_union(bcnn_box a, bcnn_box b) {
+static float box_union(bbox a, bbox b) {
     float i = box_intersection(a, b);
     float u = a.w * a.h + b.w * b.h - i;
     return u;
 }
 
-static float box_iou(bcnn_box a, bcnn_box b) {
+static float box_iou(bbox a, bbox b) {
     return box_intersection(a, b) / box_union(a, b);
 }
 
-static bcnn_box get_yolo_box(float *x, float *biases, int n, int index, int i,
-                             int j, int lw, int lh, int w, int h, int stride) {
-    bcnn_box b;
+static bbox get_yolo_box(float *x, float *biases, int n, int index, int i,
+                         int j, int lw, int lh, int w, int h, int stride) {
+    bbox b;
     b.x = (i + x[index + 0 * stride]) / lw;
     b.y = (j + x[index + 1 * stride]) / lh;
     b.w = expf(x[index + 2 * stride]) * biases[2 * n] / w;
@@ -136,11 +138,10 @@ static bcnn_box get_yolo_box(float *x, float *biases, int n, int index, int i,
     return b;
 }
 
-static float delta_yolo_box(bcnn_box truth, float *x, float *biases, int n,
+static float delta_yolo_box(bbox truth, float *x, float *biases, int n,
                             int index, int i, int j, int lw, int lh, int w,
                             int h, float *delta, float scale, int stride) {
-    bcnn_box pred =
-        get_yolo_box(x, biases, n, index, i, j, lw, lh, w, h, stride);
+    bbox pred = get_yolo_box(x, biases, n, index, i, j, lw, lh, w, h, stride);
     float iou = box_iou(pred, truth);
     /*fprintf(stderr,
             "truth %f %f %f %f pred %f %f %f %f iou %f w %d h %d bias %f %f\n",
@@ -207,8 +208,8 @@ int entry_index(bcnn_yolo_param *param, bcnn_tensor *dst_tensor, int batch,
            entry * (dst_tensor->w * dst_tensor->h) + loc;
 }
 
-static bcnn_box float_to_box(float *f, int stride) {
-    bcnn_box b = {0};
+static bbox float_to_box(float *f, int stride) {
+    bbox b = {0};
     b.x = f[0];
     b.y = f[1 * stride];
     b.w = f[2 * stride];
@@ -264,7 +265,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_yolo_param *param,
                                     n * src_tensor->w * src_tensor->h +
                                         j * src_tensor->w + i,
                                     0);
-                    bcnn_box pred = get_yolo_box(
+                    bbox pred = get_yolo_box(
                         dst_tensor->data, param->biases.data, param->mask[n],
                         box_index, i, j, src_tensor->w, src_tensor->h,
                         net->tensors[0].w, net->tensors[0].h,
@@ -272,7 +273,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_yolo_param *param,
                     float best_iou = 0;
                     int best_box = 0;
                     for (t = 0; t < param->max_boxes; ++t) {
-                        bcnn_box truth =
+                        bbox truth =
                             float_to_box(label->data + t * (param->coords + 1) +
                                              b * param->truths,
                                          1);
@@ -309,7 +310,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_yolo_param *param,
             }
         }
         for (t = 0; t < param->max_boxes; ++t) {
-            bcnn_box truth = float_to_box(
+            bbox truth = float_to_box(
                 label->data + t * (param->coords + 1) + b * param->truths, 1);
             if (!truth.x) {
                 break;
@@ -320,11 +321,11 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_yolo_param *param,
             int best_n = 0;
             i = (truth.x * src_tensor->w);
             j = (truth.y * src_tensor->h);
-            bcnn_box truth_shift = truth;
+            bbox truth_shift = truth;
             truth_shift.x = 0;
             truth_shift.y = 0;
             for (n = 0; n < param->total; ++n) {
-                bcnn_box pred = {0};
+                bbox pred = {0};
                 pred.w = param->biases.data[2 * n] / net->tensors[0].w;
                 pred.h = param->biases.data[2 * n + 1] / net->tensors[0].h;
                 float iou = box_iou(pred, truth_shift);
@@ -459,8 +460,8 @@ void bcnn_backward_yolo_layer(bcnn_net *net, bcnn_node *node) {
 #endif
 }
 
-static void correct_region_boxes(bcnn_yolo_detection *dets, int n, int w, int h,
-                                 int netw, int neth, int relative) {
+static void correct_region_boxes(bcnn_output_detection *dets, int n, int w,
+                                 int h, int netw, int neth, int relative) {
     int i;
     int new_w = 0;
     int new_h = 0;
@@ -472,70 +473,63 @@ static void correct_region_boxes(bcnn_yolo_detection *dets, int n, int w, int h,
         new_w = (w * neth) / h;
     }
     for (i = 0; i < n; ++i) {
-        bcnn_box b = dets[i].bbox;
-        b.x = (b.x - (netw - new_w) / 2. / netw) / ((float)new_w / netw);
-        b.y = (b.y - (neth - new_h) / 2. / neth) / ((float)new_h / neth);
-        b.w *= (float)netw / new_w;
-        b.h *= (float)neth / new_h;
+        dets[i].x =
+            (dets[i].x - (netw - new_w) / 2. / netw) / ((float)new_w / netw);
+        dets[i].y =
+            (dets[i].y - (neth - new_h) / 2. / neth) / ((float)new_h / neth);
+        dets[i].w *= (float)netw / new_w;
+        dets[i].h *= (float)neth / new_h;
         if (!relative) {
-            b.x *= w;
-            b.w *= w;
-            b.y *= h;
-            b.h *= h;
+            dets[i].x *= w;
+            dets[i].w *= w;
+            dets[i].y *= h;
+            dets[i].h *= h;
         }
-        dets[i].bbox = b;
     }
 }
 
 static int nms_comparator(const void *pa, const void *pb) {
-    bcnn_yolo_detection a = *(bcnn_yolo_detection *)pa;
-    bcnn_yolo_detection b = *(bcnn_yolo_detection *)pb;
-    float diff = 0;
-    if (b.sort_class >= 0) {
-        diff = a.prob[b.sort_class] - b.prob[b.sort_class];
-    } else {
-        diff = a.objectness - b.objectness;
-    }
-    if (diff < 0)
+    bcnn_output_detection a = *(bcnn_output_detection *)pa;
+    bcnn_output_detection b = *(bcnn_output_detection *)pb;
+
+    float diff = a.objectness - b.objectness;
+    if (diff < 0) {
         return 1;
-    else if (diff > 0)
+    } else if (diff > 0) {
         return -1;
+    }
     return 0;
 }
 
-static void do_nms_obj(bcnn_yolo_detection *dets, int total, int classes,
-                       float thresh) {
-    int i, j, k;
-    k = total - 1;
-    for (i = 0; i <= k; ++i) {
+static void do_nms_obj(bcnn_output_detection *dets, int num_dets,
+                       int num_classes, float thresh) {
+    int k = num_dets - 1;
+    for (int i = 0; i <= k; ++i) {
         if (dets[i].objectness == 0) {
-            bcnn_yolo_detection swap = dets[i];
+            bcnn_output_detection swap = dets[i];
             dets[i] = dets[k];
             dets[k] = swap;
             --k;
             --i;
         }
     }
-    total = k + 1;
-
-    for (i = 0; i < total; ++i) {
-        dets[i].sort_class = -1;
-    }
-
-    qsort(dets, total, sizeof(bcnn_yolo_detection), nms_comparator);
-    for (i = 0; i < total; ++i) {
+    num_dets = k + 1;
+    qsort(dets, num_dets, sizeof(bcnn_output_detection), nms_comparator);
+    for (int i = 0; i < num_dets; ++i) {
         if (dets[i].objectness == 0) {
             continue;
         }
-        bcnn_box a = dets[i].bbox;
-        for (j = i + 1; j < total; ++j) {
+        bbox a = {
+            .x = dets[i].x, .y = dets[i].y, .w = dets[i].w, .h = dets[i].h};
+        for (int j = i + 1; j < num_dets; ++j) {
             if (dets[j].objectness == 0) {
                 continue;
             }
-            bcnn_box b = dets[j].bbox;
+            bbox b = {
+                .x = dets[j].x, .y = dets[j].y, .w = dets[j].w, .h = dets[j].h};
             if (box_iou(a, b) > thresh) {
                 dets[j].objectness = 0;
-                for (k = 0; k < classes; ++k) {
+                for (k = 0; k < num_classes; ++k) {
                     dets[j].prob[k] = 0;
                 }
             }
@@ -544,10 +538,10 @@ static void do_nms_obj(bcnn_yolo_detection *dets, int total, int classes,
 }
 
 // w = 640 h = 480 netw = 416 neth = 416
-bcnn_yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w,
-                                              int h, int netw, int neth,
-                                              float thresh, int relative,
-                                              int *num_dets) {
+bcnn_output_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w,
+                                                int h, int netw, int neth,
+                                                float thresh, int relative,
+                                                int *num_dets) {
     int i, j, n, z;
     int count = 0;
     int num_classes = 0;
@@ -571,10 +565,10 @@ bcnn_yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w,
             }
         }
     }
-    bcnn_yolo_detection *dets = NULL;
+    bcnn_output_detection *dets = NULL;
     if (count > 0) {
-        dets =
-            (bcnn_yolo_detection *)calloc(count, sizeof(bcnn_yolo_detection));
+        dets = (bcnn_output_detection *)calloc(count,
+                                               sizeof(bcnn_output_detection));
         bcnn_yolo_param *param =
             (bcnn_yolo_param *)net->nodes[net->num_nodes - 1].param;
         for (i = 0; i < count; ++i) {
@@ -605,12 +599,16 @@ bcnn_yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w,
                     }
                     int box_index = entry_index(param, dst, batch,
                                                 n * dst->w * dst->h + i, 0);
-                    dets[count].bbox = get_yolo_box(
-                        dst->data, param->biases.data, param->mask[n],
-                        box_index, col, row, dst->w, dst->h, net->tensors[0].w,
-                        net->tensors[0].h, dst->w * dst->h);
+                    bbox tmp = get_yolo_box(dst->data, param->biases.data,
+                                            param->mask[n], box_index, col, row,
+                                            dst->w, dst->h, net->tensors[0].w,
+                                            net->tensors[0].h, dst->w * dst->h);
+                    dets[count].x = tmp.x;
+                    dets[count].y = tmp.y;
+                    dets[count].w = tmp.w;
+                    dets[count].h = tmp.h;
                     dets[count].objectness = objectness;
-                    dets[count].classes = param->classes;
+                    dets[count].num_classes = param->classes;
                     for (j = 0; j < param->classes; ++j) {
                         int class_index = entry_index(param, dst, batch,
                                                       n * dst->w * dst->h + i,

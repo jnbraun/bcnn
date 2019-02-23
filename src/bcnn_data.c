@@ -30,6 +30,7 @@
 #include <bip/bip.h>
 
 #include "bcnn/bcnn.h"
+#include "bcnn_net.h"
 #include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 #include "data_loader/bcnn_cifar10_loader.h"
@@ -250,7 +251,7 @@ void bcnn_fill_input_tensor(bcnn_net *net, bcnn_loader *iter, char *path_img,
         }
         bcnn_data_augmentation(iter->input_uchar, net->tensors[0].w,
                                net->tensors[0].h, net->tensors[0].c,
-                               &net->data_aug, img_tmp);
+                               net->data_aug, img_tmp);
         bh_free(img_tmp);
     }
     // Fill input tensor
@@ -288,8 +289,9 @@ bcnn_status bcnn_loader_initialize(bcnn_loader *iter, bcnn_loader_type type,
         iter, net, train_path, train_path_extra, test_path, test_path_extra);
 }
 
-bcnn_status bcnn_loader_next(bcnn_net *net, bcnn_loader *iter) {
+bcnn_status bcnn_loader_next(bcnn_net *net) {
     for (int i = 0; i < net->batch_size; ++i) {
+        bcnn_loader *iter = net->data_loader;
         if (bcnn_iterator_next_lut[iter->type](iter, net, i) != BCNN_SUCCESS) {
             // Handle the case when one sample could not be loaded correctly for
             // some reason (wrong path, image corrupted ...): skip this sample
@@ -321,7 +323,7 @@ bcnn_status bcnn_set_data_loader(bcnn_net *net, bcnn_loader_type type,
                                  const char *test_path_extra) {
     if (net->data_loader != NULL) {
         bcnn_loader_terminate(net->data_loader);
-        bh_free(data_loader);
+        bh_free(net->data_loader);
     }
     net->loader = (bcnn_loader *)calloc(1, sizeof(bcnn_loader));
     if (net->loader == NULL) {
@@ -423,7 +425,7 @@ bcnn_status bcnn_open_dataset(bcnn_loader *iter, bcnn_net *net,
 }
 
 bcnn_status bcnn_switch_data_handles(bcnn_net *net, bcnn_loader *iter) {
-    if (mode == BCNN_MODE_TRAIN) {
+    if (net->mode == BCNN_MODE_TRAIN) {
         iter->f_current = iter->f_train;
         bool valid = (iter->f_current != NULL);
         if (iter->has_extra_data) {

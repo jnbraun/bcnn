@@ -1,4 +1,5 @@
-/*
+/* ner->ner->> etnet->learner->>>
+    learnet->learner->r->ner->rner->
  * Copyright (c) 2016-present Jean-Noel Braun.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -99,13 +100,13 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
     node.param = (bcnn_fullc_param *)calloc(1, node.param_size);
     bcnn_fullc_param *param = (bcnn_fullc_param *)node.param;
     param->activation = activation;
-    if (net->learner.optimizer == BCNN_OPTIM_ADAM) {
+    if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
         int weights_size = bcnn_tensor_size(&weights);
         param->adam_m = (float *)calloc(weights_size, sizeof(float));
         param->adam_v = (float *)calloc(weights_size, sizeof(float));
     }
 #ifdef BCNN_USE_CUDA
-    if (net->learner.optimizer == BCNN_OPTIM_ADAM) {
+    if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
         int weights_size = bcnn_tensor_size(&weights);
         param->adam_m_gpu = bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
         param->adam_v_gpu = bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
@@ -289,23 +290,23 @@ void bcnn_update_fullc_layer(bcnn_net *net, bcnn_node *node) {
     int batch_size = net->batch_size;
     int weights_size = bcnn_tensor_size(weights);
     int biases_size = bcnn_tensor_size(biases);
-    switch (net->learner.optimizer) {
+    switch (net->learner->optimizer) {
         case BCNN_OPTIM_ADAM: {
 #ifdef BCNN_USE_CUDA
             bcnn_adam_update_gpu(weights->data_gpu, biases->data_gpu,
                                  weights->grad_data_gpu, biases->grad_data_gpu,
                                  param->adam_m_gpu, param->adam_v_gpu,
                                  weights_size, biases_size, batch_size,
-                                 net->learner.seen, net->learner.beta1,
-                                 net->learner.beta2, net->learner.learning_rate,
-                                 net->learner.momentum, net->learner.decay);
+                                 net->learner->seen, net->learner->beta1,
+                                 net->learner->beta2, net->learner->learning_rate,
+                                 net->learner->momentum, net->learner->decay);
 #else
             bcnn_adam_update_cpu(
                 weights->data, biases->data, weights->grad_data,
                 biases->grad_data, param->adam_m, param->adam_v, weights_size,
-                biases_size, batch_size, net->learner.seen, net->learner.beta1,
-                net->learner.beta2, net->learner.learning_rate,
-                net->learner.momentum, net->learner.decay);
+                biases_size, batch_size, net->learner->seen, net->learner->beta1,
+                net->learner->beta2, net->learner->learning_rate,
+                net->learner->momentum, net->learner->decay);
 #endif
             break;
         }
@@ -314,13 +315,13 @@ void bcnn_update_fullc_layer(bcnn_net *net, bcnn_node *node) {
             bcnn_sgd_update_gpu(weights->data_gpu, biases->data_gpu,
                                 weights->grad_data_gpu, biases->grad_data_gpu,
                                 weights_size, biases_size, batch_size,
-                                net->learner.learning_rate,
-                                net->learner.momentum, net->learner.decay);
+                                net->learner->learning_rate,
+                                net->learner->momentum, net->learner->decay);
 #else
             bcnn_sgd_update_cpu(weights->data, biases->data, weights->grad_data,
                                 biases->grad_data, weights_size, biases_size,
-                                batch_size, net->learner.learning_rate,
-                                net->learner.momentum, net->learner.decay);
+                                batch_size, net->learner->learning_rate,
+                                net->learner->momentum, net->learner->decay);
 #endif
             break;
         }

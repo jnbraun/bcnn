@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Jean-Noel Braun.
+ * Copyright (c) 2016-present Jean-Noel Braun.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,39 +20,26 @@
  * SOFTWARE.
  */
 
-#ifndef BCNN_DECONV_LAYER_H
-#define BCNN_DECONV_LAYER_H
-
-#include "bcnn_net.h"
 #include "bcnn_node.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef struct bcnn_deconv_param {
-    int num;
-    int size;
-    int stride;
-    int pad;
-    bcnn_activation activation;
-    float *conv_workspace;
-    float *adam_m;
-    float *adam_v;
-#ifdef BCNN_USE_CUDA
-    float *conv_workspace_gpu;
-    float *adam_m_gpu;
-    float *adam_v_gpu;
-#endif
-} bcnn_deconv_param;
-
-void bcnn_forward_deconv_layer(bcnn_net *net, bcnn_node *node);
-void bcnn_backward_deconv_layer(bcnn_net *net, bcnn_node *node);
-void bcnn_update_deconv_layer(bcnn_net *net, bcnn_node *node);
-void bcnn_release_param_deconv_layer(bcnn_node *node);
-
-#ifdef __cplusplus
+bcnn_status bcnn_node_add_output(bcnn_net *net, bcnn_node *node, int index) {
+    int *p_dst = NULL;
+    node->num_dst++;
+    p_dst = (int *)realloc(node->dst, node->num_dst * sizeof(int));
+    BCNN_CHECK_AND_LOG(net->log_ctx, (p_dst != NULL), BCNN_FAILED_ALLOC,
+                       "Internal allocation error");
+    node->dst = p_dst;
+    node->dst[node->num_dst - 1] = index;
+    return BCNN_SUCCESS;
 }
-#endif
 
-#endif  // BCNN_DECONV_LAYER_H
+bcnn_status bcnn_node_add_input(bcnn_net *net, bcnn_node *node, int index) {
+    int *p_src = NULL;
+    node->num_src++;
+    p_src = (int *)realloc(node->src, node->num_src * sizeof(int));
+    BCNN_CHECK_AND_LOG(net->log_ctx, (p_src != NULL), BCNN_FAILED_ALLOC,
+                       "Internal allocation error");
+    node->src = p_src;
+    node->src[node->num_src - 1] = index;
+    return BCNN_SUCCESS;
+}

@@ -23,8 +23,8 @@
 #ifndef BCNN_CONV_LAYER_H
 #define BCNN_CONV_LAYER_H
 
-#include <bcnn/bcnn.h>
-
+#include "bcnn_net.h"
+#include "bcnn_node.h"
 #include "bcnn_utils.h"
 
 #ifdef __cplusplus

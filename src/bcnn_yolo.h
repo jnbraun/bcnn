@@ -1,7 +1,8 @@
 #ifndef BCNN_YOLO_H
 #define BCNN_YOLO_H
 
-#include <bcnn/bcnn.h>
+#include "bcnn_net.h"
+#include "bcnn_node.h"
 
 #ifdef __cplusplus
 extern "C" {

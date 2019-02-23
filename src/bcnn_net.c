@@ -156,93 +156,6 @@ bcnn_status bcnn_create_cuda_context(bcnn_net *net) {
 }
 #endif
 
-int bcnn_set_param(bcnn_net *net, const char *name, const char *val) {
-    if (strcmp(name, "input_width") == 0) {
-        net->tensors[0].w = atoi(val);
-    } else if (strcmp(name, "input_height") == 0) {
-        net->tensors[0].h = atoi(val);
-    } else if (strcmp(name, "input_channels") == 0) {
-        net->tensors[0].c = atoi(val);
-    } else if (strcmp(name, "batch_size") == 0) {
-        net->batch_size = atoi(val);
-        net->tensors[0].n = atoi(val);
-    } else if (strcmp(name, "max_batches") == 0) {
-        net->learner.max_batches = atoi(val);
-    } else if (strcmp(name, "learning_policy") == 0 ||
-               strcmp(name, "decay_type") == 0) {
-        if (strcmp(val, "sigmoid") == 0) {
-            net->learner.decay_type = BCNN_LR_DECAY_SIGMOID;
-        } else if (strcmp(val, "constant") == 0) {
-            net->learner.decay_type = BCNN_LR_DECAY_CONSTANT;
-        } else if (strcmp(val, "exp") == 0) {
-            net->learner.decay_type = BCNN_LR_DECAY_EXP;
-        } else if (strcmp(val, "inv") == 0) {
-            net->learner.decay_type = BCNN_LR_DECAY_INV;
-        } else if (strcmp(val, "step") == 0) {
-            net->learner.decay_type = BCNN_LR_DECAY_STEP;
-        } else if (strcmp(val, "poly") == 0) {
-            net->learner.decay_type = BCNN_LR_DECAY_POLY;
-        } else {
-            net->learner.decay_type = BCNN_LR_DECAY_CONSTANT;
-        }
-    } else if (strcmp(name, "optimizer") == 0) {
-        if (strcmp(val, "sgd") == 0) {
-            net->learner.optimizer = BCNN_OPTIM_SGD;
-        } else if (strcmp(val, "adam") == 0) {
-            net->learner.optimizer = BCNN_OPTIM_ADAM;
-        }
-    } else if (strcmp(name, "step") == 0) {
-        net->learner.step = atoi(val);
-    } else if (strcmp(name, "learning_rate") == 0) {
-        net->learner.learning_rate = (float)atof(val);
-    } else if (strcmp(name, "beta1") == 0) {
-        net->learner.beta1 = (float)atof(val);
-    } else if (strcmp(name, "beta2") == 0) {
-        net->learner.beta2 = (float)atof(val);
-    } else if (strcmp(name, "decay") == 0) {
-        net->learner.decay = (float)atof(val);
-    } else if (strcmp(name, "momentum") == 0) {
-        net->learner.momentum = (float)atof(val);
-    } else if (strcmp(name, "gamma") == 0) {
-        net->learner.gamma = (float)atof(val);
-    } else if (strcmp(name, "range_shift_x") == 0) {
-        net->data_aug->range_shift_x = atoi(val);
-    } else if (strcmp(name, "range_shift_y") == 0) {
-        net->data_aug->range_shift_y = atoi(val);
-    } else if (strcmp(name, "min_scale") == 0) {
-        net->data_aug->min_scale = (float)atof(val);
-    } else if (strcmp(name, "max_scale") == 0) {
-        net->data_aug->max_scale = (float)atof(val);
-    } else if (strcmp(name, "rotation_range") == 0) {
-        net->data_aug->rotation_range = (float)atof(val);
-    } else if (strcmp(name, "min_contrast") == 0) {
-        net->data_aug->min_contrast = (float)atof(val);
-    } else if (strcmp(name, "max_contrast") == 0) {
-        net->data_aug->max_contrast = (float)atof(val);
-    } else if (strcmp(name, "min_brightness") == 0) {
-        net->data_aug->min_brightness = atoi(val);
-    } else if (strcmp(name, "max_brightness") == 0) {
-        net->data_aug->max_brightness = atoi(val);
-    } else if (strcmp(name, "max_distortion") == 0) {
-        net->data_aug->max_distortion = (float)atof(val);
-    } else if (strcmp(name, "max_spots") == 0) {
-        net->data_aug->max_random_spots = (float)atof(val);
-    } else if (strcmp(name, "flip_h") == 0) {
-        net->data_aug->random_fliph = 1;
-    } else if (strcmp(name, "mean_r") == 0) {
-        net->data_aug->mean_r = (float)atof(val) / 255.0f;
-    } else if (strcmp(name, "mean_g") == 0) {
-        net->data_aug->mean_g = (float)atof(val) / 255.0f;
-    } else if (strcmp(name, "mean_b") == 0) {
-        net->data_aug->mean_b = (float)atof(val) / 255.0f;
-    } else if (strcmp(name, "swap_to_bgr") == 0) {
-        net->data_aug->swap_to_bgr = atoi(val);
-    } else if (strcmp(name, "no_input_norm") == 0) {
-        net->data_aug->no_input_norm = atoi(val);
-    }
-    return BCNN_SUCCESS;
-}
-
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node) {
     bcnn_node *p_node = NULL;
     net->num_nodes++;
@@ -264,28 +177,6 @@ bcnn_status bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor) {
                        "Internal allocation error");
     net->tensors = p_tensors;
     net->tensors[net->num_tensors - 1] = tensor;
-    return BCNN_SUCCESS;
-}
-
-bcnn_status bcnn_node_add_output(bcnn_net *net, bcnn_node *node, int index) {
-    int *p_dst = NULL;
-    node->num_dst++;
-    p_dst = (int *)realloc(node->dst, node->num_dst * sizeof(int));
-    BCNN_CHECK_AND_LOG(net->log_ctx, (p_dst != NULL), BCNN_FAILED_ALLOC,
-                       "Internal allocation error");
-    node->dst = p_dst;
-    node->dst[node->num_dst - 1] = index;
-    return BCNN_SUCCESS;
-}
-
-bcnn_status bcnn_node_add_input(bcnn_net *net, bcnn_node *node, int index) {
-    int *p_src = NULL;
-    node->num_src++;
-    p_src = (int *)realloc(node->src, node->num_src * sizeof(int));
-    BCNN_CHECK_AND_LOG(net->log_ctx, (p_src != NULL), BCNN_FAILED_ALLOC,
-                       "Internal allocation error");
-    node->src = p_src;
-    node->src[node->num_src - 1] = index;
     return BCNN_SUCCESS;
 }
 
@@ -394,8 +285,8 @@ static float bcnn_get_loss(bcnn_net *net) {
     return loss;
 }
 
-float bcnn_train_on_batch(bcnn_net *net, bcnn_loader *iter) {
-    bcnn_loader_next(net, iter);
+float bcnn_train_on_batch(bcnn_net *net) {
+    bcnn_loader_next(net);
     // Forward
     bcnn_forward(net);
     // Back prop
@@ -406,9 +297,9 @@ float bcnn_train_on_batch(bcnn_net *net, bcnn_loader *iter) {
     return bcnn_get_loss(net);
 }
 
-float bcnn_predict_on_batch(bcnn_net *net, bcnn_loader *iter, float **pred) {
+float bcnn_predict_on_batch(bcnn_net *net, float **pred) {
     // Get next data batch
-    bcnn_loader_next(net, iter);
+    bcnn_loader_next(net);
     // Forward
     bcnn_forward(net);
 
@@ -426,7 +317,7 @@ float bcnn_predict_on_batch(bcnn_net *net, bcnn_loader *iter, float **pred) {
 }
 
 void bcnn_set_learner(bcnn_net *net, bcnn_optimizer type, bcnn_learner params) {
-    net->learner.optimizer = type;
+    net->learner->optimizer = type;
     return;
 }
 
@@ -434,9 +325,6 @@ bcnn_status bcnn_set_mode(bcnn_net *net, bcnn_mode mode) {
     if (net->mode == mode) {
         // Nothing changes
         return BCNN_SUCCESS;
-    } else if (net->mode == BCNN_MODE_PREDICT) {
-        BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
-                   "Can not switch from 'predict' mode to another mode");
     } else {
         // TODO: Still needs to ensure that the network allocation have been
         // done while in 'train' mode
@@ -453,10 +341,10 @@ bcnn_status bcnn_write_model(bcnn_net *net, char *filename) {
     BCNN_CHECK_AND_LOG(net->log_ctx, fp, BCNN_INVALID_PARAMETER,
                        "Could not open model file %s\n", filename);
 
-    fwrite(&net->learner.learning_rate, sizeof(float), 1, fp);
-    fwrite(&net->learner.momentum, sizeof(float), 1, fp);
-    fwrite(&net->learner.decay, sizeof(float), 1, fp);
-    fwrite(&net->learner.seen, sizeof(int), 1, fp);
+    fwrite(&net->learner->learning_rate, sizeof(float), 1, fp);
+    fwrite(&net->learner->momentum, sizeof(float), 1, fp);
+    fwrite(&net->learner->decay, sizeof(float), 1, fp);
+    fwrite(&net->learner->seen, sizeof(int), 1, fp);
 
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
@@ -550,11 +438,11 @@ bcnn_status bcnn_load_model(bcnn_net *net, char *filename) {
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
-    nb_read = fread(&net->learner.seen, sizeof(int), 1, fp);
-    BCNN_INFO(net->log_ctx, "lr= %f ", net->learner.learning_rate);
-    BCNN_INFO(net->log_ctx, "m= %f ", net->learner.momentum);
-    BCNN_INFO(net->log_ctx, "decay= %f ", net->learner.decay);
-    BCNN_INFO(net->log_ctx, "seen= %d\n", net->learner.seen);
+    nb_read = fread(&net->learner->seen, sizeof(int), 1, fp);
+    BCNN_INFO(net->log_ctx, "lr= %f ", net->learner->learning_rate);
+    BCNN_INFO(net->log_ctx, "m= %f ", net->learner->momentum);
+    BCNN_INFO(net->log_ctx, "decay= %f ", net->learner->decay);
+    BCNN_INFO(net->log_ctx, "seen= %d\n", net->learner->seen);
 
     for (i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
@@ -666,11 +554,11 @@ bcnn_status bcnn_load_model_legacy(bcnn_net *net, char *filename) {
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
     nb_read = fread(&tmp, sizeof(float), 1, fp);
-    nb_read = fread(&net->learner.seen, sizeof(int), 1, fp);
-    BCNN_INFO(net->log_ctx, "lr= %f ", net->learner.learning_rate);
-    BCNN_INFO(net->log_ctx, "m= %f ", net->learner.momentum);
-    BCNN_INFO(net->log_ctx, "decay= %f ", net->learner.decay);
-    BCNN_INFO(net->log_ctx, "seen= %d\n", net->learner.seen);
+    nb_read = fread(&net->learner->seen, sizeof(int), 1, fp);
+    BCNN_INFO(net->log_ctx, "lr= %f ", net->learner->learning_rate);
+    BCNN_INFO(net->log_ctx, "m= %f ", net->learner->momentum);
+    BCNN_INFO(net->log_ctx, "decay= %f ", net->learner->decay);
+    BCNN_INFO(net->log_ctx, "seen= %d\n", net->learner->seen);
 
     for (i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];

@@ -297,29 +297,29 @@ void bcnn_update_activation_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_activation_param *param = (bcnn_activation_param *)node->param;
     if (param->activation == BCNN_ACT_PRELU) {
         bcnn_tensor *weights = &net->tensors[node->src[1]];
-        if (net->learner.optimizer == BCNN_OPTIM_SGD) {
+        if (net->learner->optimizer == BCNN_OPTIM_SGD) {
 #ifdef BCNN_USE_CUDA
             bcnn_sgd_update_gpu(weights->data_gpu, NULL, weights->grad_data_gpu,
                                 NULL, bcnn_tensor_size(weights), 0, weights->n,
-                                net->learner.learning_rate,
-                                net->learner.momentum, net->learner.decay);
+                                net->learner->learning_rate,
+                                net->learner->momentum, net->learner->decay);
 #else
             bcnn_sgd_update_cpu(weights->data, NULL, weights->grad_data, NULL,
                                 bcnn_tensor_size(weights), 0, weights->n,
-                                net->learner.learning_rate,
-                                net->learner.momentum, net->learner.decay);
+                                net->learner->learning_rate,
+                                net->learner->momentum, net->learner->decay);
 #endif
-        } else if (net->learner.optimizer == BCNN_OPTIM_ADAM) {
+        } else if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
 #ifdef BCNN_USE_CUDA
             bcnn_sgd_update_gpu(weights->data_gpu, NULL, weights->grad_data_gpu,
                                 NULL, bcnn_tensor_size(weights), 0, weights->n,
-                                net->learner.learning_rate,
-                                net->learner.momentum, net->learner.decay);
+                                net->learner->learning_rate,
+                                net->learner->momentum, net->learner->decay);
 #else
             bcnn_sgd_update_cpu(weights->data, NULL, weights->grad_data, NULL,
                                 bcnn_tensor_size(weights), 0, weights->n,
-                                net->learner.learning_rate,
-                                net->learner.momentum, net->learner.decay);
+                                net->learner->learning_rate,
+                                net->learner->momentum, net->learner->decay);
 #endif
         }
     }

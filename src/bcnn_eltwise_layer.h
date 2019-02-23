@@ -23,7 +23,8 @@
 #ifndef BCNN_ELTWISE_LAYER_H
 #define BCNN_ELTWISE_LAYER_H
 
-#include <bcnn/bcnn.h>
+#include "bcnn_net.h"
+#include "bcnn_node.h"
 
 #ifdef __cplusplus
 extern "C" {

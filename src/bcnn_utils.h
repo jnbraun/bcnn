@@ -44,6 +44,16 @@
 extern "C" {
 #endif
 
+typedef struct {
+    int state;
+    float r;
+} bcnn_gauss_gen;
+
+typedef struct {
+    bcnn_log_callback fct;
+    bcnn_log_level lvl;
+} bcnn_log_context;
+
 /** Convenient macros */
 #define BCNN_CHECK(exp, err) \
     do {                     \
@@ -83,11 +93,6 @@ extern "C" {
     do {                                                         \
         bcnn_log((ctx), BCNN_LOG_WARNING, (fmt), ##__VA_ARGS__); \
     } while (0)
-
-typedef struct {
-    int state;
-    float r;
-} bcnn_gauss_gen;
 
 float bcnn_rng_gaussian(bcnn_gauss_gen *g);
 

@@ -23,13 +23,16 @@
 #ifndef BCNN_UPSAMPLE_LAYER_H
 #define BCNN_UPSAMPLE_LAYER_H
 
-#include <bcnn/bcnn.h>
+#include "bcnn_net.h"
+#include "bcnn_node.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct bcnn_upsample_param { int size; } bcnn_upsample_param;
+typedef struct bcnn_upsample_param {
+    int size;
+} bcnn_upsample_param;
 
 void bcnn_forward_upsample_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_upsample_layer(bcnn_net *net, bcnn_node *node);

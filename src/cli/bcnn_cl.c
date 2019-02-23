@@ -34,6 +34,92 @@
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
+void bcnn_set_param(bcnn_net *net, const char *name, const char *val) {
+    if (strcmp(name, "input_width") == 0) {
+        net->tensors[0].w = atoi(val);
+    } else if (strcmp(name, "input_height") == 0) {
+        net->tensors[0].h = atoi(val);
+    } else if (strcmp(name, "input_channels") == 0) {
+        net->tensors[0].c = atoi(val);
+    } else if (strcmp(name, "batch_size") == 0) {
+        net->batch_size = atoi(val);
+        net->tensors[0].n = atoi(val);
+    } else if (strcmp(name, "max_batches") == 0) {
+        net->learner->max_batches = atoi(val);
+    } else if (strcmp(name, "learning_policy") == 0 ||
+               strcmp(name, "decay_type") == 0) {
+        if (strcmp(val, "sigmoid") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_SIGMOID;
+        } else if (strcmp(val, "constant") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_CONSTANT;
+        } else if (strcmp(val, "exp") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_EXP;
+        } else if (strcmp(val, "inv") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_INV;
+        } else if (strcmp(val, "step") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_STEP;
+        } else if (strcmp(val, "poly") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_POLY;
+        } else {
+            net->learner->decay_type = BCNN_LR_DECAY_CONSTANT;
+        }
+    } else if (strcmp(name, "optimizer") == 0) {
+        if (strcmp(val, "sgd") == 0) {
+            net->learner->optimizer = BCNN_OPTIM_SGD;
+        } else if (strcmp(val, "adam") == 0) {
+            net->learner->optimizer = BCNN_OPTIM_ADAM;
+        }
+    } else if (strcmp(name, "step") == 0) {
+        net->learner->step = atoi(val);
+    } else if (strcmp(name, "learning_rate") == 0) {
+        net->learner->learning_rate = (float)atof(val);
+    } else if (strcmp(name, "beta1") == 0) {
+        net->learner->beta1 = (float)atof(val);
+    } else if (strcmp(name, "beta2") == 0) {
+        net->learner->beta2 = (float)atof(val);
+    } else if (strcmp(name, "decay") == 0) {
+        net->learner->decay = (float)atof(val);
+    } else if (strcmp(name, "momentum") == 0) {
+        net->learner->momentum = (float)atof(val);
+    } else if (strcmp(name, "gamma") == 0) {
+        net->learner->gamma = (float)atof(val);
+    } else if (strcmp(name, "range_shift_x") == 0) {
+        net->data_aug->range_shift_x = atoi(val);
+    } else if (strcmp(name, "range_shift_y") == 0) {
+        net->data_aug->range_shift_y = atoi(val);
+    } else if (strcmp(name, "min_scale") == 0) {
+        net->data_aug->min_scale = (float)atof(val);
+    } else if (strcmp(name, "max_scale") == 0) {
+        net->data_aug->max_scale = (float)atof(val);
+    } else if (strcmp(name, "rotation_range") == 0) {
+        net->data_aug->rotation_range = (float)atof(val);
+    } else if (strcmp(name, "min_contrast") == 0) {
+        net->data_aug->min_contrast = (float)atof(val);
+    } else if (strcmp(name, "max_contrast") == 0) {
+        net->data_aug->max_contrast = (float)atof(val);
+    } else if (strcmp(name, "min_brightness") == 0) {
+        net->data_aug->min_brightness = atoi(val);
+    } else if (strcmp(name, "max_brightness") == 0) {
+        net->data_aug->max_brightness = atoi(val);
+    } else if (strcmp(name, "max_distortion") == 0) {
+        net->data_aug->max_distortion = (float)atof(val);
+    } else if (strcmp(name, "max_spots") == 0) {
+        net->data_aug->max_random_spots = (float)atof(val);
+    } else if (strcmp(name, "flip_h") == 0) {
+        net->data_aug->random_fliph = 1;
+    } else if (strcmp(name, "mean_r") == 0) {
+        net->data_aug->mean_r = (float)atof(val) / 255.0f;
+    } else if (strcmp(name, "mean_g") == 0) {
+        net->data_aug->mean_g = (float)atof(val) / 255.0f;
+    } else if (strcmp(name, "mean_b") == 0) {
+        net->data_aug->mean_b = (float)atof(val) / 255.0f;
+    } else if (strcmp(name, "swap_to_bgr") == 0) {
+        net->data_aug->swap_to_bgr = atoi(val);
+    } else if (strcmp(name, "no_input_norm") == 0) {
+        net->data_aug->no_input_norm = atoi(val);
+    }
+}
+
 int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                             bcnncl_param *param) {
     FILE *file = NULL;
@@ -52,6 +138,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     bcnn_filler_type init = BCNN_FILLER_XAVIER;
     bcnn_loss_metric cost = BCNN_METRIC_SSE;
     bcnn_loss loss = BCNN_LOSS_EUCLIDEAN;
+    bcnn_mode mode = BCNN_MODE_PREDICT;
     float rate = 1.0f;
     int n_tok;
     char *src_id = NULL, *dst_id = NULL, *src_id2 = NULL;
@@ -222,11 +309,11 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                 if (strcmp(tok[0], "task") == 0 ||
                     strcmp(tok[0], "mode") == 0) {
                     if (strcmp(tok[1], "train") == 0)
-                        net->mode = BCNN_MODE_TRAIN;
+                        mode = BCNN_MODE_TRAIN;
                     else if (strcmp(tok[1], "predict") == 0) {
-                        net->mode = BCNN_MODE_PREDICT;
+                        mode = BCNN_MODE_PREDICT;
                     } else if (strcmp(tok[1], "valid") == 0) {
-                        net->mode = BCNN_MODE_PREDICT;
+                        mode = BCNN_MODE_PREDICT;
                     } else {
                         BCNN_ERROR(
                             net->log_ctx, BCNN_INVALID_PARAMETER,
@@ -471,6 +558,12 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     fclose(file);
 
     param->eval_period = (param->eval_period > 0 ? param->eval_period : 100);
+    // Set data loader
+    bcnn_set_data_loader(net, param->data_format, param->train_input,
+                         param->path_train_label, param->test_input,
+                         param->path_test_label);
+    // Set mode
+    bcnn_set_mode(net, mode);
 
     fflush(stderr);
     return 0;
@@ -478,21 +571,14 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
 
 int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
     float sum_error = 0.0f, error_valid = 0.0f;
-    int nb_iter = net->learner.max_batches;
+    int nb_iter = net->learner->max_batches;
     int batch_size = net->batch_size;
     bh_timer t = {0};
-    bcnn_loader iter_data = {0};
     char chk_pt_path[1024];
-
-    if (bcnn_loader_initialize(&iter_data, param->data_format, net,
-                               param->train_input,
-                               param->path_train_label) != 0) {
-        return -1;  // TODO: proper error return
-    }
 
     bh_timer_start(&t);
     for (int i = 0; i < nb_iter; ++i) {
-        sum_error += bcnn_train_on_batch(net, &iter_data);
+        sum_error += bcnn_train_on_batch(net);
 
         if (i % param->eval_period == 0 && i > 0) {
             bh_timer_stop(&t);
@@ -519,7 +605,6 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
         }
     }
 
-    bcnn_loader_terminate(&iter_data);
     *error = (float)sum_error / (param->eval_period * batch_size);
 
     return BCNN_SUCCESS;
@@ -531,17 +616,10 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     FILE *f = NULL;
     int batch_size = net->batch_size;
     char out_pred_name[128] = {0};
-    bcnn_loader iter_data = {0};
     int output_size = bcnn_tensor_size3d(
         &net->tensors[net->nodes[net->num_nodes - 2].dst[0]]);
     unsigned char *dump_img = (unsigned char *)calloc(
         net->tensors[0].w * net->tensors[0].h * 3, sizeof(unsigned char));
-
-    if (bcnn_loader_initialize(&iter_data, param->data_format, net,
-                               param->test_input,
-                               param->path_test_label) != 0) {
-        return -1;
-    }
 
     if (dump_pred) {
         f = fopen(param->pred_out, "wt");
@@ -555,13 +633,13 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     int n = param->nb_pred / batch_size;
     for (int i = 0; i < n; ++i) {
         float *out = NULL;
-        err += bcnn_predict_on_batch(net, &iter_data, &out);
+        err += bcnn_predict_on_batch(net, &out);
         // Dump predictions
         if (dump_pred) {
             if (iter_data.type == BCNN_LOAD_DETECTION_LIST) {
                 for (int b = 0; b < net->batch_size; ++b) {
                     int num_dets = 0;
-                    bcnn_yolo_detection *dets = bcnn_yolo_get_detections(
+                    bcnn_output_detection *dets = bcnn_yolo_get_detections(
                         net, b, net->tensors[0].w, net->tensors[0].h,
                         net->tensors[0].w, net->tensors[0].h, 0.5, 1,
                         &num_dets);
@@ -606,10 +684,10 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
                     for (int d = 0; d < num_dets; ++d) {
                         if (dets[d].prob[0] > 0) {
                             unsigned char blue[3] = {0, 0, 255};
-                            bcnn_draw_color_box(
-                                dump_img, net->tensors[0].w, net->tensors[0].h,
-                                dets[d].bbox.x, dets[d].bbox.y, dets[d].bbox.w,
-                                dets[d].bbox.h, blue);
+                            bcnn_draw_color_box(dump_img, net->tensors[0].w,
+                                                net->tensors[0].h, dets[d].x,
+                                                dets[d].y, dets[d].w, dets[d].h,
+                                                blue);
                         }
                     }
                     sprintf(out_pred_name, "det_%d.png", b);
@@ -633,7 +711,7 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     if (n > 0) {
         for (int i = 0; i < n; ++i) {
             float *out = NULL;
-            err += bcnn_predict_on_batch(net, &iter_data, &out);
+            err += bcnn_predict_on_batch(net, &out);
             // Dump predictions
             if (dump_pred) {
                 for (int k = 0; k < output_size; ++k) {
@@ -649,7 +727,6 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     if (f != NULL) {
         fclose(f);
     }
-    bcnn_loader_terminate(&iter_data);
     return BCNN_SUCCESS;
 }
 
@@ -677,23 +754,23 @@ int run(char *config_file) {
         if (param.input_model != NULL) {
             fprintf(stderr, "[INFO] Loading pre-trained model %s\n",
                     param.input_model);
-            bcnn_load_model(net, param.input_model);
+            BCNN_CHECK_STATUS(bcnn_load_model(net, param.input_model));
         }
         BCNN_INFO(net->log_ctx, "Start training...");
         BCNN_CHECK_STATUS(bcnncl_train(net, &param, &error_train));
         if (param.pred_out != NULL) {
-            net->mode = BCNN_MODE_VALID;
+            BCNN_CHECK_STATUS(bcnn_set_mode(net, BCNN_MODE_VALID));
             BCNN_CHECK_STATUS(bcnncl_predict(net, &param, &error_valid, 1));
-            net->mode = BCNN_MODE_TRAIN;
+            BCNN_CHECK_STATUS(bcnn_set_mode(net, BCNN_MODE_TRAIN));
         }
         if (param.output_model != NULL) {
-            bcnn_write_model(net, param.output_model);
+            BCNN_CHECK_STATUS(bcnn_write_model(net, param.output_model));
         }
         BCNN_INFO(net->log_ctx, "Training ended successfully");
     } else if (net->mode == BCNN_MODE_PREDICT) {
-        if (param.input_model != NULL)
-            bcnn_load_model(net, param.input_model);
-        else {
+        if (param.input_model != NULL) {
+            BCNN_CHECK_STATUS(bcnn_load_model(net, param.input_model));
+        } else {
             BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
                        "No model in input. Inform which model to use in "
                        "config file "

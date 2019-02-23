@@ -27,32 +27,32 @@
 #include "bcnn_mat.h"
 
 static float bcnn_update_learning_rate(bcnn_net *net) {
-    net->learner.seen += net->batch_size;
-    int iter = net->learner.seen / net->batch_size;
+    net->learner->seen += net->batch_size;
+    int iter = net->learner->seen / net->batch_size;
 
-    switch (net->learner.decay_type) {
+    switch (net->learner->decay_type) {
         case BCNN_LR_DECAY_CONSTANT:
-            return net->learner.learning_rate;
+            return net->learner->learning_rate;
         case BCNN_LR_DECAY_STEP:
-            return net->learner.learning_rate *
-                   (float)pow(net->learner.scale, iter / net->learner.step);
+            return net->learner->learning_rate *
+                   (float)pow(net->learner->scale, iter / net->learner->step);
         case BCNN_LR_DECAY_INV:
-            return net->learner.learning_rate *
-                   (float)pow(1.0f + net->learner.gamma * iter,
-                              -net->learner.power);
+            return net->learner->learning_rate *
+                   (float)pow(1.0f + net->learner->gamma * iter,
+                              -net->learner->power);
         case BCNN_LR_DECAY_EXP:
-            return net->learner.learning_rate *
-                   (float)pow(net->learner.gamma, iter);
+            return net->learner->learning_rate *
+                   (float)pow(net->learner->gamma, iter);
         case BCNN_LR_DECAY_POLY:
-            return net->learner.learning_rate *
-                   (float)pow(1 - (float)iter / net->learner.max_batches,
-                              net->learner.power);
+            return net->learner->learning_rate *
+                   (float)pow(1 - (float)iter / net->learner->max_batches,
+                              net->learner->power);
         case BCNN_LR_DECAY_SIGMOID:
-            return net->learner.learning_rate *
-                   (1.0f / (1.0f + (float)exp(net->learner.gamma *
-                                              (iter - net->learner.step))));
+            return net->learner->learning_rate *
+                   (1.0f / (1.0f + (float)exp(net->learner->gamma *
+                                              (iter - net->learner->step))));
         default:
-            return net->learner.learning_rate;
+            return net->learner->learning_rate;
     }
 }
 
@@ -113,7 +113,7 @@ void bcnn_adam_update_cpu(float *weights, float *biases, float *weights_grad,
         bcnn_vmul(weights_size, weights_grad, weights_grad, weights_grad);
         bcnn_axpby(weights_size, 1.0f - beta2, weights_grad, beta2, adam_v);
         bcnn_pow(weights_size, adam_v, 0.5f, weights_grad);
-        bcnn_add_scalar(weights_size, 0.0000001f, weights_grad);
+        bcnn_add_scalar(weights_size, /*epsilon=*/0.0000001f, weights_grad);
         bcnn_vdiv(weights_size, adam_m, weights_grad, weights_grad);
         bcnn_axpy(weights_size, -learning_rate / batch_size * mu_correction,
                   weights_grad, weights);
@@ -144,7 +144,8 @@ void bcnn_adam_update_gpu(float *weights, float *biases, float *weights_grad,
         bcnn_cuda_axpby(weights_size, 1.0f - beta2, weights_grad, beta2,
                         adam_v);
         bcnn_cuda_pow(weights_size, adam_v, 0.5f, weights_grad);
-        bcnn_cuda_add_scalar(weights_size, 0.0000001f, weights_grad);
+        bcnn_cuda_add_scalar(weights_size, /*epsilon=*/0.0000001f,
+                             weights_grad);
         bcnn_cuda_vdiv(weights_size, adam_m, weights_grad, weights_grad);
         bcnn_cuda_axpy(weights_size,
                        -learning_rate / batch_size * mu_correction,

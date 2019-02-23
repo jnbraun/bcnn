@@ -204,6 +204,6 @@ endif()
 if (BUILD_TOOLS)
     #add_subdirectory(tools/caffe_converter)
     add_subdirectory(tools/tflite_converter)
-    add_subdirectory(tools/tensorflow_converter)
+    #add_subdirectory(tools/tensorflow_converter)
 endif()
 

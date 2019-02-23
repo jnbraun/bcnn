@@ -30,7 +30,7 @@
 extern "C" {
 #endif
 
-struct bcnn_loader {
+typedef struct {
     int input_width;
     int input_height;
     int input_depth;
@@ -44,12 +44,12 @@ struct bcnn_loader {
     FILE *f_test_extra;  /* Handle to secondary test file if needed */
     FILE *f_current;
     FILE *f_current_extra;
-};
+} bcnn_loader;
 
 /**
  *  Structure for online data augmentation parameters.
  */
-struct bcnn_data_augmenter {
+typedef struct {
     int range_shift_x;  /* X-shift allowed range (chosen between
                             [-range_shift_x / 2; range_shift_x / 2]). */
     int range_shift_y;  /* Y-shift allowed range (chosen between
@@ -90,7 +90,7 @@ struct bcnn_data_augmenter {
     float distortion;    /* Current distortion factor. */
     float distortion_kx; /* Current distortion x kernel. */
     float distortion_ky; /* Current distortion y kernel. */
-};
+} bcnn_data_augmenter;
 
 typedef bcnn_status (*bcnn_loader_init_func)(bcnn_loader *iter, bcnn_net *net,
                                              const char *train_path,

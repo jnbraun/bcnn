@@ -76,28 +76,25 @@ extern "C" {
 typedef struct bcnn_net bcnn_net;
 
 /** Node struct */
-typedef struct bcnn_node bcnn_node;
+// typedef struct bcnn_node bcnn_node;
 
 /** Tensor struct */
 typedef struct bcnn_tensor bcnn_tensor;
 
 /** Data load and iterator handle struct */
-typedef struct bcnn_loader bcnn_loader;
+// typedef struct bcnn_loader bcnn_loader;
 
 /** Data augmention handle struct */
-typedef struct bcnn_data_augmenter bcnn_data_augmenter;
+// typedef struct bcnn_data_augmenter bcnn_data_augmenter;
 
 /** Learning and optimizer parameters and methods handle struct */
-typedef struct bcnn_learner bcnn_learner;
-
-/** Simple bounding box container */
-typedef struct bcnn_box bcnn_box;
+// typedef struct bcnn_learner bcnn_learner;
 
 /** Object detection result struct */
-typedef struct bcnn_yolo_detection bcnn_yolo_detection;
+typedef struct bcnn_output_detection bcnn_output_detection;
 
 /** Logging context handle */
-typedef struct bcnn_log_context bcnn_log_context;
+// typedef struct bcnn_log_context bcnn_log_context;
 
 /*************************************************************************
  * BCNN types
@@ -250,65 +247,8 @@ typedef enum bcnn_filler_type {
 /* Max number of bounding boxes for detection */
 #define BCNN_DETECTION_MAX_BOXES 50
 
-/**
- * Online data augmentation parameters struct
- */
-struct bcnn_data_augment_param {
-    int range_shift_x;  /* X-shift allowed range (chosen between
-                           [-range_shift_x / 2; range_shift_x / 2]). */
-    int range_shift_y;  /* Y-shift allowed range (chosen between
-                           [-range_shift_y / 2; range_shift_y / 2]). */
-    int random_fliph;   /* If !=0, randomly (with probability of 0.5) apply
-                           horizontal flip to image. */
-    int min_brightness; /* Minimum brightness factor allowed (additive factor,
-                           range [-255;255]). */
-    int max_brightness; /* Maximum brightness factor allowed (additive factor,
-                           range [-255;255]). */
-    int swap_to_bgr; /* Swap 1st and 3rd channel. Bcnn default image IO has RGB
-                        layout */
-    int no_input_norm;    /* If set to 1, Input data range is *not* normalized
-                             between [-1;1] */
-    int max_random_spots; /* Add a random number between [0;max_random_spots]
-                             of saturated blobs. */
-    float min_scale;      /* Minimum scale factor allowed. */
-    float max_scale;      /* Maximum scale factor allowed. */
-    float rotation_range; /* Rotation angle allowed range (chosen between
-                             [-rotation_range / 2; rotation_range / 2]).
-                             Expressed in degree. */
-    float min_contrast;   /* Minimum contrast allowed (mult factor). */
-    float max_contrast;   /* Maximum contrast allowed (mult factor). */
-    float max_distortion; /* Maximum distortion factor allowed. */
-    float mean_r;         /* 1st channel mean value to substract */
-    float mean_g;         /* 2nd channel mean value to substract */
-    float mean_b;         /* 3rd channel mean value to substract */
-};
-
-/**
- *  Structure to handle learner method and parameters.
- */
-struct bcnn_learner {
-    int step;
-    int seen;            /* Number of instances seen by the network */
-    int max_batches;     /* Maximum number of batches for training */
-    float momentum;      /* Momentum parameter */
-    float decay;         /* Decay parameter */
-    float learning_rate; /* Base learning rate */
-    float gamma;
-    float scale;
-    float power;
-    float beta1;              /* Parameter for Adam optimizer */
-    float beta2;              /* Parameter for Adam optimizer */
-    bcnn_optimizer optimizer; /* Optimization method */
-    bcnn_lr_decay decay_type; /* Learning rate decay type */
-};
-
 /* Logging callback */
 typedef void (*bcnn_log_callback)(const char *fmt, ...);
-
-struct bcnn_log_context {
-    bcnn_log_callback fct;
-    bcnn_log_level lvl;
-};
 
 /**
  * Tensor structure.
@@ -334,53 +274,14 @@ struct bcnn_tensor {
 };
 
 /**
- * Node definition
+ * Detection output struct.
  */
-struct bcnn_node {
-    int num_src;
-    int num_dst;
-    bcnn_layer_type type;
-    size_t param_size;
-    int *src; /* Array of input tensors indexes */
-    int *dst; /* Array of output tensors indexes */
-    void *param;
-    void (*forward)(struct bcnn_net *net, struct bcnn_node *node);
-    void (*backward)(struct bcnn_net *net, struct bcnn_node *node);
-    void (*update)(struct bcnn_net *net, struct bcnn_node *node);
-    void (*release_param)(struct bcnn_node *node);
-};
-
-/**
- * Net definition
- */
-struct bcnn_net {
-    int batch_size;
-    int num_nodes;
-    bcnn_mode mode;
-    bcnn_node *nodes;
-    int num_tensors;       /* Number of tensors hold in the network */
-    bcnn_tensor *tensors;  /* Array of tensors hold in the network */
-    bcnn_learner *learner; /* Learner/optimizer parameters */
-    bcnn_log_context log_ctx;
-    bcnn_loader *data_loader;
-    bcnn_data_augmenter *data_aug; /* Parameters for online data augmentation */
-    void *gemm_ctx;
-#ifdef BCNN_USE_CUDA
-    void *cuda_ctx;
-#endif
-};
-
-struct bcnn_box {
+struct bcnn_output_detection {
+    int num_classes;
     float x, y, w, h;
-};
-
-struct bcnn_yolo_detection {
-    bcnn_box bbox;
-    int classes;
     float *prob;
     float *mask;
     float objectness;
-    int sort_class;
 };
 
 /*************************************************************************
@@ -421,9 +322,8 @@ BCNN_API int bcnn_tensor_size2d(const bcnn_tensor *t);
 /**
  * Set the shape of the primary input tensor
  */
-BCNN_API void bcnn_set_input_shape(bcnn_net *net, int input_width,
-                                   int input_height, int input_channels,
-                                   int batch_size);
+BCNN_API void bcnn_set_input_shape(bcnn_net *net, int width, int height,
+                                   int channels, int batch_size);
 
 /**
  * Add extra input tensors to the network
@@ -431,17 +331,7 @@ BCNN_API void bcnn_set_input_shape(bcnn_net *net, int input_width,
 BCNN_API bcnn_status bcnn_add_input(bcnn_net *net, int w, int h, int c,
                                     char *name);
 
-BCNN_API int bcnn_set_param(bcnn_net *net, const char *name, const char *val);
-
 BCNN_API bcnn_status bcnn_compile_net(bcnn_net *net);
-
-BCNN_API bcnn_status bcnn_loader_initialize(bcnn_loader *iter,
-                                            bcnn_loader_type type,
-                                            bcnn_net *net,
-                                            const char *path_input,
-                                            const char *path_label);
-BCNN_API bcnn_status bcnn_loader_next(bcnn_net *net, bcnn_loader *iter);
-BCNN_API void bcnn_loader_terminate(bcnn_loader *iter);
 
 /* Load / Write model */
 BCNN_API bcnn_status bcnn_load_model(bcnn_net *net, char *filename);
@@ -449,6 +339,21 @@ BCNN_API bcnn_status bcnn_load_model(bcnn_net *net, char *filename);
 BCNN_API bcnn_status bcnn_write_model(bcnn_net *net, char *filename);
 /* For compatibility with older versions */
 BCNN_API bcnn_status bcnn_load_model_legacy(bcnn_net *net, char *filename);
+
+/* Learning rate decay policy */
+BCNN_API void bcnn_set_learning_rate_policy(bcnn_net *net,
+                                            bcnn_lr_decay decay_type,
+                                            float gamma, float scale,
+                                            float power, float weight_decay,
+                                            int max_batches, int step);
+/* Adam */
+BCNN_API void bcnn_set_adam_optimizer(bcnn_net *net, float learning_rate,
+                                      float beta1, float beta2);
+/* SGD with momentum */
+BCNN_API void bcnn_set_sgd_optimizer(bcnn_net *net, float learning_rate,
+                                     float momentum);
+/* Weight regularization */
+BCNN_API void bcnn_set_weight_regularizer(bcnn_net *net, float weight_decay);
 
 /* Conv layer */
 BCNN_API bcnn_status bcnn_add_convolutional_layer(
@@ -537,11 +442,9 @@ BCNN_API bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                                          const char *dst_id);
 
 /* Return the detection results of a Yolo-like model */
-BCNN_API bcnn_yolo_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch,
-                                                       int w, int h, int netw,
-                                                       int neth, float thresh,
-                                                       int relative,
-                                                       int *num_dets);
+BCNN_API bcnn_output_detection *bcnn_yolo_get_detections(
+    bcnn_net *net, int batch, int w, int h, int netw, int neth, float thresh,
+    int relative, int *num_dets);
 
 /**
  * Convert an image (represented as an array of unsigned char) to floating point
@@ -602,7 +505,7 @@ BCNN_API void bcnn_update(bcnn_net *net);
  * The common use-case for this function is to be called inside a training loop
  * See: examples/mnist/mnist_example.c for a real-case example.
  */
-BCNN_API float bcnn_train_on_batch(bcnn_net *net, bcnn_loader *data_load);
+BCNN_API float bcnn_train_on_batch(bcnn_net *net);
 
 /**
  * Wrapper function to compute the inference pass only on a data batch.
@@ -612,8 +515,7 @@ BCNN_API float bcnn_train_on_batch(bcnn_net *net, bcnn_loader *data_load);
  *
  * Return the loss value and the output raw data values.
  */
-BCNN_API float bcnn_predict_on_batch(bcnn_net *net, bcnn_loader *data_load,
-                                     float **pred);
+BCNN_API float bcnn_predict_on_batch(bcnn_net *net, float **pred);
 
 /**
  * Setup the dataset loader given the paths to training and testing dataset and
@@ -624,18 +526,16 @@ BCNN_API bcnn_status bcnn_set_data_loader(bcnn_net *net, bcnn_loader_type type,
                                           const char *train_path_extra,
                                           const char *test_path_data,
                                           const char *test_path_extra);
+
 /**
  * Set the online data augmentation parameters that will be applied on the
  * training data.
  */
-BCNN_API bcnn_status bcnn_set_data_augmentation(bcnn_net *net,
-                                                bcnn_data_augment_param params);
-
-/**
- * Set the learning parameters that will be used during training phase to update
- * the model weights.
- */
-BCNN_API bcnn_status bcnn_set_learner(bcnn_net *net, bcnn_learner_param params);
+BCNN_API bcnn_status bcnn_set_data_augmentation(
+    bcnn_net *net, int width_shift_range, int height_shift_range,
+    float rotation_range, float min_scale, float max_scale, int horizontal_flip,
+    int min_brightness, int max_brightness, float min_constrast,
+    float max_contrast, float distortion, int add_blobs);
 
 /**
  * Set the network mode.

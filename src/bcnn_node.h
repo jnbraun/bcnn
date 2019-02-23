@@ -1,5 +1,6 @@
+
 /*
- * Copyright (c) 2016-2018 Jean-Noel Braun.
+ * Copyright (c) 2016-present Jean-Noel Braun.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,39 +21,38 @@
  * SOFTWARE.
  */
 
-#ifndef BCNN_DECONV_LAYER_H
-#define BCNN_DECONV_LAYER_H
+#ifndef BCNN_NODE_H
+#define BCNN_NODE_H
 
-#include "bcnn_net.h"
-#include "bcnn_node.h"
+#include <bcnn/bcnn.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct bcnn_deconv_param {
-    int num;
-    int size;
-    int stride;
-    int pad;
-    bcnn_activation activation;
-    float *conv_workspace;
-    float *adam_m;
-    float *adam_v;
-#ifdef BCNN_USE_CUDA
-    float *conv_workspace_gpu;
-    float *adam_m_gpu;
-    float *adam_v_gpu;
-#endif
-} bcnn_deconv_param;
+/**
+ * Node definition
+ */
+struct bcnn_node {
+    int num_src;
+    int num_dst;
+    bcnn_layer_type type;
+    size_t param_size;
+    int *src; /* Array of input tensors indexes */
+    int *dst; /* Array of output tensors indexes */
+    void *param;
+    void (*forward)(struct bcnn_net *net, struct bcnn_node *node);
+    void (*backward)(struct bcnn_net *net, struct bcnn_node *node);
+    void (*update)(struct bcnn_net *net, struct bcnn_node *node);
+    void (*release_param)(struct bcnn_node *node);
+};
+typedef struct bcnn_node bcnn_node;
 
-void bcnn_forward_deconv_layer(bcnn_net *net, bcnn_node *node);
-void bcnn_backward_deconv_layer(bcnn_net *net, bcnn_node *node);
-void bcnn_update_deconv_layer(bcnn_net *net, bcnn_node *node);
-void bcnn_release_param_deconv_layer(bcnn_node *node);
+bcnn_status bcnn_node_add_input(bcnn_net *net, bcnn_node *node, int index);
+bcnn_status bcnn_node_add_output(bcnn_net *net, bcnn_node *node, int index);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif  // BCNN_DECONV_LAYER_H
+#endif  // BCNN_NODE_H

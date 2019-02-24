@@ -145,7 +145,7 @@ static int resnet18(bcnn_net *net) {
 }
 
 int create_network(bcnn_net *net, model_type type) {
-    net->learner->optimizer = BCNN_OPTIM_ADAM;
+    /*net->learner->optimizer = BCNN_OPTIM_ADAM;
     net->learner->learning_rate = 0.005f;
     net->learner->gamma = 0.00002f;
     net->learner->decay = 0.0005f;
@@ -153,20 +153,17 @@ int create_network(bcnn_net *net, model_type type) {
     net->learner->decay_type = BCNN_LR_DECAY_SIGMOID;
     net->learner->step = 40000;
     net->learner->beta1 = 0.9f;
-    net->learner->beta2 = 0.999f;
+    net->learner->beta2 = 0.999f;*/
 
     // Data augmentation
-    net->data_aug->range_shift_x = 6;
+    /*net->data_aug->range_shift_x = 6;
     net->data_aug->range_shift_y = 6;
     net->data_aug->rotation_range = 15.0f;
     net->data_aug->max_brightness = 60;
     net->data_aug->min_brightness = -60;
     net->data_aug->max_contrast = 1.5f;
     net->data_aug->min_contrast = 0.6f;
-    net->data_aug->random_fliph = 1;
-
-    // Target
-    // net->prediction_type = CLASSIFICATION;
+    net->data_aug->random_fliph = 1;*/
 
     // Define the network topology
     switch (type) {
@@ -186,30 +183,24 @@ int create_network(bcnn_net *net, model_type type) {
 
 int predict_cifar10(bcnn_net *net, char *test_img, int nb_pred, float *avg_loss,
                     char *pred_out) {
-    int i = 0, j = 0, n = 0, k = 0;
-    float *out = NULL;
-    float loss = 0.0f;
-    FILE *f = NULL;
-    bcnn_loader data_iter = {0};
-    int nb = net->num_nodes;
-    int output_size =
-        bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
-
     bcnn_set_mode(net, BCNN_MODE_VALID);
-
-    f = fopen(pred_out, "wt");
+    FILE *f = fopen(pred_out, "wt");
     if (f == NULL) {
         fprintf(stderr, "[ERROR] Could not open file %s\n", pred_out);
         return -1;
     }
 
-    n = nb_pred / net->batch_size;
-    for (i = 0; i < n; ++i) {
-        loss += bcnn_predict_on_batch(net, &out);
+    int batch_size = bcnn_get_batch_size(net);
+    int n = nb_pred / batch_size;
+    float loss = 0.0f;
+    for (int i = 0; i < n; ++i) {
+        bcnn_tensor *out = NULL;
+        loss += bcnn_predict_on_batch(net, out);
         // Save predictions
-        for (j = 0; j < net->batch_size; ++j) {
-            for (k = 0; k < output_size; ++k)
-                fprintf(f, "%f ", out[j * output_size + k]);
+        for (int j = 0; j < batch_size; ++j) {
+            int out_sz = out->w * out->h * out->c;
+            for (int k = 0; k < out_sz; ++k)
+                fprintf(f, "%f ", out->data[j * out_sz + k]);
             fprintf(f, "\n");
         }
     }
@@ -241,8 +232,8 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
             fprintf(stderr,
                     "iter= %d train-error= %f test-error= %f training-time= "
                     "%lf sec inference-time= %lf sec\n",
-                    i, sum_error / (eval_period * net->batch_size), error_valid,
-                    bh_timer_get_msec(&t) / 1000,
+                    i, sum_error / (eval_period * bcnn_get_batch_size(net)),
+                    error_valid, bh_timer_get_msec(&t) / 1000,
                     bh_timer_get_msec(&tp) / 1000);
             fflush(stderr);
             bh_timer_start(&t);
@@ -252,7 +243,7 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
         }
     }
 
-    *error = (float)sum_error / (eval_period * net->batch_size);
+    *error = (float)sum_error / (eval_period * bcnn_get_batch_size(net));
 
     return 0;
 }

@@ -3,20 +3,19 @@
 /* bcnn include */
 #include <bcnn/bcnn.h>
 //#include <bcnn/bcnn_cl.h>
-#include <bcnn_activation_layer.h>
-#include <bcnn_net.h>
-#include <bcnn_tensor.h>
-#include <bcnn_utils.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 #include <bip/bip.h>
+#include "bcnn_activation_layer.h"
 #include "bcnn_avgpool_layer.h"
 #include "bcnn_conv_layer.h"
 #include "bcnn_deconv_layer.h"
 #include "bcnn_depthwise_conv_layer.h"
 #include "bcnn_fc_layer.h"
 #include "bcnn_maxpool_layer.h"
-#include "cli/bcnn_cl.h"
+#include "bcnn_net.h"
+#include "bcnn_tensor.h"
+#include "bcnn_utils.h"
 
 /* tflite generated flatbuffers */
 #include "schema_generated.h"
@@ -802,8 +801,9 @@ int init_from_config(bcnn_net* net, char* config_file, config_param* param) {
                             tok[1]);
                         loss = BCNN_LOSS_EUCLIDEAN;
                     }
-                } else
+                } else {
                     bcnn_set_param(net, tok[0], tok[1]);
+                }
 
                 bh_free(tok[0]);
                 bh_free(tok[1]);

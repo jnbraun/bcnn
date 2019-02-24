@@ -215,6 +215,8 @@ static bcnn_status bcnn_init_workload(bcnn_net *net) {
     return BCNN_SUCCESS;
 }
 
+int bcnn_get_batch_size(bcnn_net *net) { return net->batch_size; }
+
 bcnn_status bcnn_compile_net(bcnn_net *net) {
     bcnn_free_workload(net);
     bcnn_init_workload(net);
@@ -297,12 +299,17 @@ float bcnn_train_on_batch(bcnn_net *net) {
     return bcnn_get_loss(net);
 }
 
-float bcnn_predict_on_batch(bcnn_net *net, float **pred) {
+float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor *out) {
     // Get next data batch
     bcnn_loader_next(net);
     // Forward
     bcnn_forward(net);
 
+    // Extract output tensor
+    int out_id = net->nodes[net->num_nodes - 1].dst[0];
+    if (net->nodes[net->num_nodes - 1].type == BCNN_LAYER_COST) {
+        out_id = net->nodes[net->num_nodes - 1].src[0];
+    }
 #ifdef BCNN_USE_CUDA
     int sz =
         bcnn_tensor_size(&net->tensors[net->nodes[net->num_nodes - 1].src[0]]);
@@ -310,8 +317,7 @@ float bcnn_predict_on_batch(bcnn_net *net, float **pred) {
         net->tensors[net->nodes[net->num_nodes - 1].src[0]].data_gpu,
         net->tensors[net->nodes[net->num_nodes - 1].src[0]].data, sz);
 #endif
-    // Extract output data
-    (*pred) = net->tensors[net->nodes[net->num_nodes - 1].src[0]].data;
+    out = &net->tensors[net->nodes[net->num_nodes - 1].src[0]];
     // Return the loss value
     return bcnn_get_loss(net);
 }
@@ -333,6 +339,92 @@ bcnn_status bcnn_set_mode(bcnn_net *net, bcnn_mode mode) {
         bcnn_switch_data_handles(net, net->data_loader);
     }
     return BCNN_SUCCESS;
+}
+
+void bcnn_set_param(bcnn_net *net, const char *name, const char *val) {
+    if (strcmp(name, "input_width") == 0) {
+        net->tensors[0].w = atoi(val);
+    } else if (strcmp(name, "input_height") == 0) {
+        net->tensors[0].h = atoi(val);
+    } else if (strcmp(name, "input_channels") == 0) {
+        net->tensors[0].c = atoi(val);
+    } else if (strcmp(name, "batch_size") == 0) {
+        net->batch_size = atoi(val);
+        net->tensors[0].n = atoi(val);
+    } else if (strcmp(name, "max_batches") == 0) {
+        net->learner->max_batches = atoi(val);
+    } else if (strcmp(name, "learning_policy") == 0 ||
+               strcmp(name, "decay_type") == 0) {
+        if (strcmp(val, "sigmoid") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_SIGMOID;
+        } else if (strcmp(val, "constant") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_CONSTANT;
+        } else if (strcmp(val, "exp") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_EXP;
+        } else if (strcmp(val, "inv") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_INV;
+        } else if (strcmp(val, "step") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_STEP;
+        } else if (strcmp(val, "poly") == 0) {
+            net->learner->decay_type = BCNN_LR_DECAY_POLY;
+        } else {
+            net->learner->decay_type = BCNN_LR_DECAY_CONSTANT;
+        }
+    } else if (strcmp(name, "optimizer") == 0) {
+        if (strcmp(val, "sgd") == 0) {
+            net->learner->optimizer = BCNN_OPTIM_SGD;
+        } else if (strcmp(val, "adam") == 0) {
+            net->learner->optimizer = BCNN_OPTIM_ADAM;
+        }
+    } else if (strcmp(name, "step") == 0) {
+        net->learner->step = atoi(val);
+    } else if (strcmp(name, "learning_rate") == 0) {
+        net->learner->learning_rate = (float)atof(val);
+    } else if (strcmp(name, "beta1") == 0) {
+        net->learner->beta1 = (float)atof(val);
+    } else if (strcmp(name, "beta2") == 0) {
+        net->learner->beta2 = (float)atof(val);
+    } else if (strcmp(name, "decay") == 0) {
+        net->learner->decay = (float)atof(val);
+    } else if (strcmp(name, "momentum") == 0) {
+        net->learner->momentum = (float)atof(val);
+    } else if (strcmp(name, "gamma") == 0) {
+        net->learner->gamma = (float)atof(val);
+    } else if (strcmp(name, "range_shift_x") == 0) {
+        net->data_aug->range_shift_x = atoi(val);
+    } else if (strcmp(name, "range_shift_y") == 0) {
+        net->data_aug->range_shift_y = atoi(val);
+    } else if (strcmp(name, "min_scale") == 0) {
+        net->data_aug->min_scale = (float)atof(val);
+    } else if (strcmp(name, "max_scale") == 0) {
+        net->data_aug->max_scale = (float)atof(val);
+    } else if (strcmp(name, "rotation_range") == 0) {
+        net->data_aug->rotation_range = (float)atof(val);
+    } else if (strcmp(name, "min_contrast") == 0) {
+        net->data_aug->min_contrast = (float)atof(val);
+    } else if (strcmp(name, "max_contrast") == 0) {
+        net->data_aug->max_contrast = (float)atof(val);
+    } else if (strcmp(name, "min_brightness") == 0) {
+        net->data_aug->min_brightness = atoi(val);
+    } else if (strcmp(name, "max_brightness") == 0) {
+        net->data_aug->max_brightness = atoi(val);
+    } else if (strcmp(name, "max_distortion") == 0) {
+        net->data_aug->max_distortion = (float)atof(val);
+    } else if (strcmp(name, "max_spots") == 0) {
+        net->data_aug->max_random_spots = (float)atof(val);
+    } else if (strcmp(name, "flip_h") == 0) {
+        net->data_aug->random_fliph = 1;
+    } else if (strcmp(name, "mean_r") == 0) {
+        net->data_aug->mean_r = (float)atof(val) / 255.0f;
+    } else if (strcmp(name, "mean_g") == 0) {
+        net->data_aug->mean_g = (float)atof(val) / 255.0f;
+    } else if (strcmp(name, "mean_b") == 0) {
+        net->data_aug->mean_b = (float)atof(val) / 255.0f;
+    } else if (strcmp(name, "swap_to_bgr") == 0) {
+        net->data_aug->swap_to_bgr = atoi(val);
+    } else if (strcmp(name, "no_input_norm") == 0) {
+        net->data_aug->no_input_norm = atoi(val);
+    }
 }
 
 bcnn_status bcnn_write_model(bcnn_net *net, char *filename) {

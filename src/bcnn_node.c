@@ -21,6 +21,10 @@
  */
 
 #include "bcnn_node.h"
+#include "bcnn_net.h"
+#include "bcnn_utils.h"
+
+#include <stdlib.h>
 
 bcnn_status bcnn_node_add_output(bcnn_net *net, bcnn_node *node, int index) {
     int *p_dst = NULL;

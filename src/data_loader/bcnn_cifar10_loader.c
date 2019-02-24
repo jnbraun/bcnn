@@ -26,7 +26,6 @@
 #include <bh/bh_string.h>
 /* include bip image processing lib */
 #include <bip/bip.h>
-#include "bcnn_data.h"
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_loader_cifar10_init(bcnn_loader *iter, bcnn_net *net,
@@ -126,7 +125,7 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
         }
         bcnn_data_augmentation(iter->input_uchar, iter->input_width,
                                iter->input_height, iter->input_depth,
-                               &net->data_aug, img_tmp);
+                               net->data_aug, img_tmp);
         bh_free(img_tmp);
     }
     // bip_write_image("test.png", iter->input_uchar, iter->input_width,

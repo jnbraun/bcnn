@@ -13,8 +13,8 @@ BCNN (Bare Convolutional Neural Networks) is a minimalist framework designed to 
 * Fast: Optimized inference speed using AVX and ARM Neon SIMD instructions. Particularly efficient on ARMv8 architecture.
 * Flexible: Supports multi inputs / outputs / branches. Provides the commonly used operators to build state-of-the-art CNN architectures (ResNet, DenseNet, MobileNet, [Yolo](https://github.com/jnbraun/bcnn/tree/generic_layer/examples/yolo) ...)
 * [Command line tool](https://github.com/jnbraun/bcnn/tree/generic_layer/examples/mnist_cl) to train / evaluate models via simple configuration file.
-* Online data augmentation via bip: a fast image processing library (usable as standalone module).
-* (Experimental) Model converters from Caffe->bcnn and bcnn->TensorFlow Lite.
+* Online data augmentation via [bip](https://github.com/jnbraun/bcnn/tree/generic_layer/bip), a fast image processing library (usable as standalone module).
+* (Experimental) Model converters from Caffe -> bcnn and bcnn -> TensorFlow Lite.
 
 ## Getting started
 Download or clone the repository:
@@ -57,7 +57,7 @@ set(CUDA_ARCH
 )
 ```
 
-* Build:
+* Build
 ```
 cd path/to/bcnn
 mkdir build

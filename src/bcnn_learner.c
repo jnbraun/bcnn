@@ -23,8 +23,8 @@
 #include <math.h>
 #include <string.h>
 
-#include "bcnn/bcnn.h"
 #include "bcnn_mat.h"
+#include "bcnn_net.h"
 
 static float bcnn_update_learning_rate(bcnn_net *net) {
     net->learner->seen += net->batch_size;
@@ -165,4 +165,52 @@ void bcnn_update(bcnn_net *net) {
             node->update(net, node);
         }
     }
+}
+
+/* Learning rate decay policy */
+void bcnn_set_learning_rate_policy(bcnn_net *net, bcnn_lr_decay decay_type,
+                                   float gamma, float scale, float power,
+                                   int max_batches, int step) {
+    if (net->learner == NULL) {
+        net->learner = (bcnn_learner *)calloc(1, sizeof(bcnn_learner));
+    }
+    bcnn_learner *ln = net->learner;
+    ln->decay_type = decay_type;
+    ln->gamma = gamma;
+    ln->scale = scale;
+    ln->power = power;
+    ln->max_batches = max_batches;
+    ln->step = step;
+}
+
+/* Adam */
+void bcnn_set_adam_optimizer(bcnn_net *net, float learning_rate, float beta1,
+                             float beta2) {
+    if (net->learner == NULL) {
+        net->learner = (bcnn_learner *)calloc(1, sizeof(bcnn_learner));
+    }
+    bcnn_learner *ln = net->learner;
+    ln->learning_rate = learning_rate;
+    ln->beta1 = beta1;
+    ln->beta2 = beta2;
+}
+
+/* SGD with momentum */
+void bcnn_set_sgd_optimizer(bcnn_net *net, float learning_rate,
+                            float momentum) {
+    if (net->learner == NULL) {
+        net->learner = (bcnn_learner *)calloc(1, sizeof(bcnn_learner));
+    }
+    bcnn_learner *ln = net->learner;
+    ln->learning_rate = learning_rate;
+    ln->momentum = momentum;
+}
+
+/* Weight regularization */
+void bcnn_set_weight_regularizer(bcnn_net *net, float weight_decay) {
+    if (net->learner == NULL) {
+        net->learner = (bcnn_learner *)calloc(1, sizeof(bcnn_learner));
+    }
+    bcnn_learner *ln = net->learner;
+    ln->decay = weight_decay;
 }

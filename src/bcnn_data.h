@@ -103,6 +103,8 @@ typedef bcnn_status (*bcnn_loader_next_func)(bcnn_loader *iter, bcnn_net *net,
 
 typedef void (*bcnn_loader_terminate_func)(bcnn_loader *iter);
 
+bcnn_status bcnn_loader_next(bcnn_net *net);
+
 bcnn_status bcnn_data_augmentation(unsigned char *img, int width, int height,
                                    int depth, bcnn_data_augmenter *param,
                                    unsigned char *buffer);

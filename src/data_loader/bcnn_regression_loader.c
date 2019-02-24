@@ -24,7 +24,6 @@
 
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
-#include "bcnn_data.h"
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_loader_list_reg_init(bcnn_loader *iter, bcnn_net *net,

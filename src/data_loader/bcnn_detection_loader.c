@@ -26,7 +26,6 @@
 #include <bh/bh_string.h>
 /* include bip image processing lib */
 #include <bip/bip.h>
-#include "bcnn_data.h"
 #include "bcnn_utils.h"
 
 bcnn_status bcnn_loader_list_detection_init(bcnn_loader *iter, bcnn_net *net,
@@ -143,7 +142,7 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
         }
         bcnn_data_augmentation(iter->input_net, net->tensors[0].w,
                                net->tensors[0].h, net->tensors[0].c,
-                               &net->data_aug, iter->input_uchar);
+                               net->data_aug, iter->input_uchar);
     }
     memcpy(iter->input_uchar, iter->input_net,
            net->tensors[0].c * net->tensors[0].w * net->tensors[0].h);

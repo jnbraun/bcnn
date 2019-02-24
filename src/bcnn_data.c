@@ -112,6 +112,34 @@ static bcnn_status bcnn_load_image_from_path(bcnn_net *net, char *path, int w,
     return BCNN_SUCCESS;
 }
 
+/* Setup data augmentation parameters */
+bcnn_status bcnn_set_data_augmentation(bcnn_net *net, int width_shift_range,
+                                       int height_shift_range,
+                                       float rotation_range, float min_scale,
+                                       float max_scale, int horizontal_flip,
+                                       int min_brightness, int max_brightness,
+                                       float min_constrast, float max_contrast,
+                                       float distortion, int add_blobs) {
+    if (net->data_aug == NULL) {
+        net->data_aug =
+            (bcnn_data_augmenter *)calloc(1, sizeof(bcnn_data_augmenter));
+    }
+    bcnn_data_augmenter *aug = net->data_aug;
+    aug->apply_fliph = horizontal_flip;
+    aug->range_shift_x = width_shift_range;
+    aug->range_shift_y = height_shift_range;
+    aug->rotation_range = rotation_range;
+    aug->max_brightness = max_brightness;
+    aug->min_brightness = min_brightness;
+    aug->min_contrast = min_constrast;
+    aug->max_contrast = max_contrast;
+    aug->min_scale = min_scale;
+    aug->max_scale = max_scale;
+    aug->distortion = distortion;
+    aug->max_random_spots = add_blobs;
+    return BCNN_SUCCESS;
+}
+
 /* Data augmentation */
 bcnn_status bcnn_data_augmentation(unsigned char *img, int width, int height,
                                    int depth, bcnn_data_augmenter *param,
@@ -325,49 +353,18 @@ bcnn_status bcnn_set_data_loader(bcnn_net *net, bcnn_loader_type type,
         bcnn_loader_terminate(net->data_loader);
         bh_free(net->data_loader);
     }
-    net->loader = (bcnn_loader *)calloc(1, sizeof(bcnn_loader));
-    if (net->loader == NULL) {
+    net->data_loader = (bcnn_loader *)calloc(1, sizeof(bcnn_loader));
+    if (net->data_loader == NULL) {
         return BCNN_FAILED_ALLOC;
     }
-    return bcnn_loader_initialize(&net->loader, type, net, train_path_data,
+    return bcnn_loader_initialize(net->data_loader, type, net, train_path_data,
                                   train_path_extra, test_path_data,
                                   test_path_extra);
 }
 
 void bcnn_destroy_data_loader(bcnn_net *net) {
-    bcnn_loader_terminate(net->loader);
-    bh_free(net->loader);
-}
-
-bcnn_status bcnn_set_data_augmentation(bcnn_net *net,
-                                       bcnn_data_augment_param param) {
-    if (net->data_aug != NULL) {
-        bh_free(net->data_aug);
-    }
-    net->data_aug =
-        (bcnn_data_augmenter *)calloc(1, sizeof(bcnn_data_augmenter));
-    if (net->data_aug == NULL) {
-        return BCNN_FAILED_ALLOC;
-    }
-    net->data_aug->range_shift_x = param.range_shift_x;
-    net->data_aug->range_shift_y = param.range_shift_y;
-    net->data_aug->random_fliph = param.random_fliph;
-    net->data_aug->min_brightness = param.min_brightness;
-    net->data_aug->max_brightness = param.max_brightness;
-    net->data_aug->swap_to_bgr = param.swap_to_bgr;
-    net->data_aug->no_input_norm = param.no_input_norm;
-    net->data_aug->max_random_spots = param.max_random_spots;
-    net->data_aug->min_scale = param.min_scale;
-    net->data_aug->max_scale = param.max_scale;
-    net->data_aug->rotation_range = param.rotation_range;
-    net->data_aug->min_contrast = param.min_contrast;
-    net->data_aug->max_contrast = param.max_contrast;
-    net->data_aug->max_distortion = param.max_distortion;
-    net->data_aug->mean_r = param.mean_r;
-    net->data_aug->mean_g = param.mean_g;
-    net->data_aug->mean_b = param.mean_b;
-
-    return BCNN_SUCCESS;
+    bcnn_loader_terminate(net->data_loader);
+    bh_free(net->data_loader);
 }
 
 bcnn_status bcnn_open_dataset(bcnn_loader *iter, bcnn_net *net,
@@ -376,19 +373,19 @@ bcnn_status bcnn_open_dataset(bcnn_loader *iter, bcnn_net *net,
                               const char *test_path,
                               const char *test_path_extra, bool has_extra) {
     // Open the files handles according to each dataset path
-    if (train_path_img != NULL) {
-        iter->f_train = fopen(train_path_img, "rb");
+    if (train_path != NULL) {
+        iter->f_train = fopen(train_path, "rb");
         BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_train, BCNN_INVALID_PARAMETER,
-                           "Could not open file %s", train_path_img);
+                           "Could not open file %s", train_path);
     }
-    if (test_path_img != NULL) {
-        iter->f_test = fopen(test_path_img, "rb");
+    if (test_path != NULL) {
+        iter->f_test = fopen(test_path, "rb");
         BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_test, BCNN_INVALID_PARAMETER,
-                           "Could not open file %s", test_path_img);
+                           "Could not open file %s", test_path);
     }
     if (has_extra) {
         if (train_path_extra != NULL) {
-            iter->f_train_extra = fopen(iter->f_train_extra, "rb");
+            iter->f_train_extra = fopen(train_path_extra, "rb");
             BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_train_extra,
                                BCNN_INVALID_PARAMETER, "Could not open file %s",
                                train_path_extra);
@@ -440,7 +437,7 @@ bcnn_status bcnn_switch_data_handles(bcnn_net *net, bcnn_loader *iter) {
         rewind(iter->f_test);
         iter->f_current = iter->f_test;
         bool valid = (iter->f_current != NULL);
-        if (has_extra) {
+        if (iter->has_extra_data) {
             iter->f_current_extra = iter->f_test_extra;
             valid = valid && (iter->f_current_extra != NULL);
         }

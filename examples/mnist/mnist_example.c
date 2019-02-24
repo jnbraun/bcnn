@@ -25,7 +25,7 @@
 #include "bcnn/bcnn.h"
 
 int create_network(bcnn_net *net) {
-    net->learner->optimizer = BCNN_OPTIM_SGD;
+    /*net->learner->optimizer = BCNN_OPTIM_SGD;
     net->learner->learning_rate = 0.003f;
     net->learner->gamma = 0.00002f;
     net->learner->decay = 0.0005f;
@@ -34,7 +34,7 @@ int create_network(bcnn_net *net) {
     net->learner->step = 40000;
     net->learner->beta1 = 0.9f;
     net->learner->beta2 = 0.999f;
-    net->learner->max_batches = 50000;
+    net->learner->max_batches = 50000;*/
 
     bcnn_set_input_shape(net, 28, 28, 1, 16);
 
@@ -60,9 +60,9 @@ int create_network(bcnn_net *net) {
                         "softmax", "label", "cost");
 
     // Data augmentation
-    net->data_aug->range_shift_x = 5;
+    /*net->data_aug->range_shift_x = 5;
     net->data_aug->range_shift_y = 5;
-    net->data_aug->rotation_range = 30.0f;
+    net->data_aug->rotation_range = 30.0f;*/
 
     bcnn_compile_net(net);
 
@@ -70,34 +70,30 @@ int create_network(bcnn_net *net) {
 }
 
 int predict_mnist(bcnn_net *net, const char *test_img, const char *test_label,
-                  int nb_pred, float *avg_loss, const char *pred_out) {
-    int i = 0, j = 0, n = 0, k = 0;
-    float *out = NULL;
-    float loss = 0.0f;
-    FILE *f = NULL;
-    int nb = net->num_nodes;
-    int output_size =
-        bcnn_tensor_size3d(&net->tensors[net->nodes[nb - 2].dst[0]]);
-
+                  int num_pred, float *avg_loss, const char *pred_out) {
     bcnn_set_mode(net, BCNN_MODE_VALID);
 
-    f = fopen(pred_out, "wt");
+    FILE *f = fopen(pred_out, "wt");
     if (f == NULL) {
         fprintf(stderr, "[ERROR] Could not open file %s", pred_out);
         return -1;
     }
 
-    n = nb_pred / net->batch_size;
-    for (i = 0; i < n; ++i) {
-        loss += bcnn_predict_on_batch(net, &out);
+    int batch_size = bcnn_get_batch_size(net);
+    int n = num_pred / batch_size;
+    float loss = 0.0f;
+    for (int i = 0; i < n; ++i) {
+        bcnn_tensor *out = NULL;
+        loss += bcnn_predict_on_batch(net, out);
         // Save predictions
-        for (j = 0; j < net->batch_size; ++j) {
-            for (k = 0; k < output_size; ++k)
-                fprintf(f, "%f ", out[j * output_size + k]);
+        int out_sz = out->w * out->h * out->c;
+        for (int j = 0; j < batch_size; ++j) {
+            for (int k = 0; k < out_sz; ++k)
+                fprintf(f, "%f ", out->data[j * out_sz + k]);
             fprintf(f, "\n");
         }
     }
-    *avg_loss = loss / nb_pred;
+    *avg_loss = loss / num_pred;
 
     if (f != NULL) {
         fclose(f);
@@ -126,8 +122,8 @@ int train_mnist(bcnn_net *net, const char *train_img, const char *train_label,
             fprintf(stderr,
                     "iter= %d train-error= %f test-error= %f training-time= "
                     "%lf sec inference-time= %lf sec\n",
-                    i, sum_error / (eval_period * net->batch_size), error_valid,
-                    bh_timer_get_msec(&t) / 1000,
+                    i, sum_error / (eval_period * bcnn_get_batch_size(net)),
+                    error_valid, bh_timer_get_msec(&t) / 1000,
                     bh_timer_get_msec(&tp) / 1000);
             fflush(stderr);
             bh_timer_start(&t);
@@ -137,7 +133,7 @@ int train_mnist(bcnn_net *net, const char *train_img, const char *train_label,
         }
     }
 
-    *error = (float)sum_error / (eval_period * net->batch_size);
+    *error = (float)sum_error / (eval_period * bcnn_get_batch_size(net));
 
     return 0;
 }
@@ -151,6 +147,15 @@ int run(const char *train_img, const char *train_label, const char *test_img,
     bcnn_set_mode(net, BCNN_MODE_TRAIN);
     fprintf(stderr, "Create Network...\n");
     create_network(net);
+
+    // Setup training parameters
+    bcnn_set_sgd_optimizer(net, /*learning_rate=*/0.003f, /*momentum=*/0.9f);
+    bcnn_set_learning_rate_policy(net, BCNN_LR_DECAY_SIGMOID, 0.00002f, 0.f,
+                                  0.f, 50000, 40000);
+    bcnn_set_weight_regularizer(net, 0.0005f);
+
+    // Setup data augmentation
+    bcnn_set_data_augmentation(net, 5, 5, 30.f, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     fprintf(stderr, "Start training...\n");
     if (train_mnist(net, train_img, train_label, test_img, test_label, 100000,

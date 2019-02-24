@@ -31,8 +31,6 @@ typedef struct {
     int eval_test;   /**< Set to 1 if evaluation of test database is asked. */
 } bcnncl_param;
 
-void bcnn_set_param(bcnn_net *net, const char *name, const char *val);
-
 int bcnncl_init_from_config(bcnn_net *handle_net, char *config_file,
                             bcnncl_param *param);
 

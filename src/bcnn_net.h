@@ -68,6 +68,7 @@ bcnn_status bcnn_create_cuda_context(bcnn_net *net);
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node);
 bcnn_status bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor);
 int bcnn_get_tensor_index_with_name(bcnn_net *net, const char *name);
+void bcnn_set_param(bcnn_net *net, const char *name, const char *val);
 
 #ifdef __cplusplus
 }

@@ -331,6 +331,11 @@ BCNN_API void bcnn_set_input_shape(bcnn_net *net, int width, int height,
 BCNN_API bcnn_status bcnn_add_input(bcnn_net *net, int w, int h, int c,
                                     char *name);
 
+/**
+ * Returns the batch size used for training / validation
+ */
+BCNN_API int bcnn_get_batch_size(bcnn_net *net);
+
 BCNN_API bcnn_status bcnn_compile_net(bcnn_net *net);
 
 /* Load / Write model */
@@ -344,8 +349,8 @@ BCNN_API bcnn_status bcnn_load_model_legacy(bcnn_net *net, char *filename);
 BCNN_API void bcnn_set_learning_rate_policy(bcnn_net *net,
                                             bcnn_lr_decay decay_type,
                                             float gamma, float scale,
-                                            float power, float weight_decay,
-                                            int max_batches, int step);
+                                            float power, int max_batches,
+                                            int step);
 /* Adam */
 BCNN_API void bcnn_set_adam_optimizer(bcnn_net *net, float learning_rate,
                                       float beta1, float beta2);
@@ -513,9 +518,9 @@ BCNN_API float bcnn_train_on_batch(bcnn_net *net);
  * - Load the next data batch (and performs data augmentation if required)
  * - Compute the forward pass given the loaded data batch
  *
- * Return the loss value and the output raw data values.
+ * Return the loss value and the output tensor.
  */
-BCNN_API float bcnn_predict_on_batch(bcnn_net *net, float **pred);
+BCNN_API float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor *out);
 
 /**
  * Setup the dataset loader given the paths to training and testing dataset and

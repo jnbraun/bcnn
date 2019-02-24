@@ -23,7 +23,8 @@
 #ifndef BCNN_DETECTION_LOADER_H
 #define BCNN_DETECTION_LOADER_H
 
-#include "bcnn/bcnn.h"
+#include "bcnn_data.h"
+#include "bcnn_net.h"
 
 #ifdef __cplusplus
 extern "C" {

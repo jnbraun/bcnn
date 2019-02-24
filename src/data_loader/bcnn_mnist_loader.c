@@ -26,7 +26,6 @@
 #include <bh/bh_string.h>
 /* include bip image processing lib */
 #include <bip/bip.h>
-#include "bcnn_data.h"
 #include "bcnn_utils.h"
 
 static uint32_t read_uint32(char *v) {
@@ -146,7 +145,7 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
         }
         bcnn_data_augmentation(iter->input_uchar, iter->input_width,
                                iter->input_height, iter->input_depth,
-                               &net->data_aug, img_tmp);
+                               net->data_aug, img_tmp);
         if (use_buffer_img) {
             bh_free(img_tmp);
         }

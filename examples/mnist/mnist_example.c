@@ -20,22 +20,14 @@
  * SOFTWARE.
  */
 
-#include <bh/bh_timer.h>  // For timing
+#include <stdio.h>
+#include <string.h>
 
 #include "bcnn/bcnn.h"
 
-int create_network(bcnn_net *net) {
-    /*net->learner->optimizer = BCNN_OPTIM_SGD;
-    net->learner->learning_rate = 0.003f;
-    net->learner->gamma = 0.00002f;
-    net->learner->decay = 0.0005f;
-    net->learner->momentum = 0.9f;
-    net->learner->decay_type = BCNN_LR_DECAY_SIGMOID;
-    net->learner->step = 40000;
-    net->learner->beta1 = 0.9f;
-    net->learner->beta2 = 0.999f;
-    net->learner->max_batches = 50000;*/
+#include <bh/bh_timer.h>  // For timing
 
+int create_network(bcnn_net *net) {
     bcnn_set_input_shape(net, 28, 28, 1, 16);
 
     bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 0, BCNN_FILLER_XAVIER,
@@ -59,13 +51,6 @@ int create_network(bcnn_net *net) {
     bcnn_add_cost_layer(net, BCNN_LOSS_EUCLIDEAN, BCNN_METRIC_ERROR_RATE, 1.0f,
                         "softmax", "label", "cost");
 
-    // Data augmentation
-    /*net->data_aug->range_shift_x = 5;
-    net->data_aug->range_shift_y = 5;
-    net->data_aug->rotation_range = 30.0f;*/
-
-    bcnn_compile_net(net);
-
     return 0;
 }
 
@@ -84,13 +69,12 @@ int predict_mnist(bcnn_net *net, const char *test_img, const char *test_label,
     float loss = 0.0f;
     for (int i = 0; i < n; ++i) {
         bcnn_tensor *out = NULL;
-        loss += bcnn_predict_on_batch(net, out);
+        loss += bcnn_predict_on_batch(net, &out);
         // Save predictions
         int out_sz = out->w * out->h * out->c;
         for (int j = 0; j < batch_size; ++j) {
             for (int k = 0; k < out_sz; ++k)
                 fprintf(f, "%f ", out->data[j * out_sz + k]);
-            fprintf(f, "\n");
         }
     }
     *avg_loss = loss / num_pred;
@@ -143,8 +127,8 @@ int run(const char *train_img, const char *train_label, const char *test_img,
     float error_train = 0.0f, error_test = 0.0f;
     bcnn_net *net = NULL;
 
-    bcnn_init_net(&net);
-    bcnn_set_mode(net, BCNN_MODE_TRAIN);
+    bcnn_init_net(&net, BCNN_MODE_TRAIN);
+
     fprintf(stderr, "Create Network...\n");
     create_network(net);
 
@@ -154,8 +138,14 @@ int run(const char *train_img, const char *train_label, const char *test_img,
                                   0.f, 50000, 40000);
     bcnn_set_weight_regularizer(net, 0.0005f);
 
+    // Setup loaders for train and validation dataset
+    bcnn_set_data_loader(net, BCNN_LOAD_MNIST, train_img, train_label, test_img,
+                         test_label);
+
     // Setup data augmentation
     bcnn_set_data_augmentation(net, 5, 5, 30.f, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+    bcnn_compile_net(net);
 
     fprintf(stderr, "Start training...\n");
     if (train_mnist(net, train_img, train_label, test_img, test_label, 100000,

@@ -71,7 +71,6 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
                            "network input size");
         bcnn_node_add_input(net, &node, 0);
     }
-
     BCNN_CHECK_AND_LOG(net->log_ctx,
                        net->tensors[node.src[0]].c % num_groups == 0,
                        BCNN_INVALID_PARAMETER,
@@ -81,7 +80,6 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
                        BCNN_INVALID_PARAMETER,
                        "Number of output channels has to be a multiple of the "
                        "number of groups");
-
     // Fill nodes param
     node.type = BCNN_LAYER_CONV2D;
     node.param_size = sizeof(bcnn_conv_param);
@@ -97,7 +95,6 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     node.backward = bcnn_backward_conv_layer;
     node.update = bcnn_update_conv_layer;
     node.release_param = bcnn_release_param_conv_layer;
-
     int num_channels_per_group = net->tensors[node.src[0]].c / num_groups;
     // Create weights tensor
     bcnn_tensor weights = {0};
@@ -117,10 +114,12 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     bcnn_tensor_create(&biases, 1, 1, 1, n, 1, biases_name, net->mode);
     bcnn_net_add_tensor(net, biases);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
-    if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
-        int weights_size = bcnn_tensor_size(&weights);
-        param->adam_m = (float *)calloc(weights_size, sizeof(float));
-        param->adam_v = (float *)calloc(weights_size, sizeof(float));
+    if (net->learner != NULL) {
+        if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
+            int weights_size = bcnn_tensor_size(&weights);
+            param->adam_m = (float *)calloc(weights_size, sizeof(float));
+            param->adam_v = (float *)calloc(weights_size, sizeof(float));
+        }
     }
     bcnn_tensor_set_shape(
         &dst_tensor, net->tensors[node.src[0]].n, param->num,
@@ -140,7 +139,6 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
          num_channels_per_group * size * size;
     param->conv_workspace = (float *)calloc(sz, sizeof(float));
-
     if (batch_norm) {
         param->batch_norm = 1;
         int sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
@@ -180,10 +178,14 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         param->workspace = (float *)calloc(sz, sizeof(float));
     }
 #ifdef BCNN_USE_CUDA
-    if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
-        int weights_size = bcnn_tensor_size(&weights);
-        param->adam_m_gpu = bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
-        param->adam_v_gpu = bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
+    if (net->learner != NULL) {
+        if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
+            int weights_size = bcnn_tensor_size(&weights);
+            param->adam_m_gpu =
+                bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
+            param->adam_v_gpu =
+                bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
+        }
     }
 #ifdef BCNN_USE_CUDNN
     bcnn_cudnn_check(cudnnCreateTensorDescriptor(&param->src_tensor_desc));
@@ -509,7 +511,7 @@ void bcnn_forward_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
                                    ,
                                    param->dst_tensor_desc, param->bias_desc
 #endif
-        );
+                                   );
     }
     sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
     bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, param->activation);
@@ -556,7 +558,7 @@ void bcnn_backward_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
                                     ,
                                     param->dst_tensor_desc, param->bias_desc
 #endif
-        );
+                                    );
     } else {
 #ifndef BCNN_USE_CUDNN
         bcnn_cuda_grad_bias(biases->grad_data_gpu, dst_tensor->grad_data_gpu,
@@ -597,9 +599,9 @@ void bcnn_backward_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
             }
             bcnn_cuda_gemm(
                 0, 1, param->num / param->num_groups, n, dst_sz2d, 1,
-                dst_tensor->grad_data_gpu + (i * param->num_groups + j) *
-                                                param->num / param->num_groups *
-                                                dst_sz2d,
+                dst_tensor->grad_data_gpu +
+                    (i * param->num_groups + j) * param->num /
+                        param->num_groups * dst_sz2d,
                 dst_sz2d, param->conv_workspace_gpu, dst_sz2d, 1,
                 weights->grad_data_gpu + j * w_sz / param->num_groups, n);
             if (src_tensor->grad_data_gpu) {
@@ -610,9 +612,8 @@ void bcnn_backward_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
                         dst_tensor->grad_data_gpu +
                             (i * param->num_groups + j) * param->num /
                                 param->num_groups * dst_sz2d,
-                        dst_sz2d, 0,
-                        src_tensor->grad_data_gpu +
-                            (i * param->num_groups + j) * sz,
+                        dst_sz2d, 0, src_tensor->grad_data_gpu +
+                                         (i * param->num_groups + j) * sz,
                         dst_sz2d);
                 } else {
                     bcnn_cuda_gemm(

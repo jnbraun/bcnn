@@ -31,12 +31,12 @@ typedef struct {
     int eval_test;   /**< Set to 1 if evaluation of test database is asked. */
 } bcnncl_param;
 
-int bcnncl_init_from_config(bcnn_net *handle_net, char *config_file,
+int bcnncl_init_from_config(bcnn_net **net, char *config_file,
                             bcnncl_param *param);
 
-int bcnncl_train(bcnn_net *handle_net, bcnncl_param *param, float *error);
+int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error);
 
-int bcnncl_predict(bcnn_net *handle_net, bcnncl_param *param, float *error,
+int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
                    int dump_pred);
 
 int bcnncl_free_param(bcnncl_param *param);

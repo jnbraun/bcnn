@@ -363,8 +363,10 @@ bcnn_status bcnn_set_data_loader(bcnn_net *net, bcnn_loader_type type,
 }
 
 void bcnn_destroy_data_loader(bcnn_net *net) {
-    bcnn_loader_terminate(net->data_loader);
-    bh_free(net->data_loader);
+    if (net->data_loader) {
+        bcnn_loader_terminate(net->data_loader);
+        bh_free(net->data_loader);
+    }
 }
 
 bcnn_status bcnn_open_dataset(bcnn_loader *iter, bcnn_net *net,

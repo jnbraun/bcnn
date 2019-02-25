@@ -23,6 +23,7 @@
 #ifdef BCNN_USE_CUDA
 
 #include "bcnn_mat.h"
+#include "bcnn_tensor.h"
 #include "bcnn_upsample_layer.h"
 #include "bcnn_utils.h"
 

@@ -23,6 +23,7 @@
 #ifdef BCNN_USE_CUDA
 
 #include "bcnn_avgpool_layer.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 __global__ void _bcnn_forward_avgpool_layer_kernel(int sz, int c, int h, int w,

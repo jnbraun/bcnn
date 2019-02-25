@@ -34,11 +34,18 @@
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
-int bcnncl_init_from_config(bcnn_net *net, char *config_file,
+#define CLEANUP_PARSED_LINE(l, t, n)    \
+    do {                                \
+        for (int i = 0; i < (n); ++i) { \
+            bh_free((t[i]));            \
+        }                               \
+        bh_free(t);                     \
+        bh_free(l);                     \
+    } while (0)
+
+int bcnncl_init_from_config(bcnn_net **net, char *config_file,
                             bcnncl_param *param) {
-    FILE *file = NULL;
-    char *line = NULL, *curr_layer = NULL;
-    char **tok = NULL;
+    char *curr_layer = NULL;
     int nb_lines = 0, nb_layers = 0;
     bcnn_padding padding_type = BCNN_PADDING_SAME;
     int stride = 1, pad = 0, n_filts = 1, size = 3, outputs = 0, num_groups = 1,
@@ -54,151 +61,206 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
     bcnn_loss loss = BCNN_LOSS_EUCLIDEAN;
     bcnn_mode mode = BCNN_MODE_PREDICT;
     float rate = 1.0f;
-    int n_tok;
     char *src_id = NULL, *dst_id = NULL, *src_id2 = NULL;
 
-    file = fopen(config_file, "rt");
-    if (file == 0) {
+    FILE *file = fopen(config_file, "rt");
+    if (file == NULL) {
         fprintf(stderr, "Couldn't open file: %s\n", config_file);
         exit(-1);
     }
 
-    BCNN_INFO(net->log_ctx, "Network architecture");
-    while ((line = bh_fgetline(file)) != 0) {
+    // Read first line to determine network mode
+    bool found_mode = false;
+    char *line = NULL;
+    while (found_mode == false) {
+        line = bh_fgetline(file);
+        if (line == NULL) {
+            bh_log(BH_LOG_ERROR, "Invalid config file\n");
+            return BCNN_INVALID_PARAMETER;
+        }
+        char **tok = NULL;
+        bh_strstrip(line);
+        if (line[0] == '#') {
+            bh_free(line);
+            continue;
+        }
+        int n_tok = bh_strsplit(line, '=', &tok);
+        if (n_tok != 2) {
+            bh_log(BH_LOG_ERROR, "Line %s has wrong format in config file\n",
+                   line);
+            CLEANUP_PARSED_LINE(line, tok, n_tok);
+            return BCNN_INVALID_PARAMETER;
+        }
+        if (strcmp(tok[0], "task") == 0 || strcmp(tok[0], "mode") == 0) {
+            if (strcmp(tok[1], "train") == 0)
+                mode = BCNN_MODE_TRAIN;
+            else if (strcmp(tok[1], "predict") == 0) {
+                mode = BCNN_MODE_PREDICT;
+            } else if (strcmp(tok[1], "valid") == 0) {
+                mode = BCNN_MODE_PREDICT;
+            } else {
+                bh_log(BH_LOG_ERROR,
+                       "Invalid mode parameter %s. Available modes are: "
+                       "'train', 'predict', 'valid'\n",
+                       tok[1]);
+                CLEANUP_PARSED_LINE(line, tok, n_tok);
+                return BCNN_INVALID_PARAMETER;
+            }
+            found_mode = true;
+        } else {
+            bh_log(BH_LOG_ERROR,
+                   "Invalid line %s in config file. Fist line should provide "
+                   "'mode' parameter\n",
+                   line);
+            CLEANUP_PARSED_LINE(line, tok, n_tok);
+            return BCNN_INVALID_PARAMETER;
+        }
+        CLEANUP_PARSED_LINE(line, tok, n_tok);
+    }
+    // Create net
+    BCNN_CHECK_STATUS(bcnn_init_net(net, mode));
+    bcnn_net *p_net = *net;
+    // Then, parse the rest of the config file
+    BCNN_INFO(p_net->log_ctx, "Network architecture");
+    while ((line = bh_fgetline(file)) != NULL) {
         nb_lines++;
         bh_strstrip(line);
         switch (line[0]) {
             case '{':
                 if (nb_layers > 0) {
                     if (nb_layers == 1) {
-                        BCNN_CHECK_AND_LOG(
-                            net->log_ctx,
-                            net->tensors[0].w > 0 && net->tensors[0].h > 0 &&
-                                net->tensors[0].c > 0,
-                            BCNN_INVALID_PARAMETER,
-                            "Input's width, height and channels must be > 0");
-                        BCNN_CHECK_AND_LOG(net->log_ctx, net->tensors[0].n > 0,
+                        BCNN_CHECK_AND_LOG(p_net->log_ctx,
+                                           p_net->tensors[0].w > 0 &&
+                                               p_net->tensors[0].h > 0 &&
+                                               p_net->tensors[0].c > 0,
                                            BCNN_INVALID_PARAMETER,
-                                           "Batch size must be > 0");
+                                           "Input's width, height and "
+                                           "channels must be > 0");
+                        BCNN_CHECK_AND_LOG(
+                            p_net->log_ctx, p_net->tensors[0].n > 0,
+                            BCNN_INVALID_PARAMETER, "Batch size must be > 0");
                     }
                     BCNN_CHECK_AND_LOG(
-                        net->log_ctx, src_id, BCNN_INVALID_PARAMETER,
+                        p_net->log_ctx, src_id, BCNN_INVALID_PARAMETER,
                         "Invalid input node name. "
                         "Hint: Are you sure that 'src' field is correctly "
                         "setup?");
                     if (strcmp(curr_layer, "{input}") == 0) {
-                        bcnn_add_input(net, in_w, in_h, in_c, src_id);
+                        bcnn_add_input(p_net, in_w, in_h, in_c, src_id);
                     } else if (strcmp(curr_layer, "{conv}") == 0 ||
                                strcmp(curr_layer, "{convolutional}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
                         bcnn_add_convolutional_layer(
-                            net, n_filts, size, stride, pad, num_groups,
+                            p_net, n_filts, size, stride, pad, num_groups,
                             batchnorm, init, a, 0, src_id, dst_id);
                     } else if (strcmp(curr_layer, "{deconv}") == 0 ||
                                strcmp(curr_layer, "{deconvolutional}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_deconvolutional_layer(net, n_filts, size,
+                        bcnn_add_deconvolutional_layer(p_net, n_filts, size,
                                                        stride, pad, init, a,
                                                        src_id, dst_id);
                     } else if (strcmp(curr_layer, "{depthwise-conv}") == 0 ||
                                strcmp(curr_layer, "{dw-conv}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_depthwise_conv_layer(net, size, stride, pad, 0,
-                                                      init, a, src_id, dst_id);
+                        bcnn_add_depthwise_conv_layer(p_net, size, stride, pad,
+                                                      0, init, a, src_id,
+                                                      dst_id);
                     } else if (strcmp(curr_layer, "{activation}") == 0 ||
                                strcmp(curr_layer, "{nl}") == 0) {
-                        bcnn_add_activation_layer(net, a, src_id);
+                        bcnn_add_activation_layer(p_net, a, src_id);
                     } else if (strcmp(curr_layer, "{batchnorm}") == 0 ||
                                strcmp(curr_layer, "{bn}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_batchnorm_layer(net, src_id, dst_id);
+                        bcnn_add_batchnorm_layer(p_net, src_id, dst_id);
                     } else if (strcmp(curr_layer, "{lrn}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_lrn_layer(net, size, alpha, beta, k, src_id,
+                        bcnn_add_lrn_layer(p_net, size, alpha, beta, k, src_id,
                                            dst_id);
                     } else if (strcmp(curr_layer, "{connected}") == 0 ||
                                strcmp(curr_layer, "{fullconnected}") == 0 ||
                                strcmp(curr_layer, "{fc}") == 0 ||
                                strcmp(curr_layer, "{ip}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_fullc_layer(net, outputs, init, a, 0, src_id,
+                        bcnn_add_fullc_layer(p_net, outputs, init, a, 0, src_id,
                                              dst_id);
                     } else if (strcmp(curr_layer, "{softmax}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_softmax_layer(net, src_id, dst_id);
+                        bcnn_add_softmax_layer(p_net, src_id, dst_id);
                     } else if (strcmp(curr_layer, "{max}") == 0 ||
                                strcmp(curr_layer, "{maxpool}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_maxpool_layer(net, size, stride, padding_type,
-                                               src_id, dst_id);
+                        bcnn_add_maxpool_layer(p_net, size, stride,
+                                               padding_type, src_id, dst_id);
                     } else if (strcmp(curr_layer, "{avgpool}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_avgpool_layer(net, src_id, dst_id);
+                        bcnn_add_avgpool_layer(p_net, src_id, dst_id);
                     } else if (strcmp(curr_layer, "{dropout}") == 0) {
-                        bcnn_add_dropout_layer(net, rate, src_id);
+                        bcnn_add_dropout_layer(p_net, rate, src_id);
                     } else if (strcmp(curr_layer, "{concat}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_concat_layer(net, src_id, src_id2, dst_id);
+                        bcnn_add_concat_layer(p_net, src_id, src_id2, dst_id);
                     } else if (strcmp(curr_layer, "{eltwise}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Invalid output node name. "
                             "Hint: Are you sure that 'dst' field is "
                             "correctly setup?");
-                        bcnn_add_eltwise_layer(net, a, src_id, src_id2, dst_id);
+                        bcnn_add_eltwise_layer(p_net, a, src_id, src_id2,
+                                               dst_id);
                     } else if (strcmp(curr_layer, "{yolo}") == 0) {
                         BCNN_CHECK_AND_LOG(
-                            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+                            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
                             "Cost layer: invalid input node name. "
-                            "Hint: Are you sure that 'dst' field is correctly "
+                            "Hint: Are you sure that 'dst' field is "
+                            "correctly "
                             "setup?");
                         bcnn_add_yolo_layer(
-                            net, boxes_per_cell, num_classes, num_coords,
+                            p_net, boxes_per_cell, num_classes, num_coords,
                             num_anchors, anchors_mask, anchors, src_id, dst_id);
                         bh_free(anchors);
                         bh_free(anchors_mask);
                     } else {
-                        BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
+                        BCNN_ERROR(p_net->log_ctx, BCNN_INVALID_PARAMETER,
                                    "Unknown Layer %s", curr_layer);
                     }
                     bh_free(curr_layer);
@@ -215,26 +277,13 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
             case '#':
                 bh_free(line);
                 break;
-            default:
-                n_tok = bh_strsplit(line, '=', &tok);
-                BCNN_CHECK_AND_LOG(net->log_ctx, (n_tok == 2),
+            default: {
+                char **tok = NULL;
+                int n_tok = bh_strsplit(line, '=', &tok);
+                BCNN_CHECK_AND_LOG(p_net->log_ctx, (n_tok == 2),
                                    BCNN_INVALID_PARAMETER,
                                    "Wrong format option in config file");
-                if (strcmp(tok[0], "task") == 0 ||
-                    strcmp(tok[0], "mode") == 0) {
-                    if (strcmp(tok[1], "train") == 0)
-                        mode = BCNN_MODE_TRAIN;
-                    else if (strcmp(tok[1], "predict") == 0) {
-                        mode = BCNN_MODE_PREDICT;
-                    } else if (strcmp(tok[1], "valid") == 0) {
-                        mode = BCNN_MODE_PREDICT;
-                    } else {
-                        BCNN_ERROR(
-                            net->log_ctx, BCNN_INVALID_PARAMETER,
-                            "Invalid parameter for task, available parameters: "
-                            "'train', 'predict', 'valid'");
-                    }
-                } else if (strcmp(tok[0], "data_format") == 0) {
+                if (strcmp(tok[0], "data_format") == 0) {
                     if (strcmp(tok[1], "mnist") == 0) {
                         param->data_format = BCNN_LOAD_MNIST;
                     } else if (strcmp(tok[1], "cifar10") == 0) {
@@ -248,7 +297,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     } else if (strcmp(tok[1], "detection") == 0) {
                         param->data_format = BCNN_LOAD_DETECTION_LIST;
                     } else {
-                        BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
+                        BCNN_ERROR(p_net->log_ctx, BCNN_INVALID_PARAMETER,
                                    "Invalid parameter for 'data_format', "
                                    "available parameters: "
                                    "mnist, cifar10, classif, reg, detection");
@@ -310,7 +359,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                 } else if (strcmp(tok[0], "anchors_mask") == 0) {
                     char **str_anchors_mask = NULL;
                     int sz = bh_strsplit(tok[1], ',', &str_anchors_mask);
-                    anchors_mask = (int *)calloc(sz, sizeof(float));
+                    anchors_mask = (int *)calloc(sz, sizeof(int));
                     for (int i = 0; i < sz; ++i) {
                         anchors_mask[i] = atoi(str_anchors_mask[i]);
                     }
@@ -377,7 +426,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                         a = BCNN_ACT_NONE;
                     else {
                         BCNN_WARNING(
-                            net->log_ctx,
+                            p_net->log_ctx,
                             "Unknown activation type %s, going with ReLU",
                             tok[1]);
                         a = BCNN_ACT_RELU;
@@ -389,7 +438,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                         init = BCNN_FILLER_MSRA;
                     else {
                         BCNN_WARNING(
-                            net->log_ctx,
+                            p_net->log_ctx,
                             "Unknown init type %s, going with xavier init",
                             tok[1]);
                         init = BCNN_FILLER_XAVIER;
@@ -408,7 +457,7 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                     else if (strcmp(tok[1], "dice") == 0)
                         cost = BCNN_METRIC_DICE;
                     else {
-                        BCNN_WARNING(net->log_ctx,
+                        BCNN_WARNING(p_net->log_ctx,
                                      "Unknown cost metric %s, going with sse",
                                      tok[1]);
                         cost = BCNN_METRIC_SSE;
@@ -422,13 +471,13 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                         loss = BCNN_LOSS_LIFTED_STRUCT;
                     } else {
                         BCNN_WARNING(
-                            net->log_ctx,
+                            p_net->log_ctx,
                             "Unknown loss %s, going with euclidean loss",
                             tok[1]);
                         loss = BCNN_LOSS_EUCLIDEAN;
                     }
                 } else {
-                    bcnn_set_param(net, tok[0], tok[1]);
+                    bcnn_set_param(p_net, tok[0], tok[1]);
                 }
 
                 for (int i = 0; i < n_tok; ++i) {
@@ -437,32 +486,35 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
                 bh_free(tok);
                 bh_free(line);
                 break;
+            }
         }
     }
     // Add cost layer
     if (strcmp(curr_layer, "{cost}") == 0) {
         BCNN_CHECK_AND_LOG(
-            net->log_ctx, src_id, BCNN_INVALID_PARAMETER,
+            p_net->log_ctx, src_id, BCNN_INVALID_PARAMETER,
             "Cost layer: invalid input node name. "
             "Hint: Are you sure that 'src' field is correctly setup?");
         BCNN_CHECK_AND_LOG(
-            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
             "Cost layer: invalid input node name. "
             "Hint: Are you sure that 'dst' field is correctly setup?");
-        bcnn_add_cost_layer(net, loss, cost, 1.0f, src_id, "label", dst_id);
+        bcnn_add_cost_layer(p_net, loss, cost, 1.0f, src_id, "label", dst_id);
     } else if (strcmp(curr_layer, "{yolo}") == 0) {
         BCNN_CHECK_AND_LOG(
-            net->log_ctx, src_id, BCNN_INVALID_PARAMETER,
+            p_net->log_ctx, src_id, BCNN_INVALID_PARAMETER,
             "Cost layer: invalid input node name. "
             "Hint: Are you sure that 'src' field is correctly setup?");
         BCNN_CHECK_AND_LOG(
-            net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
+            p_net->log_ctx, dst_id, BCNN_INVALID_PARAMETER,
             "Cost layer: invalid input node name. "
             "Hint: Are you sure that 'dst' field is correctly setup?");
-        bcnn_add_yolo_layer(net, boxes_per_cell, num_classes, num_coords,
+        bcnn_add_yolo_layer(p_net, boxes_per_cell, num_classes, num_coords,
                             num_anchors, anchors_mask, anchors, src_id, dst_id);
+        bh_free(anchors);
+        bh_free(anchors_mask);
     } else {
-        BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
+        BCNN_ERROR(p_net->log_ctx, BCNN_INVALID_PARAMETER,
                    "Error in config file: last layer must be a cost layer");
     }
     bh_free(src_id);
@@ -473,14 +525,12 @@ int bcnncl_init_from_config(bcnn_net *net, char *config_file,
 
     param->eval_period = (param->eval_period > 0 ? param->eval_period : 100);
     // Set data loader
-    bcnn_set_data_loader(net, param->data_format, param->train_input,
-                         param->path_train_label, param->test_input,
-                         param->path_test_label);
-    // Set mode
-    bcnn_set_mode(net, mode);
+    BCNN_CHECK_STATUS(bcnn_set_data_loader(
+        p_net, param->data_format, param->train_input, param->path_train_label,
+        param->test_input, param->path_test_label));
 
     fflush(stderr);
-    return 0;
+    return BCNN_SUCCESS;
 }
 
 int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
@@ -547,7 +597,7 @@ int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
     int n = param->nb_pred / batch_size;
     for (int i = 0; i < n; ++i) {
         bcnn_tensor *out = NULL;
-        err += bcnn_predict_on_batch(net, out);
+        err += bcnn_predict_on_batch(net, &out);
         // Dump predictions
         if (dump_pred) {
             if (net->data_loader->type == BCNN_LOAD_DETECTION_LIST) {
@@ -645,9 +695,8 @@ int run(char *config_file) {
     bcnncl_param param = {0};
     float error_train = 0.0f, error_valid = 0.0f, error_test = 0.0f;
 
-    bcnn_init_net(&net);
     // Initialize network from config file
-    BCNN_CHECK_STATUS(bcnncl_init_from_config(net, config_file, &param));
+    BCNN_CHECK_STATUS(bcnncl_init_from_config(&net, config_file, &param));
     BCNN_CHECK_STATUS(bcnn_compile_net(net));
     if (net->mode == BCNN_MODE_TRAIN) {
         if (param.input_model != NULL) {

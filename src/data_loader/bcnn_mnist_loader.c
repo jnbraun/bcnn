@@ -26,6 +26,7 @@
 #include <bh/bh_string.h>
 /* include bip image processing lib */
 #include <bip/bip.h>
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 static uint32_t read_uint32(char *v) {
@@ -118,10 +119,11 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
                            "MNIST data: number of images and labels must be "
                            "the same. Found %d images and %d labels",
                            num_img, num_labels);
-        BCNN_CHECK_AND_LOG(
-            net->log_ctx, (net->tensors[0].h == iter->input_height &&
-                           net->tensors[0].w == iter->input_width),
-            BCNN_INVALID_DATA, "MNIST data: incoherent image width and height");
+        BCNN_CHECK_AND_LOG(net->log_ctx,
+                           (net->tensors[0].h == iter->input_height &&
+                            net->tensors[0].w == iter->input_width),
+                           BCNN_INVALID_DATA,
+                           "MNIST data: incoherent image width and height");
     }
 
     // Read label

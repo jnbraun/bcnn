@@ -49,6 +49,13 @@ bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state);
 
 void bcnn_tensor_free(bcnn_tensor *t);
 
+/**
+ * Tensor manipulation helpers
+ */
+int bcnn_tensor_size(const bcnn_tensor *t);
+int bcnn_tensor_size3d(const bcnn_tensor *t);
+int bcnn_tensor_size2d(const bcnn_tensor *t);
+
 #ifdef __cplusplus
 }
 #endif

@@ -114,19 +114,25 @@ bcnn_status bcnn_add_deconvolutional_layer(
     sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
          net->tensors[node.src[0]].c * size * size;
     param->conv_workspace = (float *)calloc(sz, sizeof(float));
-    if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
-        int weights_size = bcnn_tensor_size(&weights);
-        param->adam_m = (float *)calloc(weights_size, sizeof(float));
-        param->adam_v = (float *)calloc(weights_size, sizeof(float));
+    if (net->learner != NULL) {
+        if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
+            int weights_size = bcnn_tensor_size(&weights);
+            param->adam_m = (float *)calloc(weights_size, sizeof(float));
+            param->adam_v = (float *)calloc(weights_size, sizeof(float));
+        }
     }
 #ifdef BCNN_USE_CUDA
     sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
          net->tensors[node.src[0]].c * size * size;
     param->conv_workspace_gpu = bcnn_cuda_memcpy_f32(param->conv_workspace, sz);
-    if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
-        int weights_size = bcnn_tensor_size(&weights);
-        param->adam_m_gpu = bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
-        param->adam_v_gpu = bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
+    if (net->learner != NULL) {
+        if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
+            int weights_size = bcnn_tensor_size(&weights);
+            param->adam_m_gpu =
+                bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
+            param->adam_v_gpu =
+                bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
+        }
     }
 #endif
 

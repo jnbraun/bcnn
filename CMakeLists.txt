@@ -3,9 +3,9 @@ project (bcnn)
 
 # User configuration settings
 option(USE_AVX "Build with AVX instructions" ON)
-option(USE_CUDA "Build with CUDA libraries" OFF)
-option(USE_CUDNN "Build with CuDNN library" OFF)
-option(USE_BLAS "Build with BLAS library" ON)
+option(USE_CUDA "Build with CUDA libraries" ON)
+option(USE_CUDNN "Build with CuDNN library" ON)
+option(USE_BLAS "Build with BLAS library" OFF)
 option(USE_NEON "Build with Neon instructions" OFF)
 # Building examples
 option(BUILD_EXAMPLES "Build examples" ON)
@@ -94,7 +94,6 @@ if (USE_CUDA)
         #"-gencode arch=compute_61,code=sm_61;"
     )
     set(CUDA_NVCC_FLAGS ${CUDA_ARCH} "-lcuda -lcudart -lcublas -lcurand")
-    #list(APPEND CMAKE_CXX_SOURCE_FILE_EXTENSIONS c)
     if (USE_CUDNN)
         message(STATUS "[bcnn] Build with CuDNN")
         set(CUDNN_ROOT_DIR "" CACHE PATH "Folder contains NVIDIA cuDNN")
@@ -148,6 +147,7 @@ endif()
 
 include_directories (
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/layers
     ${PROJECT_SOURCE_DIR}/inc
     ${PROJECT_SOURCE_DIR}/bip/inc
     ${PROJECT_SOURCE_DIR}/bh/inc
@@ -157,17 +157,16 @@ include_directories (
 add_subdirectory(bip) 
 
 if (USE_CUDA)
-file(GLOB SRC_LIB src/*.c src/*.cu src/data_loader/*.c)
+    file(GLOB SRC_LIB src/*.c src/*.cu src/layers/*.c src/layers/*.cu src/data_loader/*.c)
 else()
     if(USE_NEON AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-        file(GLOB SRC_LIB src/*.c src/data_loader/*.c src/openblas/*.c src/openblas/generic/*.c src/openblas/arm64/*.S)
+        file(GLOB SRC_LIB src/*.c src/layers/*.c src/data_loader/*.c
+            src/openblas/*.c src/openblas/generic/*.c src/openblas/arm64/*.S)
     else()
-        file(GLOB SRC_LIB src/*.c src/data_loader/*.c)
+        file(GLOB SRC_LIB src/*.c src/layers/*.c src/data_loader/*.c)
     endif()
 endif()
 file(GLOB SRC_CLI src/cli/*.c)
-#MESSAGE(STATUS "${SRC_LIB}")
-#MESSAGE(STATUS "${CMAKE_CURRENT_SOURCE_DIR}")
 
 if (USE_CUDA)
     cuda_add_library(bcnn ${SRC_LIB} STATIC)
@@ -196,9 +195,9 @@ endif()
 
 
 if (BUILD_EXAMPLES)
-add_subdirectory(examples/mnist)
-add_subdirectory(examples/cifar10)
-add_subdirectory(examples/yolo)
+    add_subdirectory(examples/mnist)
+    add_subdirectory(examples/cifar10)
+    add_subdirectory(examples/yolo)
 endif()
 
 if (BUILD_TOOLS)

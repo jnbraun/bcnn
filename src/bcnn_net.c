@@ -49,31 +49,37 @@
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
-bcnn_status bcnn_init_net(bcnn_net **net) {
+bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
     bcnn_net *p_net = (bcnn_net *)calloc(1, sizeof(bcnn_net));
     if (p_net == NULL) {
         return BCNN_FAILED_ALLOC;
     }
-    *net = p_net;
+    p_net->mode = mode;
     // Create input node
     bcnn_tensor input = {0};
     bh_strfill(&input.name, "input");
     // Input node is set to be the first node
-    bcnn_net_add_tensor(*net, input);
+    bcnn_net_add_tensor(p_net, input);
     // Create label node
     bcnn_tensor label = {0};
     bh_strfill(&label.name, "label");
     // Label node is set to be the second node
-    bcnn_net_add_tensor(*net, label);
+    bcnn_net_add_tensor(p_net, label);
+    // If required, allocate learner and data augmentation struct
+    if (mode == BCNN_MODE_TRAIN) {
+        p_net->learner = (bcnn_learner *)calloc(1, sizeof(bcnn_learner));
+        p_net->data_aug =
+            (bcnn_data_augmenter *)calloc(1, sizeof(bcnn_data_augmenter));
+    }
 
 #ifdef BCNN_USE_CUDA
-    BCNN_CHECK_STATUS(bcnn_create_cuda_context(*net));
+    BCNN_CHECK_STATUS(bcnn_create_cuda_context(p_net));
 #endif
 #ifndef BCNN_USE_BLAS
     // Internal context for gemm
-    BCNN_CHECK_STATUS(bcnn_create_gemm_context(*net));
+    BCNN_CHECK_STATUS(bcnn_create_gemm_context(p_net));
 #endif
-
+    *net = p_net;
     return BCNN_SUCCESS;
 }
 
@@ -115,6 +121,8 @@ static void bcnn_free_net(bcnn_net *net) {
     bcnn_destroy_data_loader(net);
     // Free data augmenter
     bh_free(net->data_aug);
+    // Free learner
+    bh_free(net->learner);
 #ifdef BCNN_USE_CUDA
     // Free cuda context
     bh_free(net->cuda_ctx);
@@ -180,7 +188,8 @@ bcnn_status bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor) {
     return BCNN_SUCCESS;
 }
 
-bcnn_status bcnn_add_input(bcnn_net *net, int w, int h, int c, char *name) {
+bcnn_status bcnn_add_input(bcnn_net *net, int w, int h, int c,
+                           const char *name) {
     // Create input node
     bcnn_tensor input = {0};
     bcnn_tensor_set_shape(&input, net->batch_size, c, h, w, 0);  // no gradient
@@ -239,6 +248,8 @@ static void bcnn_reset_node_gradients(bcnn_net *net, bcnn_node *node) {
     }
 }
 
+/* Given a tensor name, return its index in the net tensors array or -1 if not
+ * found */
 int bcnn_get_tensor_index_with_name(bcnn_net *net, const char *name) {
     for (int i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, name) == 0) {
@@ -288,6 +299,7 @@ static float bcnn_get_loss(bcnn_net *net) {
 }
 
 float bcnn_train_on_batch(bcnn_net *net) {
+    // Get next batch of data
     bcnn_loader_next(net);
     // Forward
     bcnn_forward(net);
@@ -299,12 +311,11 @@ float bcnn_train_on_batch(bcnn_net *net) {
     return bcnn_get_loss(net);
 }
 
-float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor *out) {
-    // Get next data batch
+float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor **out) {
+    // Get next batch of data
     bcnn_loader_next(net);
     // Forward
     bcnn_forward(net);
-
     // Extract output tensor
     int out_id = net->nodes[net->num_nodes - 1].dst[0];
     if (net->nodes[net->num_nodes - 1].type == BCNN_LAYER_COST) {
@@ -317,7 +328,7 @@ float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor *out) {
         net->tensors[net->nodes[net->num_nodes - 1].src[0]].data_gpu,
         net->tensors[net->nodes[net->num_nodes - 1].src[0]].data, sz);
 #endif
-    out = &net->tensors[net->nodes[net->num_nodes - 1].src[0]];
+    *out = &net->tensors[net->nodes[net->num_nodes - 1].src[0]];
     // Return the loss value
     return bcnn_get_loss(net);
 }
@@ -335,8 +346,10 @@ bcnn_status bcnn_set_mode(bcnn_net *net, bcnn_mode mode) {
         // TODO: Still needs to ensure that the network allocation have been
         // done while in 'train' mode
         net->mode = mode;
-        // Switch the dataset handles
-        bcnn_switch_data_handles(net, net->data_loader);
+        if (net->data_loader) {
+            // Switch the dataset handles train / valid if required
+            bcnn_switch_data_handles(net, net->data_loader);
+        }
     }
     return BCNN_SUCCESS;
 }
@@ -427,16 +440,20 @@ void bcnn_set_param(bcnn_net *net, const char *name, const char *val) {
     }
 }
 
-bcnn_status bcnn_write_model(bcnn_net *net, char *filename) {
-    FILE *fp = NULL;
-    fp = fopen(filename, "wb");
+#define BCNN_MAGIC "\x42\x43\x4E\x4E"
+
+bcnn_status bcnn_write_model(bcnn_net *net, const char *filename) {
+    FILE *fp = fopen(filename, "wb");
     BCNN_CHECK_AND_LOG(net->log_ctx, fp, BCNN_INVALID_PARAMETER,
                        "Could not open model file %s\n", filename);
 
-    fwrite(&net->learner->learning_rate, sizeof(float), 1, fp);
-    fwrite(&net->learner->momentum, sizeof(float), 1, fp);
-    fwrite(&net->learner->decay, sizeof(float), 1, fp);
-    fwrite(&net->learner->seen, sizeof(int), 1, fp);
+    const uint32_t major = BCNN_VERSION_MAJOR;
+    const uint32_t minor = BCNN_VERSION_MINOR;
+    const uint32_t patch = BCNN_VERSION_PATCH;
+    fwrite(BCNN_MAGIC, 1, 4, fp);
+    fwrite(&major, sizeof(uint32_t), 1, fp);
+    fwrite(&minor, sizeof(uint32_t), 1, fp);
+    fwrite(&patch, sizeof(uint32_t), 1, fp);
 
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
@@ -517,33 +534,28 @@ bcnn_status bcnn_write_model(bcnn_net *net, char *filename) {
     return BCNN_SUCCESS;
 }
 
-bcnn_status bcnn_load_model(bcnn_net *net, char *filename) {
-    FILE *fp = NULL;
-    int i, j, is_ft = 0;
-    size_t nb_read = 0;
-    float tmp = 0.0f;
-
-    fp = fopen(filename, "rb");
+bcnn_status bcnn_load_model(bcnn_net *net, const char *filename) {
+    FILE *fp = fopen(filename, "rb");
     BCNN_CHECK_AND_LOG(net->log_ctx, fp, BCNN_INVALID_PARAMETER,
                        "Can not open file %s\n", filename);
+    char magic[4];
+    uint32_t major, minor, patch;
+    size_t nb_read = fread(magic, 1, 4, fp);
+    nb_read = fread(&major, sizeof(uint32_t), 1, fp);
+    nb_read = fread(&minor, sizeof(uint32_t), 1, fp);
+    nb_read = fread(&patch, sizeof(uint32_t), 1, fp);
+    BCNN_CHECK_AND_LOG(net->log_ctx, (strncmp(magic, BCNN_MAGIC, 4) == 0),
+                       BCNN_INVALID_DATA, "Invalid format for model file %s",
+                       filename);
+    BCNN_INFO(net->log_ctx, "BCNN version %d.%d.%d used for model %s\n", major,
+              minor, patch, filename);
 
-    nb_read = fread(&tmp, sizeof(float), 1, fp);
-    nb_read = fread(&tmp, sizeof(float), 1, fp);
-    nb_read = fread(&tmp, sizeof(float), 1, fp);
-    nb_read = fread(&net->learner->seen, sizeof(int), 1, fp);
-    BCNN_INFO(net->log_ctx, "lr= %f ", net->learner->learning_rate);
-    BCNN_INFO(net->log_ctx, "m= %f ", net->learner->momentum);
-    BCNN_INFO(net->log_ctx, "decay= %f ", net->learner->decay);
-    BCNN_INFO(net->log_ctx, "seen= %d\n", net->learner->seen);
-
-    for (i = 0; i < net->num_nodes; ++i) {
+    for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
-        is_ft = 0;
         if ((node->type == BCNN_LAYER_CONV2D ||
              node->type == BCNN_LAYER_TRANSPOSE_CONV2D ||
              node->type == BCNN_LAYER_DEPTHWISE_CONV2D ||
-             node->type == BCNN_LAYER_FULL_CONNECTED) &&
-            is_ft == 0) {
+             node->type == BCNN_LAYER_FULL_CONNECTED)) {
             bcnn_tensor *weights = &net->tensors[net->nodes[i].src[1]];
             bcnn_tensor *biases = &net->tensors[net->nodes[i].src[2]];
             int weights_size = bcnn_tensor_size(weights);
@@ -625,7 +637,9 @@ bcnn_status bcnn_load_model(bcnn_net *net, char *filename) {
 #endif
         }
     }
-    if (fp != NULL) fclose(fp);
+    if (fp != NULL) {
+        fclose(fp);
+    }
 
     BCNN_INFO(net->log_ctx, "Model %s loaded succesfully", filename);
     fflush(stdout);
@@ -633,7 +647,7 @@ bcnn_status bcnn_load_model(bcnn_net *net, char *filename) {
     return BCNN_SUCCESS;
 }
 
-bcnn_status bcnn_load_model_legacy(bcnn_net *net, char *filename) {
+bcnn_status bcnn_load_model_legacy(bcnn_net *net, const char *filename) {
     FILE *fp = NULL;
     int i, j, is_ft = 0;
     size_t nb_read = 0;

@@ -33,7 +33,6 @@ extern "C" {
 
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 
 /**
  * BCNN_DLL must be defined by applications that are linking against the DLL
@@ -69,32 +68,17 @@ extern "C" {
     (BCNN_VERSION_MAJOR * 10000 + BCNN_VERSION_MINOR * 100 + BCNN_VERSION_PATCH)
 
 /*************************************************************************
- * Forward declarations of BCNN struct
+ * Forward declarations
  ************************************************************************/
 
 /** Net struct (main BCNN object) */
 typedef struct bcnn_net bcnn_net;
 
-/** Node struct */
-// typedef struct bcnn_node bcnn_node;
-
 /** Tensor struct */
 typedef struct bcnn_tensor bcnn_tensor;
 
-/** Data load and iterator handle struct */
-// typedef struct bcnn_loader bcnn_loader;
-
-/** Data augmention handle struct */
-// typedef struct bcnn_data_augmenter bcnn_data_augmenter;
-
-/** Learning and optimizer parameters and methods handle struct */
-// typedef struct bcnn_learner bcnn_learner;
-
 /** Object detection result struct */
 typedef struct bcnn_output_detection bcnn_output_detection;
-
-/** Logging context handle */
-// typedef struct bcnn_log_context bcnn_log_context;
 
 /*************************************************************************
  * BCNN types
@@ -255,19 +239,15 @@ typedef void (*bcnn_log_callback)(const char *fmt, ...);
  * Data layout is NCHW.
  */
 struct bcnn_tensor {
-    int n;       /* Batch size */
-    int c;       /* Number of channels = depth */
-    int h;       /* Spatial height */
-    int w;       /* Spatial width */
-    float *data; /* Pointer to data */
-#ifndef BCNN_DEPLOY_ONLY
+    int n;            /* Batch size */
+    int c;            /* Number of channels = depth */
+    int h;            /* Spatial height */
+    int w;            /* Spatial width */
+    float *data;      /* Pointer to data */
     float *grad_data; /* Pointer to gradient data */
-#endif
 #ifdef BCNN_USE_CUDA
-    float *data_gpu; /* Pointer to data on gpu */
-#ifndef BCNN_DEPLOY_ONLY
+    float *data_gpu;      /* Pointer to data on gpu */
     float *grad_data_gpu; /* Pointer to gradient data on gpu */
-#endif
 #endif
     int has_grad; /* If has gradient data or not */
     char *name;   /* Tensor name */
@@ -297,7 +277,7 @@ struct bcnn_output_detection {
  * @return 'BCNN_SUCCESS' if successful initialization or 'BCNN_FAILED_ALLOC'
  * otherwise
  */
-BCNN_API bcnn_status bcnn_init_net(bcnn_net **net);
+BCNN_API bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode);
 
 /**
  * This function frees any allocated ressources in the bcnn_net instance
@@ -306,57 +286,82 @@ BCNN_API bcnn_status bcnn_init_net(bcnn_net **net);
  */
 BCNN_API void bcnn_end_net(bcnn_net **net);
 
-/* Logging */
+/**
+ * Set the logging context.
+ *
+ * @param[in]   net     Pointer to net handle.
+ * @param[in]   fct     Callback to user defined log function. If NULL, default
+ *                      logging to stderr will be used.
+ * @param[in]   level   Log level.
+ */
 BCNN_API void bcnn_set_log_context(bcnn_net *net, bcnn_log_callback fct,
                                    bcnn_log_level level);
 
 /**
- * Tensor manipulation helpers
- */
-BCNN_API int bcnn_tensor_size(const bcnn_tensor *t);
-
-BCNN_API int bcnn_tensor_size3d(const bcnn_tensor *t);
-
-BCNN_API int bcnn_tensor_size2d(const bcnn_tensor *t);
-
-/**
- * Set the shape of the primary input tensor
+ * Set the shape of the primary input tensor. The primary input tensor holds the
+ * default name 'input'.
+ *
+ * @param[in]   net         Pointer to net handle.
+ * @param[in]   width       Input tensor width.
+ * @param[in]   height      Input tensor height.
+ * @param[in]   channels    Input tensor depth (= number of channels).
+ * @param[in]   batch_size  Set the batch size (will be the same for each
+ *                          tensor).
  */
 BCNN_API void bcnn_set_input_shape(bcnn_net *net, int width, int height,
                                    int channels, int batch_size);
 
 /**
- * Add extra input tensors to the network
+ * Defines an input tensor to the network.
+ *
+ * @param[in]   width       Tensor width.
+ * @param[in]   height      Tensor height.
+ * @param[in]   channels    Tensor depth (= number of channels).
+ * @param[in]   name        Tensor name.
+ *
+ * @return 'BCNN_SUCCESS' if successful initialization or 'BCNN_FAILED_ALLOC'
+ * otherwise
  */
-BCNN_API bcnn_status bcnn_add_input(bcnn_net *net, int w, int h, int c,
-                                    char *name);
+BCNN_API bcnn_status bcnn_add_input(bcnn_net *net, int width, int height,
+                                    int channels, const char *name);
 
 /**
  * Returns the batch size used for training / validation
  */
 BCNN_API int bcnn_get_batch_size(bcnn_net *net);
 
+/**
+ * Finalizes the net configuration.
+ * This function needs to be called after everything has been setup (the model
+ * architecture, the dataset loader, the data augmentation, the training
+ * configuration and the model weights) have been setup and before effectively
+ * starting the model training or inference.
+ */
 BCNN_API bcnn_status bcnn_compile_net(bcnn_net *net);
 
-/* Load / Write model */
-BCNN_API bcnn_status bcnn_load_model(bcnn_net *net, char *filename);
-
-BCNN_API bcnn_status bcnn_write_model(bcnn_net *net, char *filename);
+/* Load the model parameters from disk */
+BCNN_API bcnn_status bcnn_load_model(bcnn_net *net, const char *filename);
 /* For compatibility with older versions */
-BCNN_API bcnn_status bcnn_load_model_legacy(bcnn_net *net, char *filename);
+BCNN_API bcnn_status bcnn_load_model_legacy(bcnn_net *net,
+                                            const char *filename);
 
-/* Learning rate decay policy */
+/* Write the model on disk */
+BCNN_API bcnn_status bcnn_write_model(bcnn_net *net, const char *filename);
+
+/* Setup Adam optimizer */
+BCNN_API void bcnn_set_adam_optimizer(bcnn_net *net, float learning_rate,
+                                      float beta1, float beta2);
+/* Setup SGD optimizer with momentum */
+BCNN_API void bcnn_set_sgd_optimizer(bcnn_net *net, float learning_rate,
+                                     float momentum);
+
+/* Set the learning rate decay policy */
 BCNN_API void bcnn_set_learning_rate_policy(bcnn_net *net,
                                             bcnn_lr_decay decay_type,
                                             float gamma, float scale,
                                             float power, int max_batches,
                                             int step);
-/* Adam */
-BCNN_API void bcnn_set_adam_optimizer(bcnn_net *net, float learning_rate,
-                                      float beta1, float beta2);
-/* SGD with momentum */
-BCNN_API void bcnn_set_sgd_optimizer(bcnn_net *net, float learning_rate,
-                                     float momentum);
+
 /* Weight regularization */
 BCNN_API void bcnn_set_weight_regularizer(bcnn_net *net, float weight_decay);
 
@@ -520,7 +525,7 @@ BCNN_API float bcnn_train_on_batch(bcnn_net *net);
  *
  * Return the loss value and the output tensor.
  */
-BCNN_API float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor *out);
+BCNN_API float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor **out);
 
 /**
  * Setup the dataset loader given the paths to training and testing dataset and

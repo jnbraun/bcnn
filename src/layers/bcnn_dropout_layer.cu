@@ -22,6 +22,7 @@
 
 #ifdef BCNN_USE_CUDA
 #include "bcnn_dropout_layer.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 __global__ void _bcnn_dropout_layer_kernel(float *input, int size, float *rand,

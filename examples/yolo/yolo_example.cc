@@ -13,6 +13,7 @@
 #include "bcnn/bcnn.h"
 #include "bcnn_conv_layer.h"
 #include "bcnn_mat.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
@@ -40,17 +41,17 @@ void load_yolo_weights(bcnn_net *net, char *model) {
     size_t nr = fread(&major, sizeof(int), 1, fp);
     nr = fread(&minor, sizeof(int), 1, fp);
     nr = fread(&revision, sizeof(int), 1, fp);
+    uint64_t num_samples_seen = 0;
     if ((major * 10 + minor) >= 2 && major < 1000 && minor < 1000) {
         size_t lseen = 0;
         nr = fread(&lseen, sizeof(uint64_t), 1, fp);
-        net->learner->seen = lseen;
+        num_samples_seen = (uint64_t)lseen;
     } else {
         int iseen = 0;
         nr = fread(&iseen, sizeof(int), 1, fp);
-        net->learner->seen = iseen;
+        num_samples_seen = (uint64_t)iseen;
     }
-    fprintf(stderr, "version %d.%d seen %d\n", major, minor,
-            net->learner->seen);
+    fprintf(stderr, "version %d.%d seen %ld\n", major, minor, num_samples_seen);
     int transpose = (major > 1000) || (minor > 1000);
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
@@ -714,8 +715,7 @@ void show_usage(int argc, char **argv) {
 int run(int argc, char **argv) {
     // Init net
     bcnn_net *net = NULL;
-    bcnn_init_net(&net);
-    bcnn_set_mode(net, BCNN_MODE_PREDICT);
+    bcnn_init_net(&net, BCNN_MODE_PREDICT);
     // net->prediction_type = DETECTION;
     // Setup net and weights
     char **toks = NULL;

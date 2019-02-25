@@ -193,6 +193,7 @@ void bcnn_set_adam_optimizer(bcnn_net *net, float learning_rate, float beta1,
     ln->learning_rate = learning_rate;
     ln->beta1 = beta1;
     ln->beta2 = beta2;
+    ln->momentum = 0.9f;  // for bias updates
 }
 
 /* SGD with momentum */

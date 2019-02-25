@@ -37,6 +37,7 @@
 #endif
 #endif
 
+#include <stdio.h>
 #include <stdlib.h>  // RAND_MAX
 #include <time.h>
 

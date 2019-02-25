@@ -833,7 +833,7 @@ int main(int argc, char** argv) {
         return -1;
     }
     bcnn_net* net = NULL;
-    bcnn_init_net(&net);
+    bcnn_init_net(&net, BCNN_MODE_PREDICT);
     init_from_config(net, argv[1], &param);
     bcnn_load_model(net, argv[2]);
     run_bcnn_reference(net, argv[2]);
@@ -849,7 +849,7 @@ int main(int argc, char** argv) {
     }
     bcnn_net* net = NULL;
     config_param param;
-    bcnn_init_net(&net);
+    bcnn_init_net(&net, BCNN_MODE_PREDICT);
     init_from_config(net, argv[1], &param);
     bcnn_load_model(net, argv[2]);
     convert_bcnn_to_flatbuffers_tflite(net, argv[3]);

@@ -20,6 +20,7 @@
  * SOFTWARE.
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <bh/bh_timer.h>
@@ -195,7 +196,7 @@ int predict_cifar10(bcnn_net *net, char *test_img, int nb_pred, float *avg_loss,
     float loss = 0.0f;
     for (int i = 0; i < n; ++i) {
         bcnn_tensor *out = NULL;
-        loss += bcnn_predict_on_batch(net, out);
+        loss += bcnn_predict_on_batch(net, &out);
         // Save predictions
         for (int j = 0; j < batch_size; ++j) {
             int out_sz = out->w * out->h * out->c;
@@ -252,10 +253,24 @@ int run(char *train_data, char *test_data, model_type model) {
     float error_train = 0.0f, error_test = 0.0f;
     bcnn_net *net = NULL;
 
-    bcnn_init_net(&net);
-    bcnn_set_mode(net, BCNN_MODE_TRAIN);
+    bcnn_init_net(&net, BCNN_MODE_TRAIN);
     fprintf(stderr, "Create Network...\n");
     create_network(net, model);
+
+    // Setup training parameters
+    bcnn_set_adam_optimizer(net, /*learning_rate=*/0.005f, /*beta1=*/0.9f,
+                            /*beta2=*/0.999f);
+    bcnn_set_learning_rate_policy(net, BCNN_LR_DECAY_SIGMOID, 0.00002f, 0.f,
+                                  0.f, 1000000, 100000);
+    bcnn_set_weight_regularizer(net, 0.0005f);
+
+    // Setup loaders for train and validation dataset
+    bcnn_set_data_loader(net, BCNN_LOAD_CIFAR10, train_data, NULL, test_data,
+                         NULL);
+
+    // Setup data augmentation
+    bcnn_set_data_augmentation(net, 6, 6, 15.f, 0, 0, 1, -60, 60, 0.6f, 1.5f, 0,
+                               0);
 
     fprintf(stderr, "Start training...\n");
     if (train_cifar10(net, train_data, test_data, 4000000, 10, &error_train) !=

@@ -26,6 +26,7 @@
 
 #include <bh/bh_macros.h>
 
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 __global__ void bcnn_forward_activation_layer_kernel(float *x, int sz,

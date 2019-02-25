@@ -24,6 +24,7 @@
 #define BCNN_DATA_H
 
 #include <stdbool.h>
+#include <stdio.h>
 #include "bcnn/bcnn.h"
 
 #ifdef __cplusplus

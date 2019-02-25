@@ -112,20 +112,16 @@ bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
     }
     t->data = (float *)bh_align_calloc(size * sizeof(float), align_offset_);
     BCNN_CHECK_ALLOC(t->data);
-#ifndef BCNN_DEPLOY_ONLY
     if (t->has_grad && net_state == BCNN_MODE_TRAIN) {
         t->grad_data =
             (float *)bh_align_calloc(size * sizeof(float), align_offset_);
         BCNN_CHECK_ALLOC(t->grad_data);
     }
-#endif
 #ifdef BCNN_USE_CUDA
     t->data_gpu = bcnn_cuda_memcpy_f32(t->data, size);
-#ifndef BCNN_DEPLOY_ONLY
     if (t->has_grad && net_state == BCNN_MODE_TRAIN) {
         t->grad_data_gpu = bcnn_cuda_memcpy_f32(t->grad_data, size);
     }
-#endif
 #endif
     return BCNN_SUCCESS;
 }
@@ -133,20 +129,16 @@ bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
 void bcnn_tensor_free(bcnn_tensor *t) {
     bh_align_free(t->data);
     t->data = NULL;
-#ifndef BCNN_DEPLOY_ONLY
     if (t->has_grad) {
         bh_align_free(t->grad_data);
         t->grad_data = NULL;
     }
-#endif
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_free(t->data_gpu);
     t->data_gpu = NULL;
-#ifndef BCNN_DEPLOY_ONLY
     if (t->has_grad) {
         bcnn_cuda_free(t->grad_data_gpu);
         t->grad_data_gpu = NULL;
     }
-#endif
 #endif
 }

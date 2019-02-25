@@ -24,6 +24,7 @@
 
 #include "bcnn_mat.h"
 #include "bcnn_softmax_layer.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 __global__ void _bcnn_forward_softmax_layer_kernel(int n, int batch,

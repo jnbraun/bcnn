@@ -25,6 +25,7 @@
 #include "bcnn_depthwise_conv_layer.h"
 
 #include "bcnn_mat.h"
+#include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
 /* Depthwise Separable convolution */

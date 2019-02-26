@@ -150,12 +150,12 @@ include_directories (
     ${PROJECT_SOURCE_DIR}/src/layers
     ${PROJECT_SOURCE_DIR}/src/kernels
     ${PROJECT_SOURCE_DIR}/inc
-    ${PROJECT_SOURCE_DIR}/bip/inc
-    ${PROJECT_SOURCE_DIR}/bh/inc
-    ${PROJECT_SOURCE_DIR}/bip/thirdparty
+    ${PROJECT_SOURCE_DIR}/src/bip/inc
+    ${PROJECT_SOURCE_DIR}/src/bh/inc
+    ${PROJECT_SOURCE_DIR}/src/bip/thirdparty
     )
 
-add_subdirectory(bip) 
+add_subdirectory(src/bip) 
 
 if (USE_CUDA)
     file(GLOB SRC_LIB src/*.c src/*.cu src/kernels/*.c src/kernels/*.cu

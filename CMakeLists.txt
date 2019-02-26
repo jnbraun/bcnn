@@ -148,6 +148,7 @@ endif()
 include_directories (
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/layers
+    ${PROJECT_SOURCE_DIR}/src/kernels
     ${PROJECT_SOURCE_DIR}/inc
     ${PROJECT_SOURCE_DIR}/bip/inc
     ${PROJECT_SOURCE_DIR}/bh/inc
@@ -157,13 +158,15 @@ include_directories (
 add_subdirectory(bip) 
 
 if (USE_CUDA)
-    file(GLOB SRC_LIB src/*.c src/*.cu src/layers/*.c src/layers/*.cu src/data_loader/*.c)
+    file(GLOB SRC_LIB src/*.c src/*.cu src/kernels/*.c src/kernels/*.cu
+            src/layers/*.c src/layers/*.cu src/data_loader/*.c)
 else()
     if(USE_NEON AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-        file(GLOB SRC_LIB src/*.c src/layers/*.c src/data_loader/*.c
-            src/openblas/*.c src/openblas/generic/*.c src/openblas/arm64/*.S)
+        file(GLOB SRC_LIB src/*.c src/layers/*.c src/kernels/*.c src/data_loader/*.c
+            src/kernels/openblas/*.c src/kernels/openblas/generic/*.c
+            src/kernels/openblas/arm64/*.S)
     else()
-        file(GLOB SRC_LIB src/*.c src/layers/*.c src/data_loader/*.c)
+        file(GLOB SRC_LIB src/*.c src/kernels/*.c src/layers/*.c src/data_loader/*.c)
     endif()
 endif()
 file(GLOB SRC_CLI src/cli/*.c)

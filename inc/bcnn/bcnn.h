@@ -231,7 +231,7 @@ typedef enum bcnn_filler_type {
 /* Max number of bounding boxes for detection */
 #define BCNN_DETECTION_MAX_BOXES 50
 
-/* Logging callback */
+/* Function signature for logging callback */
 typedef void (*bcnn_log_callback)(const char *fmt, ...);
 
 /**
@@ -314,6 +314,7 @@ BCNN_API void bcnn_set_input_shape(bcnn_net *net, int width, int height,
 /**
  * Defines an input tensor to the network.
  *
+ * @param[in]   net         Pointer to net handle.
  * @param[in]   width       Tensor width.
  * @param[in]   height      Tensor height.
  * @param[in]   channels    Tensor depth (= number of channels).
@@ -364,6 +365,10 @@ BCNN_API void bcnn_set_learning_rate_policy(bcnn_net *net,
 
 /* Weight regularization */
 BCNN_API void bcnn_set_weight_regularizer(bcnn_net *net, float weight_decay);
+
+/********************
+ * BCNN layers
+ *******************/
 
 /* Conv layer */
 BCNN_API bcnn_status bcnn_add_convolutional_layer(

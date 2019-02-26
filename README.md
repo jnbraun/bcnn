@@ -27,7 +27,7 @@ You need to have cmake installed in order to build the library.
 ### [Optional] Dependencies 
 #### CPU
 * Minimal build: no external dependency.
-* Build with Blas: requires a blas library (OpenBLAS is preferred).
+* Build with Blas: requires a blas library (OpenBLAS is recommended).
 
 #### GPU 
 Requires CUDA libraries (cudart, cublas, curand) and a GPU with compute capability 2.0 at least. CuDNN is optional but supported.

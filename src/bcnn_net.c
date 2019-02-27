@@ -208,7 +208,7 @@ void bcnn_set_input_shape(bcnn_net *net, int input_width, int input_height,
 
 static bcnn_status bcnn_init_workload(bcnn_net *net) {
     // Allocate tensor for input node
-    bcnn_tensor_allocate(&net->tensors[0], net->mode);
+    BCNN_CHECK_STATUS(bcnn_tensor_allocate(&net->tensors[0], net->mode));
 
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_context *cuda_ctx = (bcnn_cuda_context *)net->cuda_ctx;
@@ -228,8 +228,7 @@ int bcnn_get_batch_size(bcnn_net *net) { return net->batch_size; }
 
 bcnn_status bcnn_compile_net(bcnn_net *net) {
     bcnn_free_workload(net);
-    bcnn_init_workload(net);
-    return BCNN_SUCCESS;
+    return bcnn_init_workload(net);
 }
 
 static void bcnn_reset_node_gradients(bcnn_net *net, bcnn_node *node) {
@@ -281,7 +280,6 @@ static float bcnn_get_loss(bcnn_net *net) {
     int n = 0;
     for (int i = 0; i < net->num_nodes; ++i) {
         if (net->nodes[i].type == BCNN_LAYER_COST) {
-            bcnn_cost_param *param = (bcnn_cost_param *)(net->nodes[i].param);
             loss += net->tensors[net->nodes[i].dst[0]].data[0];
             ++n;
         } else if (net->nodes[i].type == BCNN_LAYER_YOLOV3) {
@@ -392,7 +390,8 @@ void bcnn_set_param(bcnn_net *net, const char *name, const char *val) {
     } else if (strcmp(name, "step") == 0) {
         net->learner->step = atoi(val);
     } else if (strcmp(name, "learning_rate") == 0) {
-        net->learner->learning_rate = (float)atof(val);
+        net->learner->base_learning_rate = (float)atof(val);
+        net->learner->learning_rate = net->learner->base_learning_rate;
     } else if (strcmp(name, "beta1") == 0) {
         net->learner->beta1 = (float)atof(val);
     } else if (strcmp(name, "beta2") == 0) {

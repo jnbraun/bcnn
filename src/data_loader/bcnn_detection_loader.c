@@ -79,6 +79,7 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
                  "Wrong data format for detection %s. Found %d labels but "
                  "expected multiple of 5",
                  line);
+        BCNN_PARSE_CLEANUP(line, tok, num_toks);
         return BCNN_INVALID_DATA;
     }
     int w_img = 0, h_img = 0, c_img = 0, x_ul = 0, y_ul = 0;
@@ -88,22 +89,14 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
         bcnn_log(net->log_ctx, BCNN_LOG_WARNING, "Skip invalid image %s",
                  tok[0]);
         bh_free(pimg);
-        bh_free(line);
-        for (int i = 0; i < num_toks; ++i) {
-            bh_free(tok[i]);
-        }
-        bh_free(tok);
+        BCNN_PARSE_CLEANUP(line, tok, num_toks);
         return BCNN_INVALID_DATA;
     }
     if (net->tensors[0].c != c_img) {
         bcnn_log(net->log_ctx, BCNN_LOG_WARNING,
                  "Skip image %s: unexpected number of channels");
         bh_free(pimg);
-        bh_free(line);
-        for (int i = 0; i < num_toks; ++i) {
-            bh_free(tok[i]);
-        }
-        bh_free(tok);
+        BCNN_PARSE_CLEANUP(line, tok, num_toks);
         return BCNN_INVALID_DATA;
     }
 
@@ -185,10 +178,6 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
         }
     }
     bh_free(pimg);
-    bh_free(line);
-    for (int i = 0; i < num_toks; ++i) {
-        bh_free(tok[i]);
-    }
-    bh_free(tok);
+    BCNN_PARSE_CLEANUP(line, tok, num_toks);
     return BCNN_SUCCESS;
 }

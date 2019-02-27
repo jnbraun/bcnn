@@ -28,6 +28,7 @@ extern "C" {
 #endif
 
 #include <limits.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,8 +63,12 @@ static inline char *bh_fgetline(FILE *fp) {
     while ((line[curr - 1] != '\n') && !feof(fp)) {
         if (curr == size - 1) {
             size *= 2;
-            line = (char *)realloc(line, size * sizeof(char));
-            if (!line) return NULL;
+            char *pline = (char *)realloc(line, size * sizeof(char));
+            if (!pline) {
+                bh_free(line);
+                return NULL;
+            }
+            line = pline;
         }
         readsize = size - curr;
         if (readsize > INT_MAX) readsize = INT_MAX - 1;
@@ -165,6 +170,29 @@ static inline int bh_fskipline(FILE *f, int nb_lines) {
     }
 
     return 0;
+}
+
+/** Get next line of file and split with char 'c'
+ *  If loop is true, then rewind the file when EOF is reached
+ */
+static inline int bh_fsplitline(FILE *f, bool loop, char c, char ***tok) {
+    char *line = bh_fgetline(f);
+    if (line == NULL) {
+        rewind(f);
+        line = bh_fgetline(f);
+        if (line == NULL) {
+            return 0;
+        }
+    }
+    char **ptok = NULL;
+    int n = bh_strsplit(line, c, &ptok);
+    bh_free(line);
+    if (ptok == NULL || n == 0) {
+        bh_free(ptok);
+        return 0;
+    }
+    *tok = ptok;
+    return n;
 }
 
 #ifdef __cplusplus

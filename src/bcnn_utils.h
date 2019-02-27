@@ -95,6 +95,15 @@ typedef struct {
         bcnn_log((ctx), BCNN_LOG_WARNING, (fmt), ##__VA_ARGS__); \
     } while (0)
 
+#define BCNN_PARSE_CLEANUP(l, t, n)     \
+    do {                                \
+        for (int i = 0; i < (n); ++i) { \
+            bh_free((t[i]));            \
+        }                               \
+        bh_free(t);                     \
+        bh_free(l);                     \
+    } while (0)
+
 float bcnn_rng_gaussian(bcnn_gauss_gen *g);
 
 void bcnn_log(bcnn_log_context ctx, bcnn_log_level level, const char *fmt, ...);

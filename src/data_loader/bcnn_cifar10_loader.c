@@ -90,13 +90,17 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
     }
 
     // Read label
-    size_t n = fread((char *)&l, 1, sizeof(char), iter->f_current);
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx,
+        fread((char *)&l, 1, sizeof(char), iter->f_current) == sizeof(char),
+        BCNN_INVALID_DATA, "Corrupted Cifar data");
     int class_label = (int)l;
     // Read img
     char tmp[3072];
-    n = fread(tmp, 1,
-              iter->input_width * iter->input_height * iter->input_depth,
-              iter->f_current);
+    int sz = iter->input_width * iter->input_height * iter->input_depth;
+    BCNN_CHECK_AND_LOG(net->log_ctx,
+                       fread(tmp, 1, sz, iter->f_current) == (size_t)sz,
+                       BCNN_INVALID_DATA, "Corrupted Cifar data");
     // Swap depth <-> spatial dim arrangement
     for (int k = 0; k < iter->input_depth; ++k) {
         for (int y = 0; y < iter->input_height; ++y) {

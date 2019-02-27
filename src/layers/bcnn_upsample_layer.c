@@ -68,9 +68,6 @@ bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, const char *src_id,
     param->size = size;
     node.forward = bcnn_forward_upsample_layer;
     node.backward = bcnn_backward_upsample_layer;
-
-    sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
-
     bcnn_net_add_node(net, node);
 
     BCNN_INFO(net->log_ctx,
@@ -86,7 +83,6 @@ void bcnn_forward_upsample_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     bcnn_upsample_param *param = (bcnn_upsample_param *)node->param;
-    int dst_sz = bcnn_tensor_size(dst_tensor);
     memset(dst_tensor->data, 0, sizeof(float));
     for (int b = 0; b < src_tensor->n; ++b) {
         for (int k = 0; k < src_tensor->c; ++k) {

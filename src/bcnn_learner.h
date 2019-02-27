@@ -28,11 +28,12 @@
  */
 typedef struct {
     int step;
-    int seen;            /* Number of instances seen by the network */
-    int max_batches;     /* Maximum number of batches for training */
-    float momentum;      /* Momentum parameter */
-    float decay;         /* Decay parameter */
-    float learning_rate; /* Base learning rate */
+    int seen;                 /* Number of instances seen by the network */
+    int max_batches;          /* Maximum number of batches for training */
+    float momentum;           /* Momentum parameter */
+    float decay;              /* Decay parameter */
+    float base_learning_rate; /* Base learning rate */
+    float learning_rate;      /* Current learning rate */
     float gamma;
     float scale;
     float power;

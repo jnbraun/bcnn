@@ -40,8 +40,6 @@ bcnn_status bcnn_add_deconvolutional_layer(
     bcnn_net *net, int n, int size, int stride, int pad, bcnn_filler_type init,
     bcnn_activation activation, const char *src_id, const char *dst_id) {
     int i, sz;
-    float std_init = 0.0f;
-    bcnn_gauss_gen g = {0};
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
 
@@ -110,9 +108,6 @@ bcnn_status bcnn_add_deconvolutional_layer(
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
     sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
          net->tensors[node.src[0]].c * size * size;
-
-    sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
-         net->tensors[node.src[0]].c * size * size;
     param->conv_workspace = (float *)calloc(sz, sizeof(float));
     if (net->learner != NULL) {
         if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
@@ -122,8 +117,6 @@ bcnn_status bcnn_add_deconvolutional_layer(
         }
     }
 #ifdef BCNN_USE_CUDA
-    sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
-         net->tensors[node.src[0]].c * size * size;
     param->conv_workspace_gpu = bcnn_cuda_memcpy_f32(param->conv_workspace, sz);
     if (net->learner != NULL) {
         if (net->learner->optimizer == BCNN_OPTIM_ADAM) {

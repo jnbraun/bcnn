@@ -26,33 +26,41 @@
 #include "bcnn_mat.h"
 #include "bcnn_net.h"
 
-static float bcnn_update_learning_rate(bcnn_net *net) {
+static void bcnn_update_learning_rate(bcnn_net *net) {
     net->learner->seen += net->batch_size;
     int iter = net->learner->seen / net->batch_size;
-
     switch (net->learner->decay_type) {
         case BCNN_LR_DECAY_CONSTANT:
-            return net->learner->learning_rate;
+            return;
         case BCNN_LR_DECAY_STEP:
-            return net->learner->learning_rate *
-                   (float)pow(net->learner->scale, iter / net->learner->step);
+            net->learner->learning_rate =
+                net->learner->base_learning_rate *
+                (float)pow(net->learner->scale, iter / net->learner->step);
+            return;
         case BCNN_LR_DECAY_INV:
-            return net->learner->learning_rate *
-                   (float)pow(1.0f + net->learner->gamma * iter,
-                              -net->learner->power);
+            net->learner->learning_rate =
+                net->learner->base_learning_rate *
+                (float)pow(1.0f + net->learner->gamma * iter,
+                           -net->learner->power);
+            return;
         case BCNN_LR_DECAY_EXP:
-            return net->learner->learning_rate *
-                   (float)pow(net->learner->gamma, iter);
+            net->learner->learning_rate = net->learner->base_learning_rate *
+                                          (float)pow(net->learner->gamma, iter);
+            return;
         case BCNN_LR_DECAY_POLY:
-            return net->learner->learning_rate *
-                   (float)pow(1 - (float)iter / net->learner->max_batches,
-                              net->learner->power);
+            net->learner->learning_rate =
+                net->learner->base_learning_rate *
+                (float)pow(1 - (float)iter / net->learner->max_batches,
+                           net->learner->power);
+            return;
         case BCNN_LR_DECAY_SIGMOID:
-            return net->learner->learning_rate *
-                   (1.0f / (1.0f + (float)exp(net->learner->gamma *
-                                              (iter - net->learner->step))));
+            net->learner->learning_rate =
+                net->learner->base_learning_rate *
+                (1.0f / (1.0f + (float)exp(net->learner->gamma *
+                                           (iter - net->learner->step))));
+            return;
         default:
-            return net->learner->learning_rate;
+            return;
     }
 }
 
@@ -157,8 +165,7 @@ void bcnn_adam_update_gpu(float *weights, float *biases, float *weights_grad,
 #endif
 
 void bcnn_update(bcnn_net *net) {
-    float lr = bcnn_update_learning_rate(net);
-
+    bcnn_update_learning_rate(net);
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
         if (node->update) {
@@ -190,7 +197,8 @@ void bcnn_set_adam_optimizer(bcnn_net *net, float learning_rate, float beta1,
         net->learner = (bcnn_learner *)calloc(1, sizeof(bcnn_learner));
     }
     bcnn_learner *ln = net->learner;
-    ln->learning_rate = learning_rate;
+    ln->base_learning_rate = learning_rate;
+    ln->learning_rate = ln->base_learning_rate;
     ln->beta1 = beta1;
     ln->beta2 = beta2;
     ln->momentum = 0.9f;  // for bias updates
@@ -203,7 +211,8 @@ void bcnn_set_sgd_optimizer(bcnn_net *net, float learning_rate,
         net->learner = (bcnn_learner *)calloc(1, sizeof(bcnn_learner));
     }
     bcnn_learner *ln = net->learner;
-    ln->learning_rate = learning_rate;
+    ln->base_learning_rate = learning_rate;
+    ln->learning_rate = ln->base_learning_rate;
     ln->momentum = momentum;
 }
 

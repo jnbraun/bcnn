@@ -38,6 +38,24 @@ static uint32_t read_uint32(char *v) {
     return ret;
 }
 
+static bcnn_status read_mnist_header(bcnn_net *net, bcnn_loader *iter) {
+    // Read header
+    char tmp[16] = {0};
+    BCNN_CHECK_AND_LOG(net->log_ctx, fread(tmp, 1, 16, iter->f_current) == 16,
+                       BCNN_INVALID_DATA, "Corrupted Mnist data");
+    uint32_t num_img = read_uint32(tmp + 4);
+    iter->input_height = read_uint32(tmp + 8);
+    iter->input_width = read_uint32(tmp + 12);
+    BCNN_CHECK_AND_LOG(net->log_ctx,
+                       fread(tmp, 1, 8, iter->f_current_extra) == 8,
+                       BCNN_INVALID_DATA, "Corrupted Mnist data");
+    uint32_t num_labels = read_uint32(tmp + 4);
+    BCNN_CHECK_AND_LOG(net->log_ctx, num_img == num_labels, BCNN_INVALID_DATA,
+                       "Inconsistent MNIST data: number of images and labels "
+                       "must be the same");
+    return BCNN_SUCCESS;
+}
+
 bcnn_status bcnn_loader_mnist_init(bcnn_loader *iter, bcnn_net *net,
                                    const char *train_path_img,
                                    const char *train_path_label,
@@ -47,25 +65,16 @@ bcnn_status bcnn_loader_mnist_init(bcnn_loader *iter, bcnn_net *net,
     BCNN_CHECK_STATUS(bcnn_open_dataset(iter, net, train_path_img,
                                         train_path_label, test_path_img,
                                         test_path_label, true));
-    // Read header
-    char tmp[16] = {0};
-    size_t nr = fread(tmp, 1, 16, iter->f_current);
-    uint32_t num_img = read_uint32(tmp + 4);
-    iter->input_height = read_uint32(tmp + 8);
-    iter->input_width = read_uint32(tmp + 12);
-    iter->input_depth = 1;
-    nr = fread(tmp, 1, 8, iter->f_current_extra);
-    uint32_t num_labels = read_uint32(tmp + 4);
-    BCNN_CHECK_AND_LOG(net->log_ctx, num_img == num_labels, BCNN_INVALID_DATA,
-                       "Inconsistent MNIST data: number of images and labels "
-                       "must be the same");
-    iter->input_uchar = (uint8_t *)calloc(
-        iter->input_width * iter->input_height, sizeof(uint8_t));
     BCNN_CHECK_AND_LOG(
         net->log_ctx,
         net->tensors[0].w > 0 && net->tensors[0].h > 0 && net->tensors[0].c > 0,
         BCNN_INVALID_PARAMETER,
         "Input's width, height and channels must be > 0");
+    // Read header
+    BCNN_CHECK_STATUS(read_mnist_header(net, iter));
+    iter->input_depth = 1;
+    iter->input_uchar = (uint8_t *)calloc(
+        iter->input_width * iter->input_height, sizeof(uint8_t));
     iter->input_net = (uint8_t *)calloc(
         net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
         sizeof(uint8_t));
@@ -105,33 +114,24 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
     } else {
         fseek(iter->f_current_extra, -1, SEEK_CUR);
     }
-
+    // Skip header
     if (ftell(iter->f_current) == 0 && ftell(iter->f_current_extra) == 0) {
-        char tmp[16];
-        size_t n = fread(tmp, 1, 16, iter->f_current);
-        unsigned int num_img = read_uint32(tmp + 4);
-        iter->input_height = read_uint32(tmp + 8);
-        iter->input_width = read_uint32(tmp + 12);
-        n = fread(tmp, 1, 8, iter->f_current_extra);
-        unsigned int num_labels = read_uint32(tmp + 4);
-        BCNN_CHECK_AND_LOG(net->log_ctx, (num_img == num_labels),
-                           BCNN_INVALID_DATA,
-                           "MNIST data: number of images and labels must be "
-                           "the same. Found %d images and %d labels",
-                           num_img, num_labels);
-        BCNN_CHECK_AND_LOG(net->log_ctx,
-                           (net->tensors[0].h == iter->input_height &&
-                            net->tensors[0].w == iter->input_width),
-                           BCNN_INVALID_DATA,
-                           "MNIST data: incoherent image width and height");
+        BCNN_CHECK_STATUS(read_mnist_header(net, iter));
     }
 
     // Read label
-    size_t n = fread((char *)&l, 1, sizeof(char), iter->f_current_extra);
+    BCNN_CHECK_AND_LOG(net->log_ctx,
+                       fread((char *)&l, 1, sizeof(char),
+                             iter->f_current_extra) == sizeof(char),
+                       BCNN_INVALID_DATA, "Corrupted Mnist data");
     int class_label = (int)l;
     // Read img
-    n = fread(iter->input_uchar, 1, iter->input_width * iter->input_height,
-              iter->f_current);
+    int sz = iter->input_width * iter->input_height;
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx,
+        fread(iter->input_uchar, 1, iter->input_width * iter->input_height,
+              iter->f_current) == (size_t)sz,
+        BCNN_INVALID_DATA, "Corrupted Mnist data");
 
     // Data augmentation
     if (net->mode == BCNN_MODE_TRAIN) {

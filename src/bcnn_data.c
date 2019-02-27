@@ -39,7 +39,7 @@
 #include "data_loader/bcnn_mnist_loader.h"
 #include "data_loader/bcnn_regression_loader.h"
 
-void bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c,
+void bcnn_convert_img_to_float(const uint8_t *src, int w, int h, int c,
                                float norm_coeff, int swap_to_bgr, float mean_r,
                                float mean_g, float mean_b, float *dst) {
     float m[3] = {mean_r, mean_g, mean_b};
@@ -246,8 +246,7 @@ bcnn_status bcnn_data_augmentation(unsigned char *img, int width, int height,
             param->distortion = distortion;
         }
         bip_image_perlin_distortion(img, width * depth, width, height, depth,
-                                    buffer, width * depth, param->distortion,
-                                    kx, ky);
+                                    buffer, width * depth, distortion, kx, ky);
         memcpy(img, buffer, width * height * depth * sizeof(unsigned char));
     }
     if (param->max_random_spots > 0) {
@@ -270,8 +269,10 @@ void bcnn_fill_input_tensor(bcnn_net *net, bcnn_loader *iter, char *path_img,
     if (net->mode == BCNN_MODE_TRAIN) {
         int use_buffer_img = (net->data_aug->range_shift_x != 0 ||
                               net->data_aug->range_shift_y != 0 ||
-                              net->data_aug->rotation_range != 0 ||
-                              net->data_aug->random_fliph != 0);
+                              net->data_aug->rotation_range > 0.0f ||
+                              net->data_aug->random_fliph != 0 ||
+                              net->data_aug->max_random_spots > 0 ||
+                              net->data_aug->max_distortion > 0.0f);
         unsigned char *img_tmp = NULL;
         if (use_buffer_img) {
             int sz_img = bcnn_tensor_size3d(&net->tensors[0]);

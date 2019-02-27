@@ -34,15 +34,6 @@
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
-#define CLEANUP_PARSED_LINE(l, t, n)    \
-    do {                                \
-        for (int i = 0; i < (n); ++i) { \
-            bh_free((t[i]));            \
-        }                               \
-        bh_free(t);                     \
-        bh_free(l);                     \
-    } while (0)
-
 int bcnncl_init_from_config(bcnn_net **net, char *config_file,
                             bcnncl_param *param) {
     char *curr_layer = NULL;
@@ -88,7 +79,7 @@ int bcnncl_init_from_config(bcnn_net **net, char *config_file,
         if (n_tok != 2) {
             bh_log(BH_LOG_ERROR, "Line %s has wrong format in config file\n",
                    line);
-            CLEANUP_PARSED_LINE(line, tok, n_tok);
+            BCNN_PARSE_CLEANUP(line, tok, n_tok);
             return BCNN_INVALID_PARAMETER;
         }
         if (strcmp(tok[0], "task") == 0 || strcmp(tok[0], "mode") == 0) {
@@ -103,7 +94,7 @@ int bcnncl_init_from_config(bcnn_net **net, char *config_file,
                        "Invalid mode parameter %s. Available modes are: "
                        "'train', 'predict', 'valid'\n",
                        tok[1]);
-                CLEANUP_PARSED_LINE(line, tok, n_tok);
+                BCNN_PARSE_CLEANUP(line, tok, n_tok);
                 return BCNN_INVALID_PARAMETER;
             }
             found_mode = true;
@@ -112,10 +103,10 @@ int bcnncl_init_from_config(bcnn_net **net, char *config_file,
                    "Invalid line %s in config file. Fist line should provide "
                    "'mode' parameter\n",
                    line);
-            CLEANUP_PARSED_LINE(line, tok, n_tok);
+            BCNN_PARSE_CLEANUP(line, tok, n_tok);
             return BCNN_INVALID_PARAMETER;
         }
-        CLEANUP_PARSED_LINE(line, tok, n_tok);
+        BCNN_PARSE_CLEANUP(line, tok, n_tok);
     }
     // Create net
     BCNN_CHECK_STATUS(bcnn_init_net(net, mode));

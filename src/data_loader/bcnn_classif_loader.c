@@ -27,6 +27,8 @@
 #include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
+#include <assert.h>
+
 bcnn_status bcnn_loader_list_classif_init(bcnn_loader *iter, bcnn_net *net,
                                           const char *train_path,
                                           const char *train_path_extra,
@@ -62,16 +64,29 @@ bcnn_status bcnn_loader_list_classif_next(bcnn_loader *iter, bcnn_net *net,
                                           int idx) {
     // nb_lines_skipped = (int)((float)rand() / RAND_MAX * net->batch_size);
     // bh_fskipline(f, nb_lines_skipped);
-    char *line = bh_fgetline(iter->f_current);
+    /*char *line = bh_fgetline(iter->f_current);
     if (line == NULL) {
         rewind(iter->f_current);
         line = bh_fgetline(iter->f_current);
+        BCNN_CHECK_AND_LOG(net->log_ctx, line != NULL, BCNN_INVALID_DATA,
+                           "Invalid classif format");
     }
     char **tok = NULL;
-    int num_toks = bh_strsplit(line, ' ', &tok);
-    if (net->mode != BCNN_MODE_PREDICT) {
-        BCNN_CHECK_AND_LOG(net->log_ctx, num_toks == 2, BCNN_INVALID_DATA,
-                           "Wrong data format for classification");
+    int num_toks = bh_strsplit(line, ' ', &tok);*/
+    char **tok = NULL;
+    int num_toks = bh_fsplitline(iter->f_current, true, ' ', &tok);
+    BCNN_CHECK_AND_LOG(net->log_ctx, num_toks > 0, BCNN_INVALID_DATA,
+                       "Invalid regression format");
+    if (net->mode != BCNN_MODE_PREDICT && num_toks != 2) {
+        BCNN_WARNING(
+            net->log_ctx,
+            "Unexpected classif format. Found label size of %d, expected %d.",
+            num_toks - 1, 1);
+        for (int i = 0; i < num_toks; ++i) {
+            bh_free((tok[i]));
+        }
+        bh_free(tok);
+        return BCNN_INVALID_DATA;
     }
     // Load image, perform data augmentation if required and fill input tensor
     bcnn_fill_input_tensor(net, iter, tok[0], idx);
@@ -80,11 +95,11 @@ bcnn_status bcnn_loader_list_classif_next(bcnn_loader *iter, bcnn_net *net,
         int label_sz = bcnn_tensor_size3d(&net->tensors[1]);
         float *y = net->tensors[1].data + idx * label_sz;
         memset(y, 0, label_sz * sizeof(float));
+        assert(tok[1] != NULL);
         y[atoi(tok[1])] = 1;
     }
-    bh_free(line);
     for (int i = 0; i < num_toks; ++i) {
-        bh_free(tok[i]);
+        bh_free((tok[i]));
     }
     bh_free(tok);
 

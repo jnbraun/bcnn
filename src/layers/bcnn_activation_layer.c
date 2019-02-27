@@ -40,15 +40,6 @@ bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
     BCNN_CHECK_AND_LOG(
         net->log_ctx, net->num_nodes >= 1, BCNN_INVALID_PARAMETER,
         "Activation layer can't be the first layer of the network");
-    node.type = BCNN_LAYER_ACTIVATION;
-    node.param_size = sizeof(bcnn_activation_param);
-    node.param = (bcnn_activation_param *)calloc(1, node.param_size);
-    bcnn_activation_param *param = (bcnn_activation_param *)node.param;
-    param->activation = type;
-    node.forward = bcnn_forward_activation_layer;
-    node.backward = bcnn_backward_activation_layer;
-    node.update = bcnn_update_activation_layer;
-
     int is_src_node_found = 0;
     for (i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id) == 0) {
@@ -60,6 +51,15 @@ bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
     }
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
                        "Activation layer: invalid input node name %s", src_id);
+
+    node.type = BCNN_LAYER_ACTIVATION;
+    node.param_size = sizeof(bcnn_activation_param);
+    node.param = (bcnn_activation_param *)calloc(1, node.param_size);
+    bcnn_activation_param *param = (bcnn_activation_param *)node.param;
+    param->activation = type;
+    node.forward = bcnn_forward_activation_layer;
+    node.backward = bcnn_backward_activation_layer;
+    node.update = bcnn_update_activation_layer;
     if (type == BCNN_ACT_PRELU) {
         char weights_name[256];
         sprintf(weights_name, "%s_w_prelu", src_id);

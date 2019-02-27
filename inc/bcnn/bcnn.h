@@ -269,17 +269,25 @@ struct bcnn_output_detection {
  ************************************************************************/
 
 /**
- *  This function creates an bcnn_net instance and needs to be called
+ * \brief Creates a net object.
+ *
+ * This function creates an bcnn_net instance and needs to be called
  * before any other BCNN functions applied to this bcnn_net instance. In order
  * to free the bcnn_net instance, the function bcnn_end_net needs to be called
  * before exiting the application.
  *
- * @return 'BCNN_SUCCESS' if successful initialization or 'BCNN_FAILED_ALLOC'
+ * \param[in]   net     Pointer to net handle to be created.
+ *
+ * \return 'BCNN_SUCCESS' if successful initialization or 'BCNN_FAILED_ALLOC'
  * otherwise
  */
 BCNN_API bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode);
 
 /**
+ * \brief Destroys the net object.
+ *
+ * \param[in]   net     Pointer to net handle to be destroyed.
+ *
  * This function frees any allocated ressources in the bcnn_net instance
  * and destroys the instance itself (net pointer is set to NULL after being
  * freed).
@@ -287,76 +295,153 @@ BCNN_API bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode);
 BCNN_API void bcnn_end_net(bcnn_net **net);
 
 /**
- * Set the logging context.
+ * \brief Sets the logging context.
  *
- * @param[in]   net     Pointer to net handle.
- * @param[in]   fct     Callback to user defined log function. If NULL, default
+ * \param[in]   net     Pointer to net instance.
+ * \param[in]   fct     Callback to user defined log function. If NULL, default
  *                      logging to stderr will be used.
- * @param[in]   level   Log level.
+ * \param[in]   level   Log level.
  */
 BCNN_API void bcnn_set_log_context(bcnn_net *net, bcnn_log_callback fct,
                                    bcnn_log_level level);
 
 /**
- * Set the shape of the primary input tensor. The primary input tensor holds the
- * default name 'input'.
+ * \brief Sets the shape of the primary input tensor.
  *
- * @param[in]   net         Pointer to net handle.
- * @param[in]   width       Input tensor width.
- * @param[in]   height      Input tensor height.
- * @param[in]   channels    Input tensor depth (= number of channels).
- * @param[in]   batch_size  Set the batch size (will be the same for each
+ * The primary input tensor holds the default name 'input'.
+ *
+ * \param[in]   net         Pointer to net instance.
+ * \param[in]   width       Input tensor width.
+ * \param[in]   height      Input tensor height.
+ * \param[in]   channels    Input tensor depth (= number of channels).
+ * \param[in]   batch_size  Set the batch size (will be the same for each
  *                          tensor).
  */
 BCNN_API void bcnn_set_input_shape(bcnn_net *net, int width, int height,
                                    int channels, int batch_size);
 
 /**
- * Defines an input tensor to the network.
+ * \brief Defines an input tensor to the network.
  *
- * @param[in]   net         Pointer to net handle.
- * @param[in]   width       Tensor width.
- * @param[in]   height      Tensor height.
- * @param[in]   channels    Tensor depth (= number of channels).
- * @param[in]   name        Tensor name.
+ * \param[in]   net         Pointer to net instance.
+ * \param[in]   width       Tensor width.
+ * \param[in]   height      Tensor height.
+ * \param[in]   channels    Tensor depth (= number of channels).
+ * \param[in]   name        Tensor name.
  *
- * @return 'BCNN_SUCCESS' if successful initialization or 'BCNN_FAILED_ALLOC'
+ * \return BCNN_SUCCESS if successful initialization or BCNN_FAILED_ALLOC
  * otherwise
  */
 BCNN_API bcnn_status bcnn_add_input(bcnn_net *net, int width, int height,
                                     int channels, const char *name);
 
 /**
- * Returns the batch size used for training / validation
+ * \brief Returns the batch size used for training / validation
+ *
+ * \param[in]   net         Pointer to net instance.
+ *
+ * \return The batch size value.
  */
 BCNN_API int bcnn_get_batch_size(bcnn_net *net);
 
 /**
- * Finalizes the net configuration.
+ * \brief Finalizes the net configuration.
+ *
  * This function needs to be called after everything has been setup (the model
  * architecture, the dataset loader, the data augmentation, the training
  * configuration and the model weights) have been setup and before effectively
  * starting the model training or inference.
+ *
+ * \param[in]   net         Pointer to net instance.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
  */
 BCNN_API bcnn_status bcnn_compile_net(bcnn_net *net);
 
-/* Load the model parameters from disk */
+/**
+ * \brief Loads the model parameters (=weights) from disk.
+ *
+ * \param[in]   net         Pointer to net instance.
+ * \param[in]   filename    Path to the model weights to be loaded.
+ *
+ * \return Possible erros include BCNN_INVALID_DATA and BCNN_INVALID_PARAMETER.
+ */
 BCNN_API bcnn_status bcnn_load_model(bcnn_net *net, const char *filename);
 /* For compatibility with older versions */
 BCNN_API bcnn_status bcnn_load_model_legacy(bcnn_net *net,
                                             const char *filename);
 
-/* Write the model on disk */
+/**
+ * \brief Writes the model on disk.
+ *
+ * \param[in]   net         Pointer to net instance.
+ * \param[in]   filename    Path where to save the model weights.
+ *
+ * \return BCNN_INVALID_PARAMETER if file failed to be open.
+ */
 BCNN_API bcnn_status bcnn_write_model(bcnn_net *net, const char *filename);
 
-/* Setup Adam optimizer */
+/**
+ * \brief Setups the dataset loader.
+ *
+ * \param[in]   net                 Pointer to net instance.
+ * \param[in]   type                The loader type.
+ * \param[in]   train_path_data     Path to training dataset.
+ * \param[in]   train_path_extra    Optional path to extra training dataset.
+ *                                  NULL if not needed.
+ * \param[in]   test_path_data      Path to validataion
+ *                                  dataset
+ * \param[in]   test_path_extra     Optional path to extra validation
+ *                                  dataset. NULL if not needed.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER, BCNN_INVALID_DATA and
+ * BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_set_data_loader(bcnn_net *net, bcnn_loader_type type,
+                                          const char *train_path_data,
+                                          const char *train_path_extra,
+                                          const char *test_path_data,
+                                          const char *test_path_extra);
+
+/**
+ * \brief Sets the online data augmentation parameters that will be applied on
+ * the training data.
+ */
+BCNN_API bcnn_status bcnn_set_data_augmentation(
+    bcnn_net *net, int width_shift_range, int height_shift_range,
+    float rotation_range, float min_scale, float max_scale, int horizontal_flip,
+    int min_brightness, int max_brightness, float min_constrast,
+    float max_contrast, float distortion, int add_blobs);
+
+/**
+ * \brief Sets the network mode.
+ *
+ * This function can be called on the same bcnn_net object with different modes
+ * and will check internally if the requested mode is compatible with the
+ * network current state.
+ *
+ * \param[in]   net         Pointer to net instance.
+ * \param[in]   mode        The network mode to be set.
+ */
+BCNN_API bcnn_status bcnn_set_mode(bcnn_net *net, bcnn_mode mode);
+
+/**
+ * \brief Setups Adam optimizer.
+ *
+ * \param[in]   net         Pointer to net instance.
+ *
+ */
 BCNN_API void bcnn_set_adam_optimizer(bcnn_net *net, float learning_rate,
                                       float beta1, float beta2);
-/* Setup SGD optimizer with momentum */
+/**
+ * \brief Setups SGD optimizer with momentum
+ *
+ * \param[in]   net         Pointer to net instance
+ */
 BCNN_API void bcnn_set_sgd_optimizer(bcnn_net *net, float learning_rate,
                                      float momentum);
 
-/* Set the learning rate decay policy */
+/* Sets the learning rate decay policy */
 BCNN_API void bcnn_set_learning_rate_policy(bcnn_net *net,
                                             bcnn_lr_decay decay_type,
                                             float gamma, float scale,
@@ -456,60 +541,61 @@ BCNN_API bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                                          const char *src_id,
                                          const char *dst_id);
 
-/* Return the detection results of a Yolo-like model */
+/* Returns the detection results of a Yolo-like model */
 BCNN_API bcnn_output_detection *bcnn_yolo_get_detections(
     bcnn_net *net, int batch, int w, int h, int netw, int neth, float thresh,
     int relative, int *num_dets);
 
 /**
- * Convert an image (represented as an array of unsigned char) to floating point
- * values. Also perform a mean substraction and rescale the values
+ * Converts an image (represented as an array of unsigned char) to floating
+ * point values. Also perform a mean substraction and rescale the values
  * according to the following formula:
  * output_val = (input_pixel - mean) * norm_coeff
  *
- * Note: If the image has less than 3 channels, only the first mean values are
+ * \note: If the image has less than 3 channels, only the first mean values are
  * considered (up to the number of channels)
  *
- * @param[in]   src             Pointer to input image.
- * @param[in]   w               Image width.
- * @param[in]   h               Image height.
- * @param[in]   c               Number of channels of input image.
- * @param[in]   norm_coeff      Multiplicative factor to rescale input values
- * @param[in]   swap_to_bgr     Swap Red and Blue channels (Default layout is
+ * \param[in]   src             Pointer to input image pixels data.
+ * \param[in]   w               Image width.
+ * \param[in]   h               Image height.
+ * \param[in]   c               Number of channels of input image.
+ * \param[in]   norm_coeff      Multiplicative factor to rescale input values
+ * \param[in]   swap_to_bgr     Swap Red and Blue channels (Default layout is
  *                              RGB).
- * @param[in]   mean_r          Value to be substracted to first channel pixels
+ * \param[in]   mean_r          Value to be substracted to first channel pixels
  *                              (red).
- * @param[in]   mean_g          Value to be substracted to second channel pixels
+ * \param[in]   mean_g          Value to be substracted to second channel pixels
  *                              (green).
- * @param[in]   mean_b          Value to be substracted to third channel pixels
+ * \param[in]   mean_b          Value to be substracted to third channel pixels
  * `                            (blue).
- * @param[out]  dst             Pointer to output float values array.
+ * \param[out]  dst             Pointer to output float values array.
  */
-BCNN_API void bcnn_convert_img_to_float(unsigned char *src, int w, int h, int c,
+BCNN_API void bcnn_convert_img_to_float(const uint8_t *src, int w, int h, int c,
                                         float norm_coeff, int swap_to_bgr,
                                         float mean_r, float mean_g,
                                         float mean_b, float *dst);
 
 /**
- * Perform the model prediction on the provided input data and computes the
+ * Performs the model prediction on the provided input data and computes the
  * loss if cost layers are defined.
  */
 BCNN_API void bcnn_forward(bcnn_net *net);
 
 /**
- * Back-propagate the gradients of the loss w.r.t. the parameters of the model.
+ * Back-propagates the gradients of the loss w.r.t. the parameters of the model.
  */
 BCNN_API void bcnn_backward(bcnn_net *net);
 
 /**
- * Update the model parameters according to the learning configuration and the
+ * Updates the model parameters according to the learning configuration and the
  * calculated gradients.
  */
 BCNN_API void bcnn_update(bcnn_net *net);
 
 /**
- * Convenient wrapper to compute the different steps required to train one batch
- * of data.
+ * \brief Convenient wrapper to compute the different steps required to train
+ * one batch of data.
+ *
  * This functions performs the following:
  * - Load the next data batch (and performs data augmentation if required)
  * - Compute the forward pass given the loaded data batch
@@ -523,42 +609,15 @@ BCNN_API void bcnn_update(bcnn_net *net);
 BCNN_API float bcnn_train_on_batch(bcnn_net *net);
 
 /**
- * Wrapper function to compute the inference pass only on a data batch.
+ * \brief Wrapper function to compute the inference pass only on a data batch.
+ *
  * This functions performs the following:
  * - Load the next data batch (and performs data augmentation if required)
  * - Compute the forward pass given the loaded data batch
  *
- * Return the loss value and the output tensor.
+ * \return the loss value and the output tensor.
  */
 BCNN_API float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor **out);
-
-/**
- * Setup the dataset loader given the paths to training and testing dataset and
- * according to the data type.
- */
-BCNN_API bcnn_status bcnn_set_data_loader(bcnn_net *net, bcnn_loader_type type,
-                                          const char *train_path_data,
-                                          const char *train_path_extra,
-                                          const char *test_path_data,
-                                          const char *test_path_extra);
-
-/**
- * Set the online data augmentation parameters that will be applied on the
- * training data.
- */
-BCNN_API bcnn_status bcnn_set_data_augmentation(
-    bcnn_net *net, int width_shift_range, int height_shift_range,
-    float rotation_range, float min_scale, float max_scale, int horizontal_flip,
-    int min_brightness, int max_brightness, float min_constrast,
-    float max_contrast, float distortion, int add_blobs);
-
-/**
- * Set the network mode.
- * This function can be called on the same bcnn_net object with different modes
- * and will check internally if the requested mode is compatible with the
- * network current state.
- */
-BCNN_API bcnn_status bcnn_set_mode(bcnn_net *net, bcnn_mode mode);
 
 #ifdef __cplusplus
 }

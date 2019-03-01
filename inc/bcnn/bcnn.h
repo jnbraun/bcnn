@@ -27,9 +27,9 @@
 extern "C" {
 #endif
 
-/*************************************************************************
+/****************************************************************************
  * Preprocessor / compiler stuff
- ************************************************************************/
+ ***************************************************************************/
 
 #include <stddef.h>
 #include <stdint.h>
@@ -67,9 +67,9 @@ extern "C" {
 #define BCNN_VERSION \
     (BCNN_VERSION_MAJOR * 10000 + BCNN_VERSION_MINOR * 100 + BCNN_VERSION_PATCH)
 
-/*************************************************************************
+/****************************************************************************
  * Forward declarations
- ************************************************************************/
+ ***************************************************************************/
 
 /** Net struct (main BCNN object) */
 typedef struct bcnn_net bcnn_net;
@@ -80,9 +80,9 @@ typedef struct bcnn_tensor bcnn_tensor;
 /** Object detection result struct */
 typedef struct bcnn_output_detection bcnn_output_detection;
 
-/*************************************************************************
+/****************************************************************************
  * BCNN types
- ************************************************************************/
+ ***************************************************************************/
 
 /**
  * Error codes.
@@ -107,7 +107,7 @@ typedef enum {
     BCNN_MODE_TRAIN,   /* Training mode: Back-propagation, parameters update,
                           evaluation against ground-truth */
     BCNN_MODE_VALID    /* Evaluation mode: Forward pass and evaluation against
-                          groundtruth (required a cost layer) */
+                          groundtruth (requires a cost layer) */
 } bcnn_mode;
 
 /**
@@ -264,9 +264,9 @@ struct bcnn_output_detection {
     float objectness;
 };
 
-/*************************************************************************
- * BCNN API functions
- ************************************************************************/
+/****************************************************************************
+ * BCNN functions API
+ ***************************************************************************/
 
 /**
  * \brief Creates a net object.
@@ -367,6 +367,7 @@ BCNN_API bcnn_status bcnn_compile_net(bcnn_net *net);
  * \return Possible erros include BCNN_INVALID_DATA and BCNN_INVALID_PARAMETER.
  */
 BCNN_API bcnn_status bcnn_load_model(bcnn_net *net, const char *filename);
+
 /* For compatibility with older versions */
 BCNN_API bcnn_status bcnn_load_model_legacy(bcnn_net *net,
                                             const char *filename);
@@ -428,123 +429,50 @@ BCNN_API bcnn_status bcnn_set_mode(bcnn_net *net, bcnn_mode mode);
 /**
  * \brief Setups Adam optimizer.
  *
- * \param[in]   net         Pointer to net instance.
- *
+ * \param[in]   net             Pointer to net instance.
+ * \param[int]  learning_rate   Initial learning rate.
+ * \param[int]  beta1           Exponential decay rate for the first moment
+ *                              estimates. Default: 0.9.
+ * \param[in]   beta2           Exponential decay rate for the second moment
+ *                              estimates. Default: 0.999.
  */
 BCNN_API void bcnn_set_adam_optimizer(bcnn_net *net, float learning_rate,
                                       float beta1, float beta2);
 /**
- * \brief Setups SGD optimizer with momentum
+ * \brief Setups SGD optimizer with momentum.
  *
- * \param[in]   net         Pointer to net instance
+ * \param[in]   net             Pointer to net instance
+ * \param[int]  learning_rate   Initial learning rate.
+ * \param[in]   momentum        Exponentially decay rate for the weighted
+ *                              gradients averages. Default: 0.9.
  */
 BCNN_API void bcnn_set_sgd_optimizer(bcnn_net *net, float learning_rate,
                                      float momentum);
 
-/* Sets the learning rate decay policy */
+/**
+ * \brief Sets the learning rate decay policy.
+ *
+ * \param[in]   net         Pointer to net instance.
+ * \param[in]   decay_type  Decay policy. \see bcnn_lr_decay
+ * \param[in]   gamma
+ * \param[in]   scale
+ * \param[in]   power
+ * \param[in]   max_batches
+ * \param[in]   step
+ */
 BCNN_API void bcnn_set_learning_rate_policy(bcnn_net *net,
                                             bcnn_lr_decay decay_type,
                                             float gamma, float scale,
                                             float power, int max_batches,
                                             int step);
 
-/* Weight regularization */
+/**
+ * \brief Setups the weights L2 regularization.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   weight_decay    Weight decay coefficient.
+ */
 BCNN_API void bcnn_set_weight_regularizer(bcnn_net *net, float weight_decay);
-
-/********************
- * BCNN layers
- *******************/
-
-/* Conv layer */
-BCNN_API bcnn_status bcnn_add_convolutional_layer(
-    bcnn_net *net, int n, int size, int stride, int pad, int num_groups,
-    int batch_norm, bcnn_filler_type init, bcnn_activation activation,
-    int quantize, const char *src_id, const char *dst_id);
-
-/* Transposed convolution 2d layer */
-BCNN_API bcnn_status bcnn_add_deconvolutional_layer(
-    bcnn_net *net, int n, int size, int stride, int pad, bcnn_filler_type init,
-    bcnn_activation activation, const char *src_id, const char *dst_id);
-
-/* Depthwise convolution layer */
-BCNN_API bcnn_status bcnn_add_depthwise_conv_layer(
-    bcnn_net *net, int size, int stride, int pad, int batch_norm,
-    bcnn_filler_type init, bcnn_activation activation, const char *src_id,
-    const char *dst_id);
-
-/* Batchnorm layer */
-BCNN_API bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
-                                              const char *dst_id);
-
-/* Local Response normalization layer */
-BCNN_API bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size,
-                                        float alpha, float beta, float k,
-                                        const char *src_id, const char *dst_id);
-
-/* Fully-connected layer */
-BCNN_API bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
-                                          bcnn_filler_type init,
-                                          bcnn_activation activation,
-                                          int quantize, const char *src_id,
-                                          const char *dst_id);
-
-/* Activation layer */
-BCNN_API bcnn_status bcnn_add_activation_layer(bcnn_net *net,
-                                               bcnn_activation type,
-                                               const char *id);
-
-/* Softmax layer */
-BCNN_API bcnn_status bcnn_add_softmax_layer(bcnn_net *net, const char *src_id,
-                                            const char *dst_id);
-
-/* Max-Pooling layer */
-BCNN_API bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
-                                            bcnn_padding padding,
-                                            const char *src_id,
-                                            const char *dst_id);
-
-/* Average pooling layer */
-BCNN_API bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, const char *src_id,
-                                            const char *dst_id);
-
-/* Concat layer */
-BCNN_API bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
-                                           const char *src_id2,
-                                           const char *dst_id);
-
-/* Elementwise addition layer */
-BCNN_API bcnn_status bcnn_add_eltwise_layer(bcnn_net *net,
-                                            bcnn_activation activation,
-                                            const char *src_id1,
-                                            const char *src_id2,
-                                            const char *dst_id);
-
-/* Dropout layer */
-BCNN_API bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate,
-                                            const char *id);
-
-/* Upsample layer */
-BCNN_API bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size,
-                                             const char *src_id,
-                                             const char *dst_id);
-
-/* Cost layer */
-BCNN_API bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
-                                         bcnn_loss_metric loss_metric,
-                                         float scale, const char *src_id,
-                                         const char *label_id,
-                                         const char *dst_id);
-/* Yolo output layer */
-BCNN_API bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
-                                         int classes, int coords, int total,
-                                         int *mask, float *anchors,
-                                         const char *src_id,
-                                         const char *dst_id);
-
-/* Returns the detection results of a Yolo-like model */
-BCNN_API bcnn_output_detection *bcnn_yolo_get_detections(
-    bcnn_net *net, int batch, int w, int h, int netw, int neth, float thresh,
-    int relative, int *num_dets);
 
 /**
  * Converts an image (represented as an array of unsigned char) to floating
@@ -576,19 +504,25 @@ BCNN_API void bcnn_convert_img_to_float(const uint8_t *src, int w, int h, int c,
                                         float mean_b, float *dst);
 
 /**
- * Performs the model prediction on the provided input data and computes the
- * loss if cost layers are defined.
+ * \brief Computes the model prediction on the current batch data and computes
+ * the loss if cost layers are defined.
+ *
+ * \param[in]       Pointer to net instance.
  */
 BCNN_API void bcnn_forward(bcnn_net *net);
 
 /**
- * Back-propagates the gradients of the loss w.r.t. the parameters of the model.
+ * \brief Back-propagates the gradients of the loss w.r.t. the model weights.
+ *
+ * \param[in]       Pointer to net instance.
  */
 BCNN_API void bcnn_backward(bcnn_net *net);
 
 /**
- * Updates the model parameters according to the learning configuration and the
- * calculated gradients.
+ * \brief Updates the model parameters according to the learner configuration
+ * and the calculated gradients.
+ *
+ * \param[in]       Pointer to net instance.
  */
 BCNN_API void bcnn_update(bcnn_net *net);
 
@@ -605,6 +539,10 @@ BCNN_API void bcnn_update(bcnn_net *net);
  *
  * The common use-case for this function is to be called inside a training loop
  * See: examples/mnist/mnist_example.c for a real-case example.
+ *
+ * \param[in]       Pointer to net instance.
+ *
+ * \return The loss value.
  */
 BCNN_API float bcnn_train_on_batch(bcnn_net *net);
 
@@ -615,9 +553,314 @@ BCNN_API float bcnn_train_on_batch(bcnn_net *net);
  * - Load the next data batch (and performs data augmentation if required)
  * - Compute the forward pass given the loaded data batch
  *
- * \return the loss value and the output tensor.
+ * \param[in]       Pointer to net instance.
+ * \param[out]      Pointer to output tensor hold in the net instance. It must
+ *                  *not* be allocated neither be freed by the user.
+ *
+ * \return The loss value.
  */
 BCNN_API float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor **out);
+
+/**
+ * \brief Get the output results of an object detection model.
+ *
+ * \param[in]   net         Pointer to net instance.
+ * \param[in]   batch       Batch size.
+ * \param[in]   width       Input image width.
+ * \param[in]   height      Input image height.
+ * \param[in]   netw        Input tensor width.
+ * \param[in]   neth        Input tensor height.
+ * \param[in]   thresh      Threshold between [0;1] above which detections will
+ *                          be kept.
+ * \param[in]   relative    If set to 1, will scale the boxes dimensions to the
+ *                          input image.
+ * \param[out]  num_dets    Number of detected boxes.
+ *
+ * \return Array of 'num_dets' detected boxes.
+ */
+BCNN_API bcnn_output_detection *bcnn_yolo_get_detections(
+    bcnn_net *net, int batch, int width, int height, int netw, int neth,
+    float thresh, int relative, int *num_dets);
+
+/****************************************************************************
+ * BCNN layers API
+ ***************************************************************************/
+
+/**
+ * \brief 2D-Convolutional layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   num_filters     Number of output filters.
+ * \param[in]   size            Kernel size.
+ * \param[in]   stride          Stride value.
+ * \param[in]   pad             Padding value.
+ * \param[in]   num_groups      Number of groups of input feature maps channels.
+ * \param[in]   batch_norm      If set to 1, will fuse a batch normalization
+ *                              layer.
+ * \param[in]   init            Weights initialization type. Used only for
+ *                              training.
+ * \param[in]   activation      Type of the fused activation.
+ * \param[in]   quantize        Not implemented. Reserved for future versions.
+ * \param[in]   src_id          Input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_convolutional_layer(
+    bcnn_net *net, int num_filters, int size, int stride, int pad,
+    int num_groups, int batch_norm, bcnn_filler_type init,
+    bcnn_activation activation, int quantize, const char *src_id,
+    const char *dst_id);
+
+/**
+ * \brief Transposed 2D-convolution layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   num_filters     Number of output filters.
+ * \param[in]   size            Kernel size.
+ * \param[in]   stride          Stride value.
+ * \param[in]   pad             Padding value.
+ * \param[in]   init            Weights initialization type. Used only for
+ *                              training.
+ * \param[in]   activation      Type of the fused activation.
+ * \param[in]   src_id          Input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_deconvolutional_layer(
+    bcnn_net *net, int num_filters, int size, int stride, int pad,
+    bcnn_filler_type init, bcnn_activation activation, const char *src_id,
+    const char *dst_id);
+
+/**
+ * \brief Depthwise 2D-convolution layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   size            Kernel size.
+ * \param[in]   stride          Stride value.
+ * \param[in]   pad             Padding value.
+ * \param[in]   batch_norm      If set to 1, will fuse a batch normalization
+ *                              layer.
+ * \param[in]   init            Weights initialization type. Used only for
+ *                              training.
+ * \param[in]   activation      Type of the fused activation.
+ * \param[in]   src_id          Input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_depthwise_conv_layer(
+    bcnn_net *net, int size, int stride, int pad, int batch_norm,
+    bcnn_filler_type init, bcnn_activation activation, const char *src_id,
+    const char *dst_id);
+
+/**
+ * \brief Batch-normalization layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   src_id          Input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
+                                              const char *dst_id);
+
+/**
+ * \brief Local Response Normalization layer.
+ *
+ * Normalizes over adjacent channels according to the formula:
+ * output = input * (k + alpha * sum2) ^ (-beta)
+ * with sum2 the squared sum of inputs within local_size channels.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   local_size      Width of the normalization window.
+ * \param[in]   alpha           Scale factor.
+ * \param[in]   beta            Exponent factor.
+ * \param[in]   k               Bias value.
+ * \param[in]   src_id          Input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size,
+                                        float alpha, float beta, float k,
+                                        const char *src_id, const char *dst_id);
+
+/**
+ * \brief Dense aka fully-connected layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   output_size     Tensor output size (i.e number of output
+ *                              channels).
+ * \param[in]   init            Weights initialization type. Used only for
+ *                              training.
+ * \param[in]   activation      Type of the fused activation.
+ * \param[in]   quantize        Not implemented. Reserved for future versions.
+ * \param[in]   src_id          Input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
+                                          bcnn_filler_type init,
+                                          bcnn_activation activation,
+                                          int quantize, const char *src_id,
+                                          const char *dst_id);
+
+/**
+ * \brief Activation layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   type            Activation function.
+ * \param[in]   src_id          Input / output tensor name (inplace layer).
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_activation_layer(bcnn_net *net,
+                                               bcnn_activation type,
+                                               const char *id);
+
+/**
+ * \brief Softmax layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   src_id          Input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_softmax_layer(bcnn_net *net, const char *src_id,
+                                            const char *dst_id);
+
+/**
+ * \brief Max-Pooling layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   size            Kernel size.
+ * \param[in]   stride          Stride value.
+ * \param[in]   pad             Padding type. \see bcnn_padding
+ * \param[in]   src_id          Input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
+                                            bcnn_padding padding,
+                                            const char *src_id,
+                                            const char *dst_id);
+
+/**
+ * \brief Average pooling layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   src_id          Input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, const char *src_id,
+                                            const char *dst_id);
+
+/**
+ * \brief Concatenation layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   src_id1         First input tensor name.
+ * \param[in]   src_id2         Second input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
+                                           const char *src_id2,
+                                           const char *dst_id);
+
+/**
+ * \brief Elementwise addition layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   activation      Fused activation type.
+ * \param[in]   src_id1         First input tensor name.
+ * \param[in]   src_id2         Second input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_eltwise_layer(bcnn_net *net,
+                                            bcnn_activation activation,
+                                            const char *src_id1,
+                                            const char *src_id2,
+                                            const char *dst_id);
+
+/**
+ * \brief Dropout layer.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   rate            Dropout ratio.
+ * \param[in]   id              Input / output tensor name (inplace layer).
+ */
+BCNN_API bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate,
+                                            const char *id);
+
+/**
+ * \brief Upsampling layer.
+ *
+ * Upsamples the input tensor by a scale factor 'size'.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   size            Upsampling factor.
+ * \param[in]   src_id          Input tensor name.
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size,
+                                             const char *src_id,
+                                             const char *dst_id);
+
+/**
+ * \brief Cost layer.
+ *
+ * Computes the loss according to the objective function and the error metric.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   loss            Loss objective type.
+ * \param[in]   loss_metric     Error metric type.
+ * \param[in]   scale           Participation ratio of this specific loss layer
+ *                              towards the total network loss (in case of
+ *                              several loss layers).
+ * \param[in]   src_id          Input tensor name.
+ * \param[in]   label_id        Label tensor name. Default name: 'label'
+ * \param[in]   dst_id          Output tensor name.
+ *
+ * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
+                                         bcnn_loss_metric loss_metric,
+                                         float scale, const char *src_id,
+                                         const char *label_id,
+                                         const char *dst_id);
+/**
+ * \brief Yolo v3 output layer.
+ *
+ * \param[in]   net                 Pointer to net instance.
+ * \param[in]   num_boxes_per_cell  Max number of possibles detections per cell.
+ * \param[in]   classes             Number of object classes.
+ * \param[in]   coords              Number of coordinates to define a detection
+ *                                  box. Default: 4.
+ * \param[in]   total               Number of anchors to considerate.
+ * \param[in]   mask                Anchors indexes to considerate.
+ * \param[in]   anchors             Anchors coordinates (prior box coordinates).
+ * \param[in]   src_id              Input tensor name.
+ * \param[in]   dst_id              Output tensor name.
+ */
+BCNN_API bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
+                                         int num_classes, int coords, int total,
+                                         int *mask, float *anchors,
+                                         const char *src_id,
+                                         const char *dst_id);
 
 #ifdef __cplusplus
 }

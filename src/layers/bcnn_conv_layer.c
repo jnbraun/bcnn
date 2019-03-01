@@ -42,16 +42,12 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
                                          bcnn_activation activation,
                                          int quantize, const char *src_id,
                                          const char *dst_id) {
-    int i, sz, k, l;
     bcnn_node node = {0};
-#ifdef BCNN_USE_CUDNN
-    size_t cudnn_wrk_sz = 0;
-#endif
     bcnn_tensor dst_tensor = {0};
 
     if (net->num_nodes > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_tensors - 1; i >= 0; --i) {
+        for (int i = net->num_tensors - 1; i >= 0; --i) {
             if (strcmp(net->tensors[i].name, src_id) == 0) {
                 bcnn_node_add_input(net, &node, i);
                 is_src_node_found = 1;
@@ -103,15 +99,15 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     bcnn_tensor_filler w_filler = {
         .range = (size * size * num_channels_per_group), .type = init};
     bcnn_tensor_fill(&weights, w_filler);
-    bcnn_net_add_tensor(net, weights);
-    bcnn_node_add_input(net, &node, net->num_tensors - 1);
+    BCNN_CHECK_STATUS(bcnn_net_add_tensor(net, weights));
+    BCNN_CHECK_STATUS(bcnn_node_add_input(net, &node, net->num_tensors - 1));
     // Create bias tensor
     bcnn_tensor biases = {0};
     char biases_name[256];
     sprintf(biases_name, "%s_b", src_id);
     bcnn_tensor_create(&biases, 1, 1, 1, n, 1, biases_name, net->mode);
-    bcnn_net_add_tensor(net, biases);
-    bcnn_node_add_input(net, &node, net->num_tensors - 1);
+    BCNN_CHECK_STATUS(bcnn_net_add_tensor(net, biases));
+    BCNN_CHECK_STATUS(bcnn_node_add_input(net, &node, net->num_tensors - 1));
     if (net->learner != NULL) {
         if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
             int weights_size = bcnn_tensor_size(&weights);
@@ -128,15 +124,15 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
                 param->stride +
             1,
         1);
-    bcnn_tensor_allocate(&dst_tensor, net->mode);
+    BCNN_CHECK_STATUS(bcnn_tensor_allocate(&dst_tensor, net->mode));
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
-    bcnn_net_add_tensor(net, dst_tensor);
+    BCNN_CHECK_STATUS(bcnn_net_add_tensor(net, dst_tensor));
     // Add tensor output index to node
-    bcnn_node_add_output(net, &node, net->num_tensors - 1);
-    sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
-         num_channels_per_group * size * size;
-    param->conv_workspace = (float *)calloc(sz, sizeof(float));
+    BCNN_CHECK_STATUS(bcnn_node_add_output(net, &node, net->num_tensors - 1));
+    int sz_wk = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
+                num_channels_per_group * size * size;
+    param->conv_workspace = (float *)calloc(sz_wk, sizeof(float));
     if (batch_norm) {
         param->batch_norm = 1;
         int sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
@@ -157,20 +153,23 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         bcnn_tensor running_mean = {0};
         bcnn_tensor_create(&running_mean, 1, 1, 1, channels, 0,
                            running_mean_name, net->mode);  // no gradients
-        bcnn_net_add_tensor(net, running_mean);
-        bcnn_node_add_input(net, &node, net->num_tensors - 1);
+        BCNN_CHECK_STATUS(bcnn_net_add_tensor(net, running_mean));
+        BCNN_CHECK_STATUS(
+            bcnn_node_add_input(net, &node, net->num_tensors - 1));
         bcnn_tensor running_variance = {0};
         bcnn_tensor_create(&running_variance, 1, 1, 1, channels, 0,
                            running_var_name, net->mode);  // no gradients
-        bcnn_net_add_tensor(net, running_variance);
-        bcnn_node_add_input(net, &node, net->num_tensors - 1);
+        BCNN_CHECK_STATUS(bcnn_net_add_tensor(net, running_variance));
+        BCNN_CHECK_STATUS(
+            bcnn_node_add_input(net, &node, net->num_tensors - 1));
         bcnn_tensor scales = {0};
         bcnn_tensor_create(&scales, 1, 1, 1, channels, 1, scales_name,
                            net->mode);
         bcnn_tensor_filler filler = {.value = 1.0f, .type = BCNN_FILLER_FIXED};
         bcnn_tensor_fill(&scales, filler);
-        bcnn_net_add_tensor(net, scales);
-        bcnn_node_add_input(net, &node, net->num_tensors - 1);
+        BCNN_CHECK_STATUS(bcnn_net_add_tensor(net, scales));
+        BCNN_CHECK_STATUS(
+            bcnn_node_add_input(net, &node, net->num_tensors - 1));
         // Internal workspace for batch norm
         param->x_norm = (float *)calloc(sz, sizeof(float));
         param->workspace = (float *)calloc(sz, sizeof(float));
@@ -235,6 +234,7 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         param->conv_desc, param->filter_desc,
         CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0,
         &param->bwd_filter_algo));
+    size_t cudnn_wrk_sz = 0;
     bcnn_cudnn_check(cudnnGetConvolutionForwardWorkspaceSize(
         bcnn_cudnn_handle(), param->src_tensor_desc, param->filter_desc,
         param->conv_desc, param->dst_tensor_desc, param->fwd_algo,
@@ -268,14 +268,13 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     }
 #endif  // BCNN_USE_CUDA
     bcnn_net_add_node(net, node);
-    BCNN_INFO(
-        net->log_ctx,
-        "[Convolutional] input_shape= %dx%dx%d nb_filters= %d kernel_size= %d "
-        "stride= %d padding= %d groups= %d output_shape= %dx%dx%d",
-        net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-        net->tensors[node.src[0]].c, n, size, stride, pad, num_groups,
-        net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
-        net->tensors[node.dst[0]].c);
+    BCNN_INFO(net->log_ctx,
+              "[Conv2D] input_shape= %dx%dx%d filters= %d kernel_size= %d "
+              "stride= %d padding= %d groups= %d output_shape= %dx%dx%d",
+              net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
+              net->tensors[node.src[0]].c, n, size, stride, pad, num_groups,
+              net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
+              net->tensors[node.dst[0]].c);
 
     return 0;
 }

@@ -59,11 +59,17 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
                           net->tensors[node.src[0]].w,  // width
                           1);
     bcnn_tensor_allocate(&dst_tensor, net->mode);
-    bh_strfill(&dst_tensor.name, dst_id);
+    // bh_strfill(&dst_tensor.name, dst_id);
+    dst_tensor.name = dst_id;
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
+
+    BCNN_CHECK_AND_LOG(net->log_ctx, local_size < net->tensors[node.src[0]].c,
+                       BCNN_INVALID_PARAMETER,
+                       "BCNN_LAYER_LRN layer: local size must be inferior to "
+                       "the number of channels");
 
     node.type = BCNN_LAYER_LRN;
     node.param_size = sizeof(bcnn_lrn_param);
@@ -78,11 +84,6 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
     node.forward = bcnn_forward_lrn_layer;
     node.backward = bcnn_backward_lrn_layer;
     node.release_param = bcnn_release_param_lrn_layer;
-
-    BCNN_CHECK_AND_LOG(net->log_ctx, local_size < net->tensors[node.src[0]].c,
-                       BCNN_INVALID_PARAMETER,
-                       "BCNN_LAYER_LRN layer: local size must be inferior to "
-                       "the number of channels");
 
     bcnn_net_add_node(net, node);
 

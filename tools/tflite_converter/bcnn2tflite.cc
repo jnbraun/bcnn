@@ -75,7 +75,8 @@ void add_reshape_node(bcnn_net* net, int dst_n, int dst_c, int dst_h, int dst_w,
     }
     bcnn_tensor_set_shape(&dst_tensor, dst_n, dst_c, dst_h, dst_w, 1);
     bcnn_tensor_allocate(&dst_tensor, net->mode);
-    bh_strfill(&dst_tensor.name, dst_id);
+    // bh_strfill(&dst_tensor.name, dst_id);
+    dst_tensor.name = dst_id;
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node

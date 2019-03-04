@@ -152,8 +152,9 @@ bip_status bip_image_brightness(uint8_t *src, size_t src_stride, size_t width,
 static float _bip_noise2d(int x, int y, int octave, int seed) {
     int i = x * 1619 + y * 31337 + octave * 3463 + seed * 13397;
     int n = (i << 13) ^ i;
-    return (1.0f - ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) /
-                       1073741824.0f);
+    return (1.0f -
+            ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) /
+                1073741824.0f);
 }
 
 static float _bip_interpolate(float v1, float v2, float x) {
@@ -208,7 +209,6 @@ bip_status bip_image_perlin_distortion(uint8_t *src, size_t src_stride,
     int32_t index, x_map, y_map;
     int32_t seed = rand();
     float persistence, x_norm, y_norm, px, py, x_diff, y_diff;
-    uint8_t level;
 
     BIP_CHECK_SIZE(width);
     BIP_CHECK_SIZE(height);
@@ -220,26 +220,27 @@ bip_status bip_image_perlin_distortion(uint8_t *src, size_t src_stride,
         for (x = 0; x < width; ++x) {
             x_norm = (float)x / width;
             y_norm = (float)y / height;
-            px = (x_norm + _bip_perlin_noise2d(x_norm + kx, y_norm + ky,
-                                               persistence, 1, seed) *
-                               distortion) *
+            px = (x_norm +
+                  _bip_perlin_noise2d(x_norm + kx, y_norm + ky, persistence, 1,
+                                      seed) *
+                      distortion) *
                  width;
-            py = (y_norm + _bip_perlin_noise2d(x_norm + kx, y_norm + ky,
-                                               persistence, 1, seed) *
-                               distortion) *
+            py = (y_norm +
+                  _bip_perlin_noise2d(x_norm + kx, y_norm + ky, persistence, 1,
+                                      seed) *
+                      distortion) *
                  height;
             x_map = (int)(px);
             y_map = (int)(py);
             x_diff = (px - (float)floor(px));
             y_diff = (py - (float)floor(py));
             index = (y_map * width + x_map);
-            level = 0;
             // if (x_map >= 0 && x_map < ((int32_t)width - 1) && y_map >= 0 &&
             // y_map < ((int32_t)height - 1)) {
             if (is_positive_and_inferior_to(x_map, (int32_t)width - 1) &&
                 is_positive_and_inferior_to(y_map, (int32_t)height - 1)) {
                 for (k = 0; k < depth; ++k) {
-                    level =
+                    uint8_t level =
                         (uint8_t)((float)src[index * depth + k] * (1 - x_diff) *
                                       (1 - y_diff) +
                                   (float)src[(index + 1) * depth + k] *
@@ -450,7 +451,6 @@ bip_status bip_mirror_borders_8u(uint8_t *src, int32_t src_width,
         src += src_stride;
         dst += dst_stride;
     }
-    src -= src_height * src_stride;
     dst -= (src_height + top) * dst_stride;
     for (y = 0; y < top; ++y) {
         memcpy(dst + (top - y - 1) * width2 * src_depth,
@@ -507,7 +507,6 @@ bip_status bip_mirror_borders_32f(float *src, int32_t src_width,
         src += src_stride;
         dst += dst_stride;
     }
-    src -= src_height * src_stride;
     dst -= (src_height + top) * dst_stride;
     for (y = 0; y < top; ++y) {
         memcpy(dst + (top - y - 1) * width2 * src_depth,
@@ -1203,10 +1202,9 @@ bip_status bip_rotate_image(uint8_t *src, size_t src_width, size_t src_height,
                             size_t dst_height, size_t dst_stride, size_t depth,
                             float angle, int32_t center_x, int32_t center_y,
                             bip_interpolation interpolation) {
-    size_t x, y, k, dst_row_sz = dst_width * depth;
+    size_t x, y, k;
     int32_t cosa, sina, tmp[4], x_map, y_map, index, rx, ry;
     float x_diff, y_diff;
-    uint8_t level;
 
     BIP_CHECK_SIZE(src_width);
     BIP_CHECK_SIZE(src_height);
@@ -1257,11 +1255,10 @@ bip_status bip_rotate_image(uint8_t *src, size_t src_width, size_t src_height,
                     x_diff = (float)(rx - (x_map << 16)) / 65536;
                     y_diff = (float)(ry - (y_map << 16)) / 65536;
                     index = (y_map * src_width + x_map);
-                    level = 0;
                     if (x_map >= 0 && x_map < (src_width - 1) && y_map >= 0 &&
                         y_map < (src_height - 1)) {
                         for (k = 0; k < depth; ++k) {
-                            level = (uint8_t)(
+                            uint8_t level = (uint8_t)(
                                 (float)src[index * depth + k] * (1 - x_diff) *
                                     (1 - y_diff) +
                                 (float)src[(index + 1) * depth + k] * (x_diff) *
@@ -1393,9 +1390,6 @@ bip_status bip_convert_u8_to_f32(uint8_t *src, size_t width, size_t height,
 bip_status bip_lbp_estimate(uint8_t *src, size_t width, size_t height,
                             size_t src_stride, uint8_t *dst,
                             size_t dst_stride) {
-    size_t x, y;
-    uint8_t pix = 0;
-
     BIP_CHECK_PTR(src);
     BIP_CHECK_PTR(dst);
     BIP_CHECK_SIZE(width);
@@ -1406,10 +1400,9 @@ bip_status bip_lbp_estimate(uint8_t *src, size_t width, size_t height,
     src += src_stride;
     dst += dst_stride;
 
-    for (y = 1; y < height - 1; ++y) {
+    for (size_t y = 1; y < height - 1; ++y) {
         dst[0] = 0;
-        for (x = 1; x < width - 1; ++x) {
-            pix = src[x];
+        for (size_t x = 1; x < width - 1; ++x) {
             dst[x] = (src[x - src_stride - 1] >= src[x]) << 0 |
                      (src[x - src_stride] >= src[x]) << 1 |
                      (src[x - src_stride + 1] >= src[x]) << 2 |

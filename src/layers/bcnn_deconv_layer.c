@@ -101,7 +101,8 @@ bcnn_status bcnn_add_deconvolutional_layer(
                               param->size - 2 * param->pad,
                           1);
     bcnn_tensor_allocate(&dst_tensor, net->mode);
-    bh_strfill(&dst_tensor.name, dst_id);
+    // bh_strfill(&dst_tensor.name, dst_id);
+    dst_tensor.name = dst_id;
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node

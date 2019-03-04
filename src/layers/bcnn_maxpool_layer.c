@@ -87,7 +87,8 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
                           out_w,                        // width
                           1);
     bcnn_tensor_allocate(&dst_tensor, net->mode);
-    bh_strfill(&dst_tensor.name, dst_id);
+    // bh_strfill(&dst_tensor.name, dst_id);
+    dst_tensor.name = dst_id;
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
@@ -236,22 +237,22 @@ void bcnn_forward_maxpool_layer_cpu_neon_2x2(bcnn_tensor *src_tensor,
 #endif
 
 void bcnn_forward_maxpool_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
-    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node->param;
 #ifdef BCNN_USE_CUDA
     return bcnn_forward_maxpool_layer_gpu(net, node);
 #else
 #ifdef BCNN_USE_NEON
+    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node->param;
     if (param->size == 2 && param->stride == 2) {
+        bcnn_tensor *src = &net->tensors[node->src[0]];
+        bcnn_tensor *dst = &net->tensors[node->dst[0]];
         return bcnn_forward_maxpool_layer_cpu_neon_2x2(src, dst);
     } else {
         return bcnn_forward_maxpool_layer_cpu(net, node);
     }
 #else
     return bcnn_forward_maxpool_layer_cpu(net, node);
-#endif
-#endif
+#endif  // BCNN_USE_NEON
+#endif  // BCNN_USE_CUDA
 }
 
 void bcnn_backward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
@@ -272,8 +273,6 @@ void bcnn_backward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
 }
 
 void bcnn_backward_maxpool_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
     return bcnn_backward_maxpool_layer_gpu(net, node);
 #else

@@ -57,12 +57,14 @@ bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
     p_net->mode = mode;
     // Create input node
     bcnn_tensor input = {0};
-    bh_strfill(&input.name, "input");
+    // bh_strfill(&input.name, "input");
+    input.name = "input";
     // Input node is set to be the first node
     bcnn_net_add_tensor(p_net, input);
     // Create label node
     bcnn_tensor label = {0};
-    bh_strfill(&label.name, "label");
+    label.name = "label";
+    // bh_strfill(&label.name, "label");
     // Label node is set to be the second node
     bcnn_net_add_tensor(p_net, label);
     // If required, allocate learner and data augmentation struct
@@ -194,7 +196,7 @@ bcnn_status bcnn_add_input(bcnn_net *net, int w, int h, int c,
     bcnn_tensor input = {0};
     bcnn_tensor_set_shape(&input, net->batch_size, c, h, w, 0);  // no gradient
     bcnn_tensor_allocate(&input, net->mode);
-    bh_strfill(&input.name, name);
+    input.name = name;
     // Add tensor to net
     return bcnn_net_add_tensor(net, input);
 }
@@ -320,13 +322,11 @@ float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor **out) {
         out_id = net->nodes[net->num_nodes - 1].src[0];
     }
 #ifdef BCNN_USE_CUDA
-    int sz =
-        bcnn_tensor_size(&net->tensors[net->nodes[net->num_nodes - 1].src[0]]);
-    bcnn_cuda_memcpy_dev2host(
-        net->tensors[net->nodes[net->num_nodes - 1].src[0]].data_gpu,
-        net->tensors[net->nodes[net->num_nodes - 1].src[0]].data, sz);
+    int sz = bcnn_tensor_size(&net->tensors[out_id]);
+    bcnn_cuda_memcpy_dev2host(net->tensors[out_id].data_gpu,
+                              net->tensors[out_id].data, sz);
 #endif
-    *out = &net->tensors[net->nodes[net->num_nodes - 1].src[0]];
+    *out = &net->tensors[out_id];
     // Return the loss value
     return bcnn_get_loss(net);
 }

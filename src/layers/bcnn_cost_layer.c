@@ -41,17 +41,6 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
 
-    // Fill nodes param
-    node.type = BCNN_LAYER_COST;
-    node.param_size = sizeof(bcnn_cost_param);
-    node.param = (bcnn_cost_param *)calloc(1, node.param_size);
-    bcnn_cost_param *param = (bcnn_cost_param *)node.param;
-    param->scale = scale;
-    param->loss = loss;
-    param->loss_metric = loss_metric;
-    node.forward = bcnn_forward_cost_layer;
-    node.backward = bcnn_backward_cost_layer;
-
     BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,
                        BCNN_INVALID_PARAMETER,
                        "Cost layer can't be the first layer of the network");
@@ -66,6 +55,17 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
                        "Cost layer: invalid input node name %s", src_id);
 
+    // Fill nodes param
+    node.type = BCNN_LAYER_COST;
+    node.param_size = sizeof(bcnn_cost_param);
+    node.param = (bcnn_cost_param *)calloc(1, node.param_size);
+    bcnn_cost_param *param = (bcnn_cost_param *)node.param;
+    param->scale = scale;
+    param->loss = loss;
+    param->loss_metric = loss_metric;
+    node.forward = bcnn_forward_cost_layer;
+    node.backward = bcnn_backward_cost_layer;
+
     // Setup label node
     bcnn_tensor_set_shape(&net->tensors[1], net->tensors[node.src[0]].n,
                           net->tensors[node.src[0]].c,
@@ -73,14 +73,15 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
                           net->tensors[node.src[0]].w, 0);
     bcnn_tensor_allocate(&net->tensors[1], net->mode);
     // Add pointer to label node to connection
-    bcnn_node_add_input(net, &node, 1 /* LABEL_NODE_ID */);
+    bcnn_node_add_input(net, &node, /*label_id=*/1);
 
     // Create output node
     bcnn_tensor_set_shape(
         &dst_tensor, net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
         net->tensors[node.src[0]].h, net->tensors[node.src[0]].w, 1);
     bcnn_tensor_allocate(&dst_tensor, net->mode);
-    bh_strfill(&dst_tensor.name, dst_id);
+    // bh_strfill(&dst_tensor.name, dst_id);
+    dst_tensor.name = dst_id;
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node

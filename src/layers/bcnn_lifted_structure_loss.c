@@ -102,14 +102,14 @@ void bcnn_lifted_struct_loss_forward(bcnn_net *net, bcnn_node *node) {
     for (int i = 0; i < batch_size; ++i) {
         // find out which element in the One Hot label array
         // is 1 and the index is the label
-        double label_i;
+        double label_i = -1;
         for (int l = 0; l < length; ++l) {
             if (label->data[i * length + l] > 0.0f) {
                 label_i = l;
                 break;
             }
         }
-        double label_j;
+        double label_j = -1;
         for (int j = 0; j < batch_size; ++j) {
             for (int l = 0; l < length; ++l) {
                 if (label->data[j * length + l] > 0.0f) {
@@ -299,8 +299,6 @@ void bcnn_lifted_struct_loss_forward(bcnn_net *net, bcnn_node *node) {
 
 void bcnn_lifted_struct_loss_backward(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
-    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
-    bcnn_tensor *label = &net->tensors[1];
     bcnn_cost_param *param = (bcnn_cost_param *)node->param;
     int batch_size = src_tensor->n;
     int channels = src_tensor->c;

@@ -34,14 +34,11 @@
 
 bcnn_status bcnn_add_softmax_layer(bcnn_net *net, const char *src_id,
                                    const char *dst_id) {
-    int num_nodes = net->num_nodes + 1;
-    int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
-
     if (net->num_nodes > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_tensors - 1; i >= 0; --i) {
+        for (int i = net->num_tensors - 1; i >= 0; --i) {
             if (strcmp(net->tensors[i].name, src_id) == 0) {
                 bcnn_node_add_input(net, &node, i);
                 is_src_node_found = 1;
@@ -63,7 +60,8 @@ bcnn_status bcnn_add_softmax_layer(bcnn_net *net, const char *src_id,
                           net->tensors[node.src[0]].w,  // width
                           1);
     bcnn_tensor_allocate(&dst_tensor, net->mode);
-    bh_strfill(&dst_tensor.name, dst_id);
+    // bh_strfill(&dst_tensor.name, dst_id);
+    dst_tensor.name = dst_id;
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node

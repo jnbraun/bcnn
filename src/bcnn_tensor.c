@@ -41,10 +41,10 @@
 static const size_t align_offset_ = 32;
 
 void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
-                        int has_grad, char *name, int net_state) {
+                        int has_grad, const char *name, int net_state) {
     bcnn_tensor_set_shape(t, n, c, h, w, has_grad);
     bcnn_tensor_allocate(t, net_state);
-    bh_strfill(&t->name, name);
+    t->name = name;
 }
 
 void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler) {
@@ -85,7 +85,7 @@ void bcnn_tensor_destroy(bcnn_tensor *t) {
     t->h = 0;
     t->w = 0;
     t->has_grad = 0;
-    bh_free(t->name);
+    // bh_free(t->name);
 }
 
 void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w,

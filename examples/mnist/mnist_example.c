@@ -143,8 +143,10 @@ int run(const char *train_img, const char *train_label, const char *test_img,
                          test_label);
 
     // Setup data augmentation
-    bcnn_set_data_augmentation(net, 5, 5, 30.f, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    bcnn_augment_data_with_shift(net, 5, 5);
+    bcnn_augment_data_with_rotation(net, 30.f);
 
+    // Finalize net config
     bcnn_compile_net(net);
 
     fprintf(stderr, "Start training...\n");

@@ -251,13 +251,26 @@ static void bcnn_reset_node_gradients(bcnn_net *net, bcnn_node *node) {
 
 /* Given a tensor name, return its index in the net tensors array or -1 if not
  * found */
-int bcnn_get_tensor_index_with_name(bcnn_net *net, const char *name) {
+int bcnn_get_tensor_index_by_name(bcnn_net *net, const char *name) {
     for (int i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, name) == 0) {
             return i;
         }
     }
     return -1;
+}
+
+bcnn_tensor *bcnn_get_tensor_by_index(bcnn_net *net, int index) {
+    if (index < 0 || (index > net->num_tensors - 1)) {
+        return NULL;
+    }
+    bcnn_tensor *tensor = &net->tensors[index];
+    return tensor;
+}
+
+bcnn_tensor *bcnn_get_tensor_by_name(bcnn_net *net, const char *name) {
+    int index = bcnn_get_tensor_index_by_name(net, name);
+    return bcnn_get_tensor_by_index(net, index);
 }
 
 void bcnn_forward(bcnn_net *net) {

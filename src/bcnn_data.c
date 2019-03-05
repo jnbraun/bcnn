@@ -113,37 +113,78 @@ static bcnn_status bcnn_load_image_from_path(bcnn_net *net, char *path, int w,
 }
 
 /* Setup data augmentation parameters */
-bcnn_status bcnn_set_data_augmentation(bcnn_net *net, int width_shift_range,
-                                       int height_shift_range,
-                                       float rotation_range, float min_scale,
-                                       float max_scale, int horizontal_flip,
-                                       int min_brightness, int max_brightness,
-                                       float min_constrast, float max_contrast,
-                                       float distortion, int add_blobs) {
+void bcnn_augment_data_with_shift(bcnn_net *net, int width_shift_range,
+                                  int height_shift_range) {
     if (net->data_aug == NULL) {
-        net->data_aug =
-            (bcnn_data_augmenter *)calloc(1, sizeof(bcnn_data_augmenter));
+        return;
+    }
+    bcnn_data_augmenter *aug = net->data_aug;
+    aug->range_shift_x = width_shift_range;
+    aug->range_shift_y = height_shift_range;
+}
+
+void bcnn_augment_data_with_scale(bcnn_net *net, float min_scale,
+                                  float max_scale) {
+    if (net->data_aug == NULL) {
+        return;
+    }
+    bcnn_data_augmenter *aug = net->data_aug;
+    aug->min_scale = min_scale;
+    aug->max_scale = max_scale;
+}
+
+void bcnn_augment_data_with_rotation(bcnn_net *net, float rotation_range) {
+    if (net->data_aug == NULL) {
+        return;
+    }
+    bcnn_data_augmenter *aug = net->data_aug;
+    aug->rotation_range = rotation_range;
+}
+
+void bcnn_augment_data_with_flip(bcnn_net *net, int horizontal_flip,
+                                 int vertical_flip) {
+    if (net->data_aug == NULL) {
+        return;
     }
     bcnn_data_augmenter *aug = net->data_aug;
     aug->apply_fliph = horizontal_flip;
-    aug->range_shift_x = width_shift_range;
-    aug->range_shift_y = height_shift_range;
-    aug->rotation_range = rotation_range;
+}
+
+void bcnn_augment_data_with_color_adjustment(bcnn_net *net, int min_brightness,
+                                             int max_brightness,
+                                             float min_constrast,
+                                             float max_contrast) {
+    if (net->data_aug == NULL) {
+        return;
+    }
+    bcnn_data_augmenter *aug = net->data_aug;
     aug->max_brightness = max_brightness;
     aug->min_brightness = min_brightness;
     aug->min_contrast = min_constrast;
     aug->max_contrast = max_contrast;
-    aug->min_scale = min_scale;
-    aug->max_scale = max_scale;
+}
+
+void bcnn_augment_data_with_blobs(bcnn_net *net, int max_blobs) {
+    if (net->data_aug == NULL) {
+        return;
+    }
+    bcnn_data_augmenter *aug = net->data_aug;
+    aug->max_random_spots = max_blobs;
+}
+
+void bcnn_augment_data_with_distortion(bcnn_net *net, float distortion) {
+    if (net->data_aug == NULL) {
+        return;
+    }
+    bcnn_data_augmenter *aug = net->data_aug;
     aug->distortion = distortion;
-    aug->max_random_spots = add_blobs;
-    return BCNN_SUCCESS;
 }
 
 /* Data augmentation */
-bcnn_status bcnn_data_augmentation(unsigned char *img, int width, int height,
-                                   int depth, bcnn_data_augmenter *param,
-                                   unsigned char *buffer) {
+bcnn_status bcnn_apply_data_augmentation(unsigned char *img, int width,
+                                         int height, int depth,
+                                         bcnn_data_augmenter *param,
+                                         unsigned char *buffer) {
     int sz = width * height * depth;
     unsigned char *img_scale = NULL;
     int x_ul = 0, y_ul = 0, w_scale, h_scale;
@@ -278,9 +319,9 @@ void bcnn_fill_input_tensor(bcnn_net *net, bcnn_loader *iter, char *path_img,
             int sz_img = bcnn_tensor_size3d(&net->tensors[0]);
             img_tmp = (unsigned char *)calloc(sz_img, sizeof(unsigned char));
         }
-        bcnn_data_augmentation(iter->input_uchar, net->tensors[0].w,
-                               net->tensors[0].h, net->tensors[0].c,
-                               net->data_aug, img_tmp);
+        bcnn_apply_data_augmentation(iter->input_uchar, net->tensors[0].w,
+                                     net->tensors[0].h, net->tensors[0].c,
+                                     net->data_aug, img_tmp);
         bh_free(img_tmp);
     }
     // Fill input tensor

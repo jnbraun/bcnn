@@ -106,9 +106,10 @@ typedef void (*bcnn_loader_terminate_func)(bcnn_loader *iter);
 
 bcnn_status bcnn_loader_next(bcnn_net *net);
 
-bcnn_status bcnn_data_augmentation(unsigned char *img, int width, int height,
-                                   int depth, bcnn_data_augmenter *param,
-                                   unsigned char *buffer);
+bcnn_status bcnn_apply_data_augmentation(unsigned char *img, int width,
+                                         int height, int depth,
+                                         bcnn_data_augmenter *param,
+                                         unsigned char *buffer);
 
 bcnn_status bcnn_open_dataset(bcnn_loader *iter, bcnn_net *net,
                               const char *train_path,

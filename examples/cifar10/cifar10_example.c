@@ -59,7 +59,6 @@ static int simple_net(bcnn_net *net) {
     bcnn_add_cost_layer(net, BCNN_LOSS_EUCLIDEAN, BCNN_METRIC_ERROR_RATE, 1.0f,
                         "softmax", "label", "cost");
 
-    bcnn_compile_net(net);
     return 0;
 }
 
@@ -139,8 +138,6 @@ static int resnet18(bcnn_net *net) {
     bcnn_add_softmax_layer(net, "fc", "softmax");
     bcnn_add_cost_layer(net, BCNN_LOSS_EUCLIDEAN, BCNN_METRIC_ERROR_RATE, 1.0f,
                         "softmax", "label", "cost");
-
-    bcnn_compile_net(net);
 
     return 0;
 }
@@ -248,8 +245,14 @@ int run(char *train_data, char *test_data, model_type model) {
                          NULL);
 
     // Setup data augmentation
-    bcnn_set_data_augmentation(net, 6, 6, 15.f, 0, 0, 1, -60, 60, 0.6f, 1.5f, 0,
-                               0);
+    bcnn_augment_data_with_shift(net, 5, 5);
+    bcnn_augment_data_with_rotation(net, 15.f);
+    bcnn_augment_data_with_flip(net, 1, 0);
+    bcnn_augment_data_with_color_adjustment(net, -60, 60, 0.6f, 1.5f);
+
+    // Finalize net setup
+    bcnn_compile_net(net);
+
     fprintf(stderr, "Start training...\n");
     if (train_cifar10(net, train_data, test_data, 400000, 10, &error_train) !=
         0) {

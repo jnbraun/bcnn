@@ -134,9 +134,9 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
         if (net->data_aug->random_fliph) {
             net->data_aug->apply_fliph = ((float)rand() / RAND_MAX > 0.5f);
         }
-        bcnn_data_augmentation(iter->input_net, net->tensors[0].w,
-                               net->tensors[0].h, net->tensors[0].c,
-                               net->data_aug, iter->input_uchar);
+        bcnn_apply_data_augmentation(iter->input_net, net->tensors[0].w,
+                                     net->tensors[0].h, net->tensors[0].c,
+                                     net->data_aug, iter->input_uchar);
     }
     memcpy(iter->input_uchar, iter->input_net,
            net->tensors[0].c * net->tensors[0].w * net->tensors[0].h);

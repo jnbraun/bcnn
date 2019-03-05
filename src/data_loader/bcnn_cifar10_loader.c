@@ -90,10 +90,9 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
     }
 
     // Read label
-    BCNN_CHECK_AND_LOG(
-        net->log_ctx,
-        fread((char *)&l, 1, sizeof(char), iter->f_current) == sizeof(char),
-        BCNN_INVALID_DATA, "Corrupted Cifar data");
+    BCNN_CHECK_AND_LOG(net->log_ctx, fread((char *)&l, 1, sizeof(char),
+                                           iter->f_current) == sizeof(char),
+                       BCNN_INVALID_DATA, "Corrupted Cifar data");
     int class_label = (int)l;
     // Read img
     char tmp[3072];
@@ -128,9 +127,9 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
                 iter->input_width * iter->input_height * iter->input_depth;
             img_tmp = (unsigned char *)calloc(sz_img, sizeof(unsigned char));
         }
-        bcnn_data_augmentation(iter->input_uchar, iter->input_width,
-                               iter->input_height, iter->input_depth,
-                               net->data_aug, img_tmp);
+        bcnn_apply_data_augmentation(iter->input_uchar, iter->input_width,
+                                     iter->input_height, iter->input_depth,
+                                     net->data_aug, img_tmp);
         bh_free(img_tmp);
     }
     // bip_write_image("test.png", iter->input_uchar, iter->input_width,

@@ -79,8 +79,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                           net->tensors[node.src[0]].w,  // width
                           1);
     bcnn_tensor_allocate(&dst_tensor, net->mode);
-    // bh_strfill(&dst_tensor.name, dst_id);
-    dst_tensor.name = dst_id;
+    bh_strfill(&dst_tensor.name, dst_id);
     // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
@@ -99,9 +98,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     return 0;
 }
 
-typedef struct bbox {
-    float x, y, w, h;
-} bbox;
+typedef struct bbox { float x, y, w, h; } bbox;
 
 static float overlap(float x1, float w1, float x2, float w2) {
     float l1 = x1 - w1 / 2;

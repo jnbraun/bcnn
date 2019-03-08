@@ -244,7 +244,7 @@ struct bcnn_tensor {
     int h;            /* Spatial height */
     int w;            /* Spatial width */
     int has_grad;     /* If has gradient data or not */
-    const char *name; /* Tensor name */
+    char *name;       /* Tensor name */
     float *data;      /* Pointer to data */
     float *grad_data; /* Pointer to gradient data */
 #ifdef BCNN_USE_CUDA
@@ -576,14 +576,14 @@ BCNN_API void bcnn_convert_img_to_float(const uint8_t *src, int w, int h, int c,
  * \brief Computes the model prediction on the current batch data and computes
  * the loss if cost layers are defined.
  *
- * \param[in]       Pointer to net instance.
+ * \param[in]   net             Pointer to net instance.
  */
 BCNN_API void bcnn_forward(bcnn_net *net);
 
 /**
  * \brief Back-propagates the gradients of the loss w.r.t. the model weights.
  *
- * \param[in]       Pointer to net instance.
+ * \param[in]   net             Pointer to net instance.
  */
 BCNN_API void bcnn_backward(bcnn_net *net);
 
@@ -591,7 +591,7 @@ BCNN_API void bcnn_backward(bcnn_net *net);
  * \brief Updates the model parameters according to the learner configuration
  * and the calculated gradients.
  *
- * \param[in]       Pointer to net instance.
+ * \param[in]   net            Pointer to net instance.
  */
 BCNN_API void bcnn_update(bcnn_net *net);
 
@@ -609,7 +609,7 @@ BCNN_API void bcnn_update(bcnn_net *net);
  * The common use-case for this function is to be called inside a training loop
  * See: examples/mnist/mnist_example.c for a real-case example.
  *
- * \param[in]       Pointer to net instance.
+ * \param[in]   net            Pointer to net instance.
  *
  * \return The loss value.
  */
@@ -622,9 +622,10 @@ BCNN_API float bcnn_train_on_batch(bcnn_net *net);
  * - Load the next data batch (and performs data augmentation if required)
  * - Compute the forward pass given the loaded data batch
  *
- * \param[in]       Pointer to net instance.
- * \param[out]      Pointer to output tensor hold in the net instance. It must
- *                  *not* be allocated neither be freed by the user.
+ * \param[in]   net            Pointer to net instance.
+ * \param[out]  out            Pointer to output tensor hold in the net
+ *                             instance. It must *not* be allocated neither be
+ *                             freed by the user.
  *
  * \return The loss value.
  */
@@ -659,7 +660,7 @@ BCNN_API bcnn_output_detection *bcnn_yolo_get_detections(
  *
  * \return Tensor index. Returns -1 is invalid name.
  */
-int bcnn_get_tensor_index_by_name(bcnn_net *net, const char *name);
+BCNN_API int bcnn_get_tensor_index_by_name(bcnn_net *net, const char *name);
 
 /**
  * \brief Gets a pointer to a tensor struct, given its index.
@@ -670,7 +671,7 @@ int bcnn_get_tensor_index_by_name(bcnn_net *net, const char *name);
  *
  * \return A pointer to tensor struct. Returns NULL if index is invalid.
  */
-bcnn_tensor *bcnn_get_tensor_by_index(bcnn_net *net, int index);
+BCNN_API bcnn_tensor *bcnn_get_tensor_by_index(bcnn_net *net, int index);
 
 /**
  * \brief Gets a pointer to a tensor struct, given its name.
@@ -686,9 +687,12 @@ bcnn_tensor *bcnn_get_tensor_by_index(bcnn_net *net, int index);
  * for (;;) {bcnn_tensor *pt = bcnn_get_tensor_by_name(some_net,
  * "some_tensor");}
  *
+ * \param[in]   net         Pointer to net instance.
+ * \param[in]   name        Tensor name.
+ *
  * \return A pointer to tensor struct. Returns NULL is name is invalid.
  */
-bcnn_tensor *bcnn_get_tensor_by_name(bcnn_net *net, const char *name);
+BCNN_API bcnn_tensor *bcnn_get_tensor_by_name(bcnn_net *net, const char *name);
 
 /****************************************************************************
  * BCNN layers API

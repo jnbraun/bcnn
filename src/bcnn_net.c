@@ -57,14 +57,12 @@ bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
     p_net->mode = mode;
     // Create input node
     bcnn_tensor input = {0};
-    // bh_strfill(&input.name, "input");
-    input.name = "input";
+    bh_strfill(&input.name, "input");
     // Input node is set to be the first node
     bcnn_net_add_tensor(p_net, input);
     // Create label node
     bcnn_tensor label = {0};
-    label.name = "label";
-    // bh_strfill(&label.name, "label");
+    bh_strfill(&label.name, "label");
     // Label node is set to be the second node
     bcnn_net_add_tensor(p_net, label);
     // If required, allocate learner and data augmentation struct
@@ -196,7 +194,7 @@ bcnn_status bcnn_add_input(bcnn_net *net, int w, int h, int c,
     bcnn_tensor input = {0};
     bcnn_tensor_set_shape(&input, net->batch_size, c, h, w, 0);  // no gradient
     bcnn_tensor_allocate(&input, net->mode);
-    input.name = name;
+    bh_strfill(&input.name, name);
     // Add tensor to net
     return bcnn_net_add_tensor(net, input);
 }

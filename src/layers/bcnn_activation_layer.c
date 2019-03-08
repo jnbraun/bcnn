@@ -35,13 +35,12 @@ bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
                                       const char *src_id) {
     bcnn_node node = {0};
     char type_name[256];
-    int i;
 
     BCNN_CHECK_AND_LOG(
         net->log_ctx, net->num_nodes >= 1, BCNN_INVALID_PARAMETER,
         "Activation layer can't be the first layer of the network");
     int is_src_node_found = 0;
-    for (i = net->num_tensors - 1; i >= 0; --i) {
+    for (int i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id) == 0) {
             bcnn_node_add_input(net, &node, i);
             bcnn_node_add_output(net, &node, i);

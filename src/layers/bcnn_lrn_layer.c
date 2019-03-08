@@ -59,9 +59,8 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
                           net->tensors[node.src[0]].w,  // width
                           1);
     bcnn_tensor_allocate(&dst_tensor, net->mode);
-    // bh_strfill(&dst_tensor.name, dst_id);
-    dst_tensor.name = dst_id;
-    // Add node to net
+    bh_strfill(&dst_tensor.name, dst_id);
+    // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);

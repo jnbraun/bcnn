@@ -28,13 +28,12 @@
 
 bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, const char *src_id,
                                     const char *dst_id) {
-    int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
 
     if (net->num_nodes > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_tensors - 1; i >= 0; --i) {
+        for (int i = net->num_tensors - 1; i >= 0; --i) {
             if (strcmp(net->tensors[i].name, src_id) == 0) {
                 bcnn_node_add_input(net, &node, i);
                 is_src_node_found = 1;
@@ -55,9 +54,8 @@ bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, const char *src_id,
                           net->tensors[node.src[0]].w * size,  // width
                           1);
     bcnn_tensor_allocate(&dst_tensor, net->mode);
-    // bh_strfill(&dst_tensor.name, dst_id);
-    dst_tensor.name = dst_id;
-    // Add node to net
+    bh_strfill(&dst_tensor.name, dst_id);
+    // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);

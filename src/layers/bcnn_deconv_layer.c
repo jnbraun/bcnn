@@ -39,13 +39,12 @@
 bcnn_status bcnn_add_deconvolutional_layer(
     bcnn_net *net, int n, int size, int stride, int pad, bcnn_filler_type init,
     bcnn_activation activation, const char *src_id, const char *dst_id) {
-    int i, sz;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
 
     if (net->num_nodes > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_tensors - 1; i >= 0; --i) {
+        for (int i = net->num_tensors - 1; i >= 0; --i) {
             if (strcmp(net->tensors[i].name, src_id) == 0) {
                 bcnn_node_add_input(net, &node, i);
                 is_src_node_found = 1;
@@ -101,14 +100,13 @@ bcnn_status bcnn_add_deconvolutional_layer(
                               param->size - 2 * param->pad,
                           1);
     bcnn_tensor_allocate(&dst_tensor, net->mode);
-    // bh_strfill(&dst_tensor.name, dst_id);
-    dst_tensor.name = dst_id;
+    bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
-    sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
-         net->tensors[node.src[0]].c * size * size;
+    int sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
+             net->tensors[node.src[0]].c * size * size;
     param->conv_workspace = (float *)calloc(sz, sizeof(float));
     if (net->learner != NULL) {
         if (net->learner->optimizer == BCNN_OPTIM_ADAM) {

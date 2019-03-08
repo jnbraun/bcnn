@@ -80,8 +80,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
         &dst_tensor, net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
         net->tensors[node.src[0]].h, net->tensors[node.src[0]].w, 1);
     bcnn_tensor_allocate(&dst_tensor, net->mode);
-    // bh_strfill(&dst_tensor.name, dst_id);
-    dst_tensor.name = dst_id;
+    bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
     // Add tensor output index to node

@@ -34,6 +34,186 @@
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
+typedef struct {
+    char *name;
+    char *val;
+} bcnn_parser_key;
+
+typedef struct {
+    int num_keys;
+    char *name;
+    bcnn_parser_key *keys;
+} bcnn_parser_section;
+
+typedef struct {
+    int num_sections;
+    bcnn_parser_section *sections;
+} bcnn_parser_ini;
+
+int bcnn_parser_add_key(bcnn_parser_section *section, const char *line) {
+    if (section == NULL) {
+        fprintf(stderr, "[ERROR] No valid section for key %s\n", line);
+    }
+    char **tok = NULL;
+    int num_toks = bh_strsplit(line, '=', &tok);
+    if (num_toks != 2) {
+        fprintf(stderr, "[ERROR] Invalid key section %s\n", line);
+        return -1;
+    }
+    bcnn_parser_key key = {.name = tok[0], .val = tok[1]};
+    section->num_keys++;
+    bcnn_parser_key *p_keys = (bcnn_parser_key *)realloc(
+        section->keys, section->num_keys * sizeof(bcnn_parser_key));
+    if (p_keys == NULL) {
+        fprintf(stderr, "[ERROR] Failed allocation\n");
+        for (int i = 0; i < num_toks; ++i) {
+            bh_free(tok[i]);
+        }
+        bh_free(tok);
+        return -1;
+    }
+    section->keys = p_keys;
+    section->keys[section->num_keys - 1] = key;
+    return 0;
+}
+
+int bcnn_parser_add_section(bcnn_parser_ini *config, const char *line) {
+    bcnn_parser_section section = {0};
+    config->num_sections++;
+    bcnn_parser_section *p_sections = (bcnn_parser_section *)realloc(
+        config->sections, config->num_sections * sizeof(bcnn_parser_section));
+    if (p_sections == NULL) {
+        fprintf(stderr, "[ERROR] Failed allocation\n");
+        return -1;
+    }
+    section.name = line;
+    config->sections = p_sections;
+    config->sections[config->num_sections - 1] = section;
+    return 0;
+}
+
+void bcnn_parser_free(bcnn_parser_ini *config) {
+    for (int i = 0; i < config->num_sections; ++i) {
+        for (int j = 0; j < config->sections[i].num_keys; ++j) {
+            bh_free(config->sections[i].keys[j].name);
+            bh_free(config->sections[i].keys[j].val);
+        }
+        bh_free(config->sections[i].keys);
+        bh_free(config->sections[i].name);
+    }
+    bh_free(config->sections);
+}
+
+bcnn_parser_ini *bcnn_parser_read_ini(const char *filename) {
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        fprintf(stderr, "[ERROR] Could not open file: %s\n", filename);
+        return -1;
+    }
+    char *line = NULL;
+    bcnn_parser_ini *config =
+        (bcnn_parser_ini *)calloc(1, sizeof(bcnn_parser_ini));
+    bcnn_parser_section *section = NULL;
+    while ((line = bh_fgetline(file)) != NULL) {
+        bh_strstrip(line);
+        switch (line[0]) {
+            case '[': {
+                if (bcnn_parser_add_section(config, line) != 0) {
+                    fprintf(stderr, "[ERROR] Failed to parse config file %s\n",
+                            filename);
+                    bcnn_parser_free(config);
+                    return NULL;
+                }
+                section = &config->sections[config->num_sections - 1];
+                break;
+            }
+            case '!':
+            case '\0':
+            case '#':
+            case ';':
+                bh_free(line);
+                break;
+            default: {
+                if (bcnn_parser_add_key(section, line) != 0) {
+                    fprintf(stderr, "[ERROR] Failed to parse config file %s\n",
+                            filename);
+                    bcnn_parser_free(config);
+                    return NULL;
+                }
+                break;
+            }
+        }
+    }
+    fclose(file);
+    return options;
+}
+
+bool bcnn_read_mode(const char *name, const char *val, bcnn_mode *mode) {
+    if (strcmp(name, "task") == 0 || strcmp(name, "mode") == 0) {
+        if (strcmp(val, "train") == 0)
+            mode = BCNN_MODE_TRAIN;
+        else if (strcmp(val, "predict") == 0) {
+            mode = BCNN_MODE_PREDICT;
+        } else if (strcmp(val, "valid") == 0) {
+            mode = BCNN_MODE_PREDICT;
+        } else {
+            bh_log(BH_LOG_ERROR,
+                   "Invalid mode parameter %s. Available modes are: "
+                   "'train', 'predict', 'valid'\n",
+                   val);
+            return false;
+        }
+        return true;
+    } else {
+        bh_log(BH_LOG_ERROR, "Invalid line %s in config file. Fist line should
+               provide 'mode' parameter\n ",
+               line);
+        return false;
+    }
+}
+
+bcnn_status bcnn_create_net_from_config(bcnn_net **net, const char *conf_name,
+                                        const char *model_name) {
+    bcnn_parser_ini *config = bcnn_parser_read_ini(conf_name);
+    if (config == NULL) {
+        return BCNN_INVALID_PARAMETER;
+    }
+    if (config->num_sections == 0 || config->sections == NULL) {
+        bh_log(BH_LOG_ERROR, "Empty config file %s\n", conf_name);
+        bcnn_parser_free(config);
+        return BCNN_INVALID_PARAMETER;
+    }
+    if (strmcp(config->sections[0].name, "[net]") != 0 ||
+        strmcp(config->sections[0].name, "[network]") != 0) {
+        bh_log(BH_LOG_ERROR, "First section must be [net] or [network]\n");
+        bcnn_parser_free(config);
+        return BCNN_INVALID_PARAMETER;
+    }
+    if (config->sections[0].keys == NULL || config->sections[0].num_keys == 0) {
+        bh_log(BH_LOG_ERROR, "Empty section [net] in file %s\n", conf_name);
+        bcnn_parser_free(config);
+        return BCNN_INVALID_PARAMETER;
+    }
+    // First key must be the network mode
+    char *name = config->sections[0].keys[0].name;
+    char *val = config->sections[0].keys[0].val;
+    bcnn_mode mode;
+    if (bcnn_read_mode(name, val, &mode) == false) {
+        bcnn_parser_free(config);
+        return BCNN_INVALID_PARAMETER;
+    }
+    // Create net
+    BCNN_CHECK_STATUS(bcnn_init_net(net, mode));
+    bcnn_net *p_net = *net;
+    for (int i = 1; i < config->sections[0].num_keys; ++i) {
+        bcnn_set_param(p_net, config->sections[0].keys[i].name,
+                       config->sections[0].keys[i].val);
+    }
+
+    bcnn_parser_free(config);
+    return BCNN_SUCCESS;
+}
+
 int bcnncl_init_from_config(bcnn_net **net, char *config_file,
                             bcnncl_param *param) {
     char *curr_layer = NULL;
@@ -57,7 +237,7 @@ int bcnncl_init_from_config(bcnn_net **net, char *config_file,
     FILE *file = fopen(config_file, "rt");
     if (file == NULL) {
         fprintf(stderr, "Couldn't open file: %s\n", config_file);
-        exit(-1);
+        return -1;
     }
 
     // Read first line to determine network mode

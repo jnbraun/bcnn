@@ -59,7 +59,6 @@ static int simple_net(bcnn_net *net) {
     bcnn_add_cost_layer(net, BCNN_LOSS_EUCLIDEAN, BCNN_METRIC_ERROR_RATE, 1.0f,
                         "softmax", "label", "cost");
 
-    bcnn_compile_net(net);
     return 0;
 }
 
@@ -140,32 +139,10 @@ static int resnet18(bcnn_net *net) {
     bcnn_add_cost_layer(net, BCNN_LOSS_EUCLIDEAN, BCNN_METRIC_ERROR_RATE, 1.0f,
                         "softmax", "label", "cost");
 
-    bcnn_compile_net(net);
-
     return 0;
 }
 
 int create_network(bcnn_net *net, model_type type) {
-    /*net->learner->optimizer = BCNN_OPTIM_ADAM;
-    net->learner->learning_rate = 0.005f;
-    net->learner->gamma = 0.00002f;
-    net->learner->decay = 0.0005f;
-    net->learner->momentum = 0.9f;
-    net->learner->decay_type = BCNN_LR_DECAY_SIGMOID;
-    net->learner->step = 40000;
-    net->learner->beta1 = 0.9f;
-    net->learner->beta2 = 0.999f;*/
-
-    // Data augmentation
-    /*net->data_aug->range_shift_x = 6;
-    net->data_aug->range_shift_y = 6;
-    net->data_aug->rotation_range = 15.0f;
-    net->data_aug->max_brightness = 60;
-    net->data_aug->min_brightness = -60;
-    net->data_aug->max_contrast = 1.5f;
-    net->data_aug->min_contrast = 0.6f;
-    net->data_aug->random_fliph = 1;*/
-
     // Define the network topology
     switch (type) {
         case SIMPLENET:
@@ -223,7 +200,6 @@ int train_cifar10(bcnn_net *net, char *train_img, char *test_img, int nb_iter,
     bh_timer_start(&t);
     for (int i = 0; i < nb_iter; ++i) {
         sum_error += bcnn_train_on_batch(net);
-
         if (i % eval_period == 0 && i > 0) {
             bh_timer_stop(&t);
             bh_timer_start(&tp);
@@ -269,11 +245,16 @@ int run(char *train_data, char *test_data, model_type model) {
                          NULL);
 
     // Setup data augmentation
-    bcnn_set_data_augmentation(net, 6, 6, 15.f, 0, 0, 1, -60, 60, 0.6f, 1.5f, 0,
-                               0);
+    bcnn_augment_data_with_shift(net, 5, 5);
+    bcnn_augment_data_with_rotation(net, 15.f);
+    bcnn_augment_data_with_flip(net, 1, 0);
+    bcnn_augment_data_with_color_adjustment(net, -60, 60, 0.6f, 1.5f);
+
+    // Finalize net setup
+    bcnn_compile_net(net);
 
     fprintf(stderr, "Start training...\n");
-    if (train_cifar10(net, train_data, test_data, 4000000, 10, &error_train) !=
+    if (train_cifar10(net, train_data, test_data, 400000, 10, &error_train) !=
         0) {
         fprintf(stderr, "Can not perform training");
         bcnn_end_net(&net);

@@ -271,7 +271,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_yolo_param *param,
                         net->tensors[0].w, net->tensors[0].h,
                         src_tensor->w * src_tensor->h);
                     float best_iou = 0;
-                    int best_box = 0;
+                    // int best_box = 0;
                     for (t = 0; t < param->max_boxes; ++t) {
                         bbox truth =
                             float_to_box(label->data + t * (param->coords + 1) +
@@ -285,7 +285,7 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_yolo_param *param,
                         float iou = box_iou(pred, truth);
                         if (iou > best_iou) {
                             best_iou = iou;
-                            best_box = t;
+                            // best_box = t;
                         }
                     }
                     /*fprintf(stderr, "best_box %d best_iou %f\n", best_box,
@@ -381,7 +381,6 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_yolo_param *param,
                 delta_yolo_class(dst_tensor->data, dst_tensor->grad_data,
                                  class_index, class, param->classes,
                                  src_tensor->w * src_tensor->h, &avg_cat);
-                int stride = src_tensor->w * src_tensor->h;
                 ++count;
                 ++class_count;
                 if (iou > 0.5f) {
@@ -578,6 +577,9 @@ bcnn_output_detection *bcnn_yolo_get_detections(bcnn_net *net, int batch, int w,
                     (float *)calloc(param->coords - 4, sizeof(float));
             }
         }
+    } else {
+        *num_dets = 0;
+        return NULL;
     }
 
     // Fill the detected boxes

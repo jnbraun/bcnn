@@ -243,14 +243,14 @@ struct bcnn_tensor {
     int c;            /* Number of channels = depth */
     int h;            /* Spatial height */
     int w;            /* Spatial width */
+    int has_grad;     /* If has gradient data or not */
+    char *name;       /* Tensor name */
     float *data;      /* Pointer to data */
     float *grad_data; /* Pointer to gradient data */
 #ifdef BCNN_USE_CUDA
     float *data_gpu;      /* Pointer to data on gpu */
     float *grad_data_gpu; /* Pointer to gradient data on gpu */
 #endif
-    int has_grad; /* If has gradient data or not */
-    char *name;   /* Tensor name */
 };
 
 /**
@@ -405,14 +405,83 @@ BCNN_API bcnn_status bcnn_set_data_loader(bcnn_net *net, bcnn_loader_type type,
                                           const char *test_path_extra);
 
 /**
- * \brief Sets the online data augmentation parameters that will be applied on
- * the training data.
+ * \brief Generates random shifts (i.e. translations) on inputs.
+ *
+ * \param[in]   net                 Pointer to net instance.
+ * \param[in]   width_shift_range   Horizontal shift range in pixels.
+ * \param[in]   height_shift_range  Vertical shift range in pixels.
  */
-BCNN_API bcnn_status bcnn_set_data_augmentation(
-    bcnn_net *net, int width_shift_range, int height_shift_range,
-    float rotation_range, float min_scale, float max_scale, int horizontal_flip,
-    int min_brightness, int max_brightness, float min_constrast,
-    float max_contrast, float distortion, int add_blobs);
+BCNN_API void bcnn_augment_data_with_shift(bcnn_net *net, int width_shift_range,
+                                           int height_shift_range);
+
+/**
+ * \brief Generates random scalings on inputs.
+ *
+ * \param[in]   net                 Pointer to net instance.
+ * \param[in]   min_scale           Minimal scale coefficient.
+ * \param[in]   max_scale           Maximal scale coefficent.
+ */
+BCNN_API void bcnn_augment_data_with_scale(bcnn_net *net, float min_scale,
+                                           float max_scale);
+
+/**
+ * \brief Generates random rotations on inputs.
+ *
+ * \param[in]   net                 Pointer to net instance.
+ * \param[in]   rotation_range      Rotation angle range in degree. Angle will
+ *                                  randomly be sampled in [-rotation_range / 2;
+ *                                  rotation_range / 2].
+ */
+BCNN_API void bcnn_augment_data_with_rotation(bcnn_net *net,
+                                              float rotation_range);
+
+/**
+ * \brief Generates random flips on inputs.
+ *
+ * \param[in]   net                 Pointer to net instance.
+ * \param[in]   horizontal_flip     If set to 1, will randomly flip inputs
+ *                                  horizontally.
+ * \param[in]   vertical_flip       If set to 1, will randomly flip inputs
+ *                                  vertically. Not implemented.
+ */
+BCNN_API void bcnn_augment_data_with_flip(bcnn_net *net, int horizontal_flip,
+                                          int vertical_flip);
+
+/**
+ * \brief Generates random brightness and contrast adjustments on inputs.
+ *
+ * \param[in]   net                 Pointer to net instance.
+ * \param[in]   min_brightness      Minimal brightness additive factor (range in
+ *                                  [-255;255]).
+ * \param[in]   max_brightness      Maximal brightness additive factor (range in
+ *                                  [-255;255]).
+ * \param[in]   min_contrast        Minimal contrast scale factor.
+ * \param[in]   max_contrast        Maximal contrast scale factor.
+ */
+BCNN_API void bcnn_augment_data_with_color_adjustment(bcnn_net *net,
+                                                      int min_brightness,
+                                                      int max_brightness,
+                                                      float min_constrast,
+                                                      float max_contrast);
+
+/**
+ * \brief Generates random saturated blobs on inputs.
+ *
+ * \param[in]   net                 Pointer to net instance.
+ * \param[in]   max_blobs           Maximal number of blobs generated on an
+ *                                  input i.e. will randomly generates
+ *                                  [0;max_blobs] blobs.
+ */
+BCNN_API void bcnn_augment_data_with_blobs(bcnn_net *net, int max_blobs);
+
+/**
+ * \brief Generates random 2d-perlin-noise based distortion on inputs.
+ *
+ * \param[in]   net                 Pointer to net instance.
+ * \param[in]   distortion          Distortion intensity.
+ */
+BCNN_API void bcnn_augment_data_with_distortion(bcnn_net *net,
+                                                float distortion);
 
 /**
  * \brief Sets the network mode.
@@ -507,14 +576,14 @@ BCNN_API void bcnn_convert_img_to_float(const uint8_t *src, int w, int h, int c,
  * \brief Computes the model prediction on the current batch data and computes
  * the loss if cost layers are defined.
  *
- * \param[in]       Pointer to net instance.
+ * \param[in]   net             Pointer to net instance.
  */
 BCNN_API void bcnn_forward(bcnn_net *net);
 
 /**
  * \brief Back-propagates the gradients of the loss w.r.t. the model weights.
  *
- * \param[in]       Pointer to net instance.
+ * \param[in]   net             Pointer to net instance.
  */
 BCNN_API void bcnn_backward(bcnn_net *net);
 
@@ -522,7 +591,7 @@ BCNN_API void bcnn_backward(bcnn_net *net);
  * \brief Updates the model parameters according to the learner configuration
  * and the calculated gradients.
  *
- * \param[in]       Pointer to net instance.
+ * \param[in]   net            Pointer to net instance.
  */
 BCNN_API void bcnn_update(bcnn_net *net);
 
@@ -540,7 +609,7 @@ BCNN_API void bcnn_update(bcnn_net *net);
  * The common use-case for this function is to be called inside a training loop
  * See: examples/mnist/mnist_example.c for a real-case example.
  *
- * \param[in]       Pointer to net instance.
+ * \param[in]   net            Pointer to net instance.
  *
  * \return The loss value.
  */
@@ -553,16 +622,17 @@ BCNN_API float bcnn_train_on_batch(bcnn_net *net);
  * - Load the next data batch (and performs data augmentation if required)
  * - Compute the forward pass given the loaded data batch
  *
- * \param[in]       Pointer to net instance.
- * \param[out]      Pointer to output tensor hold in the net instance. It must
- *                  *not* be allocated neither be freed by the user.
+ * \param[in]   net            Pointer to net instance.
+ * \param[out]  out            Pointer to output tensor hold in the net
+ *                             instance. It must *not* be allocated neither be
+ *                             freed by the user.
  *
  * \return The loss value.
  */
 BCNN_API float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor **out);
 
 /**
- * \brief Get the output results of an object detection model.
+ * \brief Gets the output results of an object detection model.
  *
  * \param[in]   net         Pointer to net instance.
  * \param[in]   batch       Batch size.
@@ -581,6 +651,48 @@ BCNN_API float bcnn_predict_on_batch(bcnn_net *net, bcnn_tensor **out);
 BCNN_API bcnn_output_detection *bcnn_yolo_get_detections(
     bcnn_net *net, int batch, int width, int height, int netw, int neth,
     float thresh, int relative, int *num_dets);
+
+/**
+ * \brief Gets a tensor's index, given its name.
+ *
+ * \param[in]   net         Pointer to net instance.
+ * \param[in]   name        Tensor name.
+ *
+ * \return Tensor index. Returns -1 is invalid name.
+ */
+BCNN_API int bcnn_get_tensor_index_by_name(bcnn_net *net, const char *name);
+
+/**
+ * \brief Gets a pointer to a tensor struct, given its index.
+ *
+ * \param[in]   net         Pointer to net instance.
+ * \param[in]   index       Tensor index (accessible via
+ *                          'bcnn_get_tensor_index_by_name').
+ *
+ * \return A pointer to tensor struct. Returns NULL if index is invalid.
+ */
+BCNN_API bcnn_tensor *bcnn_get_tensor_by_index(bcnn_net *net, int index);
+
+/**
+ * \brief Gets a pointer to a tensor struct, given its name.
+ *
+ * \note For performance-critical code, it is better to use a combination
+ * of 'bcnn_get_tensor_index_by_name' and 'bcnn_get_tensor_by_index' instead of
+ * this function i.e. prefer using:
+ *
+ * int index = bcnn_get_tensor_index_by_name(some_net, "some_tensor");
+ * for (;;) {bcnn_tensor *pt = bcnn_get_tensor_by_index(some_net, index);}
+ *
+ * instead of:
+ * for (;;) {bcnn_tensor *pt = bcnn_get_tensor_by_name(some_net,
+ * "some_tensor");}
+ *
+ * \param[in]   net         Pointer to net instance.
+ * \param[in]   name        Tensor name.
+ *
+ * \return A pointer to tensor struct. Returns NULL is name is invalid.
+ */
+BCNN_API bcnn_tensor *bcnn_get_tensor_by_name(bcnn_net *net, const char *name);
 
 /****************************************************************************
  * BCNN layers API

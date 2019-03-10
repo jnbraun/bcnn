@@ -43,19 +43,11 @@ bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
                                           bcnn_activation activation,
                                           const char *src_id,
                                           const char *dst_id) {
-    int num_nodes = net->num_nodes + 1;
-    int i, sz;
     bcnn_node node = {0};
-    float std_init = 0.0f;
-    bcnn_gauss_gen g = {0};
-#ifdef BCNN_USE_CUDNN
-    size_t cudnn_wrk_sz = 0;
-#endif
     bcnn_tensor dst_tensor = {0};
-
     if (net->num_nodes > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_tensors - 1; i >= 0; --i) {
+        for (int i = net->num_tensors - 1; i >= 0; --i) {
             if (strcmp(net->tensors[i].name, src_id) == 0) {
                 bcnn_node_add_input(net, &node, i);
                 is_src_node_found = 1;
@@ -139,17 +131,12 @@ bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
-         net->tensors[node.src[0]].c * size * size;
-
 #ifdef BCNN_USE_CUDA
     if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
         int weights_size = bcnn_tensor_size(&weights);
         param->adam_m_gpu = bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
         param->adam_v_gpu = bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
     }
-    sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
-         net->tensors[node.src[0]].c * size * size;
 #endif
 
     bcnn_net_add_node(net, node);
@@ -298,7 +285,7 @@ void bcnn_backward_depthwise_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *weights = &net->tensors[node->src[1]];
     bcnn_tensor *biases = &net->tensors[node->src[2]];
     bcnn_depthwise_conv_param *param = (bcnn_depthwise_conv_param *)node->param;
-    int sz, n, c, h, w, kh, kw, w_in, h_in, offset;
+    int n, c, h, w, kh, kw, w_in, h_in, offset;
     int batch_size = src_tensor->n;
     float *dst_grad_data = NULL;
     float *weight_diff_base = NULL, *weight_diff = NULL;
@@ -306,8 +293,6 @@ void bcnn_backward_depthwise_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     float *bias_diff = NULL;
     /*bh_timer t = { 0 };
     bh_timer_start(&t);*/
-
-    sz = bcnn_tensor_size(dst_tensor);
 
     bcnn_backward_activation_cpu(
         dst_tensor->data, dst_tensor->grad_data,

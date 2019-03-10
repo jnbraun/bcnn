@@ -36,14 +36,6 @@ bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
     int is_src_node1_found = 0, is_src_node2_found = 0;
-
-    node.type = BCNN_LAYER_ELTWISE;
-    node.param_size = sizeof(bcnn_eltwise_param);
-    node.param = (bcnn_eltwise_param *)calloc(1, sizeof(node.param_size));
-    bcnn_eltwise_param *param = (bcnn_eltwise_param *)node.param;
-    param->activation = activation;
-    node.forward = bcnn_forward_eltwise_layer;
-    node.backward = bcnn_backward_eltwise_layer;
     for (int i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id1) == 0) {
             bcnn_node_add_input(net, &node, i);
@@ -70,6 +62,15 @@ bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
         BCNN_INVALID_PARAMETER,
         "Eltwise layer: inconsistent sizes between tensor %s and tensor %s",
         src_id1, src_id2);
+
+    // Setup node
+    node.type = BCNN_LAYER_ELTWISE;
+    node.param_size = sizeof(bcnn_eltwise_param);
+    node.param = (bcnn_eltwise_param *)calloc(1, sizeof(node.param_size));
+    bcnn_eltwise_param *param = (bcnn_eltwise_param *)node.param;
+    param->activation = activation;
+    node.forward = bcnn_forward_eltwise_layer;
+    node.backward = bcnn_backward_eltwise_layer;
     // Setup output tensor
     bcnn_tensor_set_shape(
         &dst_tensor, net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,

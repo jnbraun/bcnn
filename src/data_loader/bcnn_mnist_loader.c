@@ -145,9 +145,9 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
                 iter->input_width * iter->input_height * iter->input_depth;
             img_tmp = (unsigned char *)calloc(sz_img, sizeof(unsigned char));
         }
-        bcnn_data_augmentation(iter->input_uchar, iter->input_width,
-                               iter->input_height, iter->input_depth,
-                               net->data_aug, img_tmp);
+        bcnn_apply_data_augmentation(iter->input_uchar, iter->input_width,
+                                     iter->input_height, iter->input_depth,
+                                     net->data_aug, img_tmp);
         if (use_buffer_img) {
             bh_free(img_tmp);
         }

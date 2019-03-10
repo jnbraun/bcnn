@@ -120,8 +120,6 @@ void bcnn_backward_dropout_layer_cpu(bcnn_net *net, bcnn_node *node) {
 }
 
 void bcnn_backward_dropout_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
     return bcnn_backward_dropout_layer_gpu(net, node);
 #else

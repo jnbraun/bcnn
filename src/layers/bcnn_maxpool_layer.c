@@ -38,13 +38,12 @@
 bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
                                    bcnn_padding padding, const char *src_id,
                                    const char *dst_id) {
-    int sz, i;
     bcnn_node node = {0};
     bcnn_tensor dst_tensor = {0};
 
     if (net->num_nodes > 0) {
         int is_src_node_found = 0;
-        for (i = net->num_tensors - 1; i >= 0; --i) {
+        for (int i = net->num_tensors - 1; i >= 0; --i) {
             if (strcmp(net->tensors[i].name, src_id) == 0) {
                 bcnn_node_add_input(net, &node, i);
                 is_src_node_found = 1;
@@ -93,7 +92,7 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
     // Add tensor output index to node
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
-    sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
+    int sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
     node.type = BCNN_LAYER_MAXPOOL;
     node.param_size = sizeof(bcnn_maxpool_param);
     node.param = (bcnn_maxpool_param *)calloc(1, node.param_size);
@@ -236,22 +235,22 @@ void bcnn_forward_maxpool_layer_cpu_neon_2x2(bcnn_tensor *src_tensor,
 #endif
 
 void bcnn_forward_maxpool_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
-    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node->param;
 #ifdef BCNN_USE_CUDA
     return bcnn_forward_maxpool_layer_gpu(net, node);
 #else
 #ifdef BCNN_USE_NEON
+    bcnn_maxpool_param *param = (bcnn_maxpool_param *)node->param;
     if (param->size == 2 && param->stride == 2) {
+        bcnn_tensor *src = &net->tensors[node->src[0]];
+        bcnn_tensor *dst = &net->tensors[node->dst[0]];
         return bcnn_forward_maxpool_layer_cpu_neon_2x2(src, dst);
     } else {
         return bcnn_forward_maxpool_layer_cpu(net, node);
     }
 #else
     return bcnn_forward_maxpool_layer_cpu(net, node);
-#endif
-#endif
+#endif  // BCNN_USE_NEON
+#endif  // BCNN_USE_CUDA
 }
 
 void bcnn_backward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
@@ -272,8 +271,6 @@ void bcnn_backward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
 }
 
 void bcnn_backward_maxpool_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
     return bcnn_backward_maxpool_layer_gpu(net, node);
 #else

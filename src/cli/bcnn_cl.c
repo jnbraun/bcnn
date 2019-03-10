@@ -538,7 +538,9 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
         if (i % param->eval_period == 0 && i > 0) {
             bh_timer_stop(&t);
             if (param->eval_test) {
+                BCNN_CHECK_STATUS(bcnn_set_mode(net, BCNN_MODE_VALID));
                 bcnncl_predict(net, param, &error_valid, 1);
+                BCNN_CHECK_STATUS(bcnn_set_mode(net, BCNN_MODE_TRAIN));
                 fprintf(stderr,
                         "iter= %d train-error= %f test-error= %f "
                         "training-time= %lf sec\n",

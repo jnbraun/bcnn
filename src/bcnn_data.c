@@ -39,6 +39,32 @@
 #include "data_loader/bcnn_mnist_loader.h"
 #include "data_loader/bcnn_regression_loader.h"
 
+bcnn_status bcnn_transform_img_and_fill_tensor(
+    bcnn_net *net, const uint8_t *src, int w, int h, int c, float norm_coeff,
+    int swap_to_bgr, float mean_r, float mean_g, float mean_b, int tensor_index,
+    int batch_index) {
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx, (tensor_index >= 0 && tensor_index < net->num_tensors),
+        BCNN_INVALID_PARAMETER, "Invalid tensor index %d. ", tensor_index);
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx,
+        (w * h * c == bcnn_tensor_size3d(&net->tensors[tensor_index])),
+        BCNN_INVALID_PARAMETER,
+        "Inconsistent size between input image and target tensor. Target "
+        "tensor has size (w=%d h=%d c=%d)",
+        net->tensors[tensor_index].w, net->tensors[tensor_index].h,
+        net->tensors[tensor_index].c);
+    float *data = net->tensors[tensor_index].data +
+                  batch_index * bcnn_tensor_size3d(&net->tensors[tensor_index]);
+    bcnn_convert_img_to_float(src, w, h, c, norm_coeff, swap_to_bgr, mean_r,
+                              mean_g, mean_b, data);
+    fprintf(stderr, "src %d %d %d dst %f %f %f\n", src[0], src[1], src[2],
+            net->tensors[tensor_index].data[0],
+            net->tensors[tensor_index].data[1],
+            net->tensors[tensor_index].data[2]);
+    return BCNN_SUCCESS;
+}
+
 void bcnn_convert_img_to_float(const uint8_t *src, int w, int h, int c,
                                float norm_coeff, int swap_to_bgr, float mean_r,
                                float mean_g, float mean_b, float *dst) {

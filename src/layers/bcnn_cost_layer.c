@@ -113,12 +113,17 @@ static void bcnn_euclidean_loss_forward(bcnn_tensor *src_tensor,
                                         bcnn_tensor *dst_tensor) {
     int size = bcnn_tensor_size(src_tensor);
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_copy_f32(size, src_tensor->data_gpu, 1, dst_tensor->grad_data_gpu,
+    if (dst_tensor->grad_data_gpu) {
+        bcnn_cuda_copy_f32(size, src_tensor->data_gpu, 1,
+                           dst_tensor->grad_data_gpu, 1);
+        bcnn_cuda_axpy(size, -1, label->data_gpu, 1, dst_tensor->grad_data_gpu,
                        1);
-    bcnn_cuda_axpy(size, -1, label->data_gpu, 1, dst_tensor->grad_data_gpu, 1);
+    }
 #else
-    bcnn_copy_f32(size, src_tensor->data, dst_tensor->grad_data);
-    bcnn_axpy(size, -1, label->data, dst_tensor->grad_data);
+    if (dst_tensor->grad_data) {
+        bcnn_copy_f32(size, src_tensor->data, dst_tensor->grad_data);
+        bcnn_axpy(size, -1, label->data, dst_tensor->grad_data);
+    }
 #endif
 }
 

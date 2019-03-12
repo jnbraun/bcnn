@@ -88,7 +88,7 @@ int bcnncl_init_from_config(bcnn_net **net, char *config_file,
             else if (strcmp(tok[1], "predict") == 0) {
                 mode = BCNN_MODE_PREDICT;
             } else if (strcmp(tok[1], "valid") == 0) {
-                mode = BCNN_MODE_PREDICT;
+                mode = BCNN_MODE_VALID;
             } else {
                 bh_log(BH_LOG_ERROR,
                        "Invalid mode parameter %s. Available modes are: "
@@ -538,7 +538,9 @@ int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error) {
         if (i % param->eval_period == 0 && i > 0) {
             bh_timer_stop(&t);
             if (param->eval_test) {
+                BCNN_CHECK_STATUS(bcnn_set_mode(net, BCNN_MODE_VALID));
                 bcnncl_predict(net, param, &error_valid, 1);
+                BCNN_CHECK_STATUS(bcnn_set_mode(net, BCNN_MODE_TRAIN));
                 fprintf(stderr,
                         "iter= %d train-error= %f test-error= %f "
                         "training-time= %lf sec\n",
@@ -706,7 +708,7 @@ int run(char *config_file) {
             BCNN_CHECK_STATUS(bcnn_write_model(net, param.output_model));
         }
         BCNN_INFO(net->log_ctx, "Training ended successfully");
-    } else if (net->mode == BCNN_MODE_PREDICT) {
+    } else if (net->mode == BCNN_MODE_VALID || net->mode == BCNN_MODE_PREDICT) {
         if (param.input_model != NULL) {
             BCNN_CHECK_STATUS(bcnn_load_model(net, param.input_model));
         } else {

@@ -189,8 +189,6 @@ void bcnn_forward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_NEON
 void bcnn_forward_maxpool_layer_cpu_neon_2x2(bcnn_tensor *src_tensor,
                                              bcnn_tensor *dst_tensor) {
-    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
-    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     const int tail = src_tensor->w + (src_tensor->w - 2 * dst_tensor->w);
     for (int b = 0; b < dst_tensor->n; ++b) {  // batch_size
         int offset0 = dst_tensor->c * b;

@@ -47,15 +47,15 @@ static inline void bh_log(bh_log_level level, const char *fmt, ...) {
     va_end(args);
     switch (level) {
         case BH_LOG_INFO: {
-            fprintf(stderr, "[INFO] %s\n", msg);
+            fprintf(stderr, "[INFO] %s", msg);
             break;
         }
         case BH_LOG_WARNING: {
-            fprintf(stderr, "\33[35;1m[WARNING] %s\33[0m\n", msg);
+            fprintf(stderr, "\33[35;1m[WARNING] %s\33[0m", msg);
             break;
         }
         case BH_LOG_ERROR: {
-            fprintf(stderr, "\33[31;1m[ERROR] %s\33[0m\n", msg);
+            fprintf(stderr, "\33[31;1m[ERROR] %s\33[0m", msg);
             break;
         }
         case BH_LOG_SILENT: {

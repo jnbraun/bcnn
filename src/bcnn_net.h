@@ -47,12 +47,12 @@ typedef struct bcnn_cuda_context {
 struct bcnn_net {
     int batch_size;
     int num_nodes;
+    int num_tensors; /* Number of tensors hold in the network */
     bcnn_mode mode;
+    bcnn_log_context log_ctx;
     bcnn_node *nodes;
-    int num_tensors;       /* Number of tensors hold in the network */
     bcnn_tensor *tensors;  /* Array of tensors hold in the network */
     bcnn_learner *learner; /* Learner/optimizer parameters */
-    bcnn_log_context log_ctx;
     bcnn_loader *data_loader;
     bcnn_data_augmenter *data_aug; /* Parameters for online data augmentation */
     void *gemm_ctx;

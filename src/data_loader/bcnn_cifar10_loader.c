@@ -47,7 +47,7 @@ bcnn_status bcnn_loader_cifar10_init(bcnn_loader *iter, bcnn_net *net,
         net->log_ctx,
         net->tensors[0].w > 0 && net->tensors[0].h > 0 && net->tensors[0].c > 0,
         BCNN_INVALID_PARAMETER,
-        "Input's width, height and channels must be > 0");
+        "Input's width, height and channels must be > 0\n");
     iter->input_net = (uint8_t *)calloc(
         net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
         sizeof(uint8_t));
@@ -90,16 +90,17 @@ bcnn_status bcnn_loader_cifar10_next(bcnn_loader *iter, bcnn_net *net,
     }
 
     // Read label
-    BCNN_CHECK_AND_LOG(net->log_ctx, fread((char *)&l, 1, sizeof(char),
-                                           iter->f_current) == sizeof(char),
-                       BCNN_INVALID_DATA, "Corrupted Cifar data");
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx,
+        fread((char *)&l, 1, sizeof(char), iter->f_current) == sizeof(char),
+        BCNN_INVALID_DATA, "Corrupted Cifar data\n");
     int class_label = (int)l;
     // Read img
     char tmp[3072];
     int sz = iter->input_width * iter->input_height * iter->input_depth;
     BCNN_CHECK_AND_LOG(net->log_ctx,
                        fread(tmp, 1, sz, iter->f_current) == (size_t)sz,
-                       BCNN_INVALID_DATA, "Corrupted Cifar data");
+                       BCNN_INVALID_DATA, "Corrupted Cifar data\n");
     // Swap depth <-> spatial dim arrangement
     for (int k = 0; k < iter->input_depth; ++k) {
         for (int y = 0; y < iter->input_height; ++y) {

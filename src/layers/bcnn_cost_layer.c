@@ -43,7 +43,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
 
     BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,
                        BCNN_INVALID_PARAMETER,
-                       "Cost layer can't be the first layer of the network");
+                       "Cost layer can't be the first layer of the network\n");
     int is_src_node_found = 0;
     for (i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id) == 0) {
@@ -53,7 +53,7 @@ bcnn_status bcnn_add_cost_layer(bcnn_net *net, bcnn_loss loss,
         }
     }
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
-                       "Cost layer: invalid input node name %s", src_id);
+                       "Cost layer: invalid input node name %s\n", src_id);
 
     // Fill nodes param
     node.type = BCNN_LAYER_COST;

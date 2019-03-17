@@ -31,9 +31,9 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate,
                                    const char *src_id) {
     bcnn_node node = {0};
 
-    BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,
-                       BCNN_INVALID_PARAMETER,
-                       "Dropout layer can't be the first layer of the network");
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx, net->num_nodes >= 1, BCNN_INVALID_PARAMETER,
+        "Dropout layer can't be the first layer of the network\n");
 
     int is_src_node_found = 0;
     for (int i = net->num_tensors - 1; i >= 0; --i) {
@@ -45,7 +45,7 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate,
         }
     }
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
-                       "Dropout layer: invalid input node name %s", src_id);
+                       "Dropout layer: invalid input node name %s\n", src_id);
 
     node.type = BCNN_LAYER_DROPOUT;
     node.param_size = sizeof(bcnn_dropout_param);
@@ -64,11 +64,12 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate,
 
     bcnn_net_add_node(net, node);
 
-    BCNN_INFO(net->log_ctx,
-              "[Dropout] input_shape= %dx%dx%d rate= %f output_shape= %dx%dx%d",
-              net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-              net->tensors[node.src[0]].c, rate, net->tensors[node.dst[0]].w,
-              net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);
+    BCNN_INFO(
+        net->log_ctx,
+        "[Dropout] input_shape= %dx%dx%d rate= %f output_shape= %dx%dx%d\n",
+        net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
+        net->tensors[node.src[0]].c, rate, net->tensors[node.dst[0]].w,
+        net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);
     return 0;
 }
 

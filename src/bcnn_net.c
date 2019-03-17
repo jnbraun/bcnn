@@ -170,7 +170,7 @@ bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node) {
     p_node =
         (bcnn_node *)realloc(net->nodes, net->num_nodes * sizeof(bcnn_node));
     BCNN_CHECK_AND_LOG(net->log_ctx, (p_node != NULL), BCNN_FAILED_ALLOC,
-                       "Internal allocation error");
+                       "Internal allocation error\n");
     net->nodes = p_node;
     net->nodes[net->num_nodes - 1] = node;
     return BCNN_SUCCESS;
@@ -182,7 +182,7 @@ bcnn_status bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor) {
     p_tensors = (bcnn_tensor *)realloc(net->tensors,
                                        net->num_tensors * sizeof(bcnn_tensor));
     BCNN_CHECK_AND_LOG(net->log_ctx, (p_tensors != NULL), BCNN_FAILED_ALLOC,
-                       "Internal allocation error");
+                       "Internal allocation error\n");
     net->tensors = p_tensors;
     net->tensors[net->num_tensors - 1] = tensor;
     return BCNN_SUCCESS;
@@ -373,9 +373,9 @@ void bcnn_set_param(bcnn_net *net, const char *name, const char *val) {
     } else if (strcmp(name, "batch_size") == 0) {
         net->batch_size = atoi(val);
         net->tensors[0].n = atoi(val);
-    } else if (strcmp(name, "max_batches") == 0) {
+    } else if (net->learner && strcmp(name, "max_batches") == 0) {
         net->learner->max_batches = atoi(val);
-    } else if (strcmp(name, "learning_policy") == 0 ||
+    } else if (net->learner && strcmp(name, "learning_policy") == 0 ||
                strcmp(name, "decay_type") == 0) {
         if (strcmp(val, "sigmoid") == 0) {
             net->learner->decay_type = BCNN_LR_DECAY_SIGMOID;
@@ -392,60 +392,60 @@ void bcnn_set_param(bcnn_net *net, const char *name, const char *val) {
         } else {
             net->learner->decay_type = BCNN_LR_DECAY_CONSTANT;
         }
-    } else if (strcmp(name, "optimizer") == 0) {
+    } else if (net->learner && strcmp(name, "optimizer") == 0) {
         if (strcmp(val, "sgd") == 0) {
             net->learner->optimizer = BCNN_OPTIM_SGD;
         } else if (strcmp(val, "adam") == 0) {
             net->learner->optimizer = BCNN_OPTIM_ADAM;
         }
-    } else if (strcmp(name, "step") == 0) {
+    } else if (net->learner && strcmp(name, "step") == 0) {
         net->learner->step = atoi(val);
-    } else if (strcmp(name, "learning_rate") == 0) {
+    } else if (net->learner && strcmp(name, "learning_rate") == 0) {
         net->learner->base_learning_rate = (float)atof(val);
         net->learner->learning_rate = net->learner->base_learning_rate;
-    } else if (strcmp(name, "beta1") == 0) {
+    } else if (net->learner && strcmp(name, "beta1") == 0) {
         net->learner->beta1 = (float)atof(val);
-    } else if (strcmp(name, "beta2") == 0) {
+    } else if (net->learner && strcmp(name, "beta2") == 0) {
         net->learner->beta2 = (float)atof(val);
-    } else if (strcmp(name, "decay") == 0) {
+    } else if (net->learner && strcmp(name, "decay") == 0) {
         net->learner->decay = (float)atof(val);
-    } else if (strcmp(name, "momentum") == 0) {
+    } else if (net->learner && strcmp(name, "momentum") == 0) {
         net->learner->momentum = (float)atof(val);
-    } else if (strcmp(name, "gamma") == 0) {
+    } else if (net->learner && strcmp(name, "gamma") == 0) {
         net->learner->gamma = (float)atof(val);
-    } else if (strcmp(name, "range_shift_x") == 0) {
+    } else if (net->data_aug && strcmp(name, "range_shift_x") == 0) {
         net->data_aug->range_shift_x = atoi(val);
-    } else if (strcmp(name, "range_shift_y") == 0) {
+    } else if (net->data_aug && strcmp(name, "range_shift_y") == 0) {
         net->data_aug->range_shift_y = atoi(val);
-    } else if (strcmp(name, "min_scale") == 0) {
+    } else if (net->data_aug && strcmp(name, "min_scale") == 0) {
         net->data_aug->min_scale = (float)atof(val);
-    } else if (strcmp(name, "max_scale") == 0) {
+    } else if (net->data_aug && strcmp(name, "max_scale") == 0) {
         net->data_aug->max_scale = (float)atof(val);
-    } else if (strcmp(name, "rotation_range") == 0) {
+    } else if (net->data_aug && strcmp(name, "rotation_range") == 0) {
         net->data_aug->rotation_range = (float)atof(val);
-    } else if (strcmp(name, "min_contrast") == 0) {
+    } else if (net->data_aug && strcmp(name, "min_contrast") == 0) {
         net->data_aug->min_contrast = (float)atof(val);
-    } else if (strcmp(name, "max_contrast") == 0) {
+    } else if (net->data_aug && strcmp(name, "max_contrast") == 0) {
         net->data_aug->max_contrast = (float)atof(val);
-    } else if (strcmp(name, "min_brightness") == 0) {
+    } else if (net->data_aug && strcmp(name, "min_brightness") == 0) {
         net->data_aug->min_brightness = atoi(val);
-    } else if (strcmp(name, "max_brightness") == 0) {
+    } else if (net->data_aug && strcmp(name, "max_brightness") == 0) {
         net->data_aug->max_brightness = atoi(val);
-    } else if (strcmp(name, "max_distortion") == 0) {
+    } else if (net->data_aug && strcmp(name, "max_distortion") == 0) {
         net->data_aug->max_distortion = (float)atof(val);
-    } else if (strcmp(name, "max_spots") == 0) {
+    } else if (net->data_aug && strcmp(name, "max_spots") == 0) {
         net->data_aug->max_random_spots = (float)atof(val);
-    } else if (strcmp(name, "flip_h") == 0) {
+    } else if (net->data_aug && strcmp(name, "flip_h") == 0) {
         net->data_aug->random_fliph = 1;
-    } else if (strcmp(name, "mean_r") == 0) {
+    } else if (net->data_aug && strcmp(name, "mean_r") == 0) {
         net->data_aug->mean_r = (float)atof(val) / 255.0f;
-    } else if (strcmp(name, "mean_g") == 0) {
+    } else if (net->data_aug && strcmp(name, "mean_g") == 0) {
         net->data_aug->mean_g = (float)atof(val) / 255.0f;
-    } else if (strcmp(name, "mean_b") == 0) {
+    } else if (net->data_aug && strcmp(name, "mean_b") == 0) {
         net->data_aug->mean_b = (float)atof(val) / 255.0f;
-    } else if (strcmp(name, "swap_to_bgr") == 0) {
+    } else if (net->data_aug && strcmp(name, "swap_to_bgr") == 0) {
         net->data_aug->swap_to_bgr = atoi(val);
-    } else if (strcmp(name, "no_input_norm") == 0) {
+    } else if (net->data_aug && strcmp(name, "no_input_norm") == 0) {
         net->data_aug->no_input_norm = atoi(val);
     }
 }
@@ -555,7 +555,7 @@ bcnn_status bcnn_load_model(bcnn_net *net, const char *filename) {
     nb_read = fread(&minor, sizeof(uint32_t), 1, fp);
     nb_read = fread(&patch, sizeof(uint32_t), 1, fp);
     BCNN_CHECK_AND_LOG(net->log_ctx, (strncmp(magic, BCNN_MAGIC, 4) == 0),
-                       BCNN_INVALID_DATA, "Invalid format for model file %s",
+                       BCNN_INVALID_DATA, "Invalid format for model file %s\n",
                        filename);
     BCNN_INFO(net->log_ctx, "BCNN version %d.%d.%d used for model %s\n", major,
               minor, patch, filename);
@@ -572,12 +572,12 @@ bcnn_status bcnn_load_model(bcnn_net *net, const char *filename) {
             int biases_size = bcnn_tensor_size(biases);
             nb_read = fread(biases->data, sizeof(float), biases_size, fp);
             BCNN_INFO(net->log_ctx,
-                      "node_idx= %d nbread_bias= %lu bias_size_expected= %d", i,
-                      (unsigned long)nb_read, biases_size);
+                      "node_idx= %d nbread_bias= %lu bias_size_expected= %d\n",
+                      i, (unsigned long)nb_read, biases_size);
             nb_read = fread(weights->data, sizeof(float), weights_size, fp);
             BCNN_INFO(
                 net->log_ctx,
-                "node_idx= %d nbread_weight= %lu weight_size_expected= %d", i,
+                "node_idx= %d nbread_weight= %lu weight_size_expected= %d\n", i,
                 (unsigned long)nb_read, weights_size);
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(weights->data_gpu, weights->data,
@@ -618,8 +618,8 @@ bcnn_status bcnn_load_model(bcnn_net *net, const char *filename) {
                 bcnn_tensor *weights = &net->tensors[net->nodes[i].src[1]];
                 int weights_size = bcnn_tensor_size(weights);
                 nb_read = fread(weights->data, sizeof(float), weights_size, fp);
-                BCNN_INFO(net->log_ctx, "PReLU= %d nbread= %lu expected= %d", i,
-                          (unsigned long)nb_read, weights_size);
+                BCNN_INFO(net->log_ctx, "PReLU= %d nbread= %lu expected= %d\n",
+                          i, (unsigned long)nb_read, weights_size);
             }
         }
         if (node->type == BCNN_LAYER_BATCHNORM) {
@@ -630,12 +630,12 @@ bcnn_status bcnn_load_model(bcnn_net *net, const char *filename) {
             int sz = net->tensors[net->nodes[i].dst[0]].c;
             nb_read = fread(bn_mean->data, sizeof(float), sz, fp);
             BCNN_INFO(net->log_ctx,
-                      "batchnorm= %d nbread_mean= %lu mean_size_expected= %d",
+                      "batchnorm= %d nbread_mean= %lu mean_size_expected= %d\n",
                       i, (unsigned long)nb_read, sz);
             nb_read = fread(bn_var->data, sizeof(float), sz, fp);
             BCNN_INFO(net->log_ctx,
                       "batchnorm= %d nbread_variance= %lu "
-                      "variance_size_expected= %d",
+                      "variance_size_expected= %d\n",
                       i, (unsigned long)nb_read, sz);
             nb_read = fread(bn_scales->data, sizeof(float), sz, fp);
             nb_read = fread(bn_biases->data, sizeof(float), sz, fp);
@@ -651,7 +651,7 @@ bcnn_status bcnn_load_model(bcnn_net *net, const char *filename) {
         fclose(fp);
     }
 
-    BCNN_INFO(net->log_ctx, "Model %s loaded succesfully", filename);
+    BCNN_INFO(net->log_ctx, "Model %s loaded succesfully\n", filename);
     fflush(stdout);
 
     return BCNN_SUCCESS;

@@ -50,9 +50,9 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
                 break;
             }
         }
-        BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found,
-                           BCNN_INVALID_PARAMETER,
-                           "Maxpool layer: invalid input node name %s", src_id);
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
+            "Maxpool layer: invalid input node name %s\n", src_id);
     } else {
         bcnn_node_add_input(net, &node, 0);
     }
@@ -128,7 +128,7 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
     BCNN_INFO(
         net->log_ctx,
         "[Maxpool] input_shape= %dx%dx%d size= %d stride= %d ouput_shape= "
-        "%dx%dx%d",
+        "%dx%dx%d\n",
         net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
         net->tensors[node.src[0]].c, size, stride, net->tensors[node.dst[0]].w,
         net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);

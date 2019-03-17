@@ -39,7 +39,7 @@ bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
 
     BCNN_CHECK_AND_LOG(
         net->log_ctx, net->num_nodes >= 1, BCNN_INVALID_PARAMETER,
-        "Batchnorm layer can't be the first layer of the network");
+        "Batchnorm layer can't be the first layer of the network\n");
 
     int is_src_node_found = 0;
     for (i = net->num_tensors - 1; i >= 0; --i) {
@@ -50,7 +50,7 @@ bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
         }
     }
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
-                       "Batchnorm layer: invalid input node name %s", src_id);
+                       "Batchnorm layer: invalid input node name %s\n", src_id);
     bcnn_tensor_set_shape(
         &dst_tensor, net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
         net->tensors[node.src[0]].h, net->tensors[node.src[0]].w, 1);
@@ -129,7 +129,7 @@ bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
     bcnn_net_add_node(net, node);
 
     BCNN_INFO(net->log_ctx,
-              "[Batchnorm] input_shape= %dx%dx%d output_shape= %dx%dx%d",
+              "[Batchnorm] input_shape= %dx%dx%d output_shape= %dx%dx%d\n",
               net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
               net->tensors[node.src[0]].c, net->tensors[node.dst[0]].w,
               net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);

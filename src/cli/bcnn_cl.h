@@ -11,35 +11,29 @@ extern "C" {
 #endif
 
 /**
- * \brief Structure for general parameters.
+ * \brief Command-line tool parameters.
  */
 typedef struct {
-    char *train_input;      /**< Path to train file. */
-    char *test_input;       /**< Path to test/validation file. */
-    char *path_train_label; /**< Path to label train file (used for mnist format
-                               only). */
-    char *path_test_label;  /**< Path to label test file (used for mnist format
-                               only). */
-    char *input_model;      /**< Path to input model. */
-    char *output_model;     /**< Path to output model. */
-    char *pred_out;         /**< Path to output prediction file. */
-    // char *data_format;                 /**< Data format. */
+    int save_model;  /* Periodicity of model saving. */
+    int num_pred;    /* Number of samples to be predicted in test file. */
+    int eval_period; /* Periodicity of evaluating the train/test error. */
+    int eval_test;   /* Set to 1 if evaluation of test database is asked. */
     bcnn_loader_type data_format;
-    int save_model;  /**< Periodicity of model saving. */
-    int nb_pred;     /**< Number of samples to be predicted in test file. */
-    int eval_period; /**< Periodicity of evaluating the train/test error. */
-    int eval_test;   /**< Set to 1 if evaluation of test database is asked. */
-} bcnncl_param;
+    char *train_input;      /* Path to train file. */
+    char *test_input;       /* Path to test/validation file. */
+    char *path_train_label; /* Path to label train file (used for mnist format
+                           only). */
+    char *path_test_label;  /* Path to label test file (used for mnist format
+                        only). */
+    char *input_model;      /* Path to input model. */
+    char *output_model;     /* Path to output model. */
+    char *pred_out;         /* Path to output prediction file. */
+} bcnn_cl_param;
 
-int bcnncl_init_from_config(bcnn_net **net, char *config_file,
-                            bcnncl_param *param);
-
-int bcnncl_train(bcnn_net *net, bcnncl_param *param, float *error);
-
-int bcnncl_predict(bcnn_net *net, bcnncl_param *param, float *error,
-                   int dump_pred);
-
-int bcnncl_free_param(bcnncl_param *param);
+bcnn_status bcnn_cl_load_param(const char *config_path, bcnn_cl_param *param);
+bcnn_status bcnn_cl_train(bcnn_net *net, bcnn_cl_param *param, float *error);
+bcnn_status bcnn_cl_predict(bcnn_net *net, bcnn_cl_param *param, float *error);
+void bcnn_cl_free_param(bcnn_cl_param *param);
 
 #ifdef __cplusplus
 }

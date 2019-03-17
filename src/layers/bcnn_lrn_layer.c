@@ -47,7 +47,7 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
         }
         BCNN_CHECK_AND_LOG(
             net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
-            "BCNN_LAYER_LRN layer: invalid input node name %s", src_id);
+            "BCNN_LAYER_LRN layer: invalid input node name %s\n", src_id);
     } else {
         bcnn_node_add_input(net, &node, 0);
     }
@@ -68,7 +68,7 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
     BCNN_CHECK_AND_LOG(net->log_ctx, local_size < net->tensors[node.src[0]].c,
                        BCNN_INVALID_PARAMETER,
                        "BCNN_LAYER_LRN layer: local size must be inferior to "
-                       "the number of channels");
+                       "the number of channels\n");
 
     node.type = BCNN_LAYER_LRN;
     node.param_size = sizeof(bcnn_lrn_param);
@@ -88,7 +88,7 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
 
     BCNN_INFO(net->log_ctx,
               "[LocalResponseNormalization] input_shape= %dx%dx%d ouput_shape= "
-              "%dx%dx%d",
+              "%dx%dx%d\n",
               net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
               net->tensors[node.src[0]].c, net->tensors[node.dst[0]].w,
               net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);

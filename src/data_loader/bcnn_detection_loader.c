@@ -77,7 +77,7 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
     if (((num_toks - 1) % 5 != 0)) {
         bcnn_log(net->log_ctx, BCNN_LOG_WARNING,
                  "Wrong data format for detection %s. Found %d labels but "
-                 "expected multiple of 5",
+                 "expected multiple of 5\n",
                  line);
         BCNN_PARSE_CLEANUP(line, tok, num_toks);
         return BCNN_INVALID_DATA;
@@ -86,7 +86,7 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
     unsigned char *pimg = NULL;
     bip_load_image(tok[0], &pimg, &w_img, &h_img, &c_img);
     if (!(w_img > 0 && h_img > 0 && pimg)) {
-        bcnn_log(net->log_ctx, BCNN_LOG_WARNING, "Skip invalid image %s",
+        bcnn_log(net->log_ctx, BCNN_LOG_WARNING, "Skip invalid image %s\n",
                  tok[0]);
         bh_free(pimg);
         BCNN_PARSE_CLEANUP(line, tok, num_toks);
@@ -94,7 +94,7 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
     }
     if (net->tensors[0].c != c_img) {
         bcnn_log(net->log_ctx, BCNN_LOG_WARNING,
-                 "Skip image %s: unexpected number of channels");
+                 "Skip image %s: unexpected number of channels\n");
         bh_free(pimg);
         BCNN_PARSE_CLEANUP(line, tok, num_toks);
         return BCNN_INVALID_DATA;

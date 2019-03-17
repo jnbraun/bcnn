@@ -36,9 +36,9 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
     bcnn_tensor dst_tensor = {0};
     int is_src_node1_found = 0, is_src_node2_found = 0;
 
-    BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,
-                       BCNN_INVALID_PARAMETER,
-                       "Concat layer can't be the first layer of the network");
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx, net->num_nodes >= 1, BCNN_INVALID_PARAMETER,
+        "Concat layer can't be the first layer of the network\n");
 
     node.type = BCNN_LAYER_CONCAT;
     node.forward = bcnn_forward_concat_layer;
@@ -57,18 +57,18 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
         }
     }
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node1_found, BCNN_INVALID_PARAMETER,
-                       "Concat layer: invalid input node name %s", src_id1);
+                       "Concat layer: invalid input node name %s\n", src_id1);
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node2_found, BCNN_INVALID_PARAMETER,
-                       "Concat layer: invalid input node name %s", src_id2);
+                       "Concat layer: invalid input node name %s\n", src_id2);
     BCNN_CHECK_AND_LOG(net->log_ctx, node.num_src == 2, BCNN_INVALID_PARAMETER,
-                       "Concat layer: invalid setup");
+                       "Concat layer: invalid setup\n");
     // Check spatial dimensions consistency
     BCNN_CHECK_AND_LOG(
         net->log_ctx,
         net->tensors[node.src[0]].w == net->tensors[node.src[1]].w,
         BCNN_INVALID_PARAMETER,
         "Concat layer: inconsistent width size between node %s (w = %d) and "
-        "node %s (w = %d)",
+        "node %s (w = %d)\n",
         src_id1, net->tensors[node.src[0]].w, src_id2,
         net->tensors[node.src[1]].w);
     BCNN_CHECK_AND_LOG(
@@ -76,7 +76,7 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
         net->tensors[node.src[0]].h == net->tensors[node.src[1]].h,
         BCNN_INVALID_PARAMETER,
         "Concat layer: inconsistent width size between node %s (w = %d) and "
-        "node %s (w = %d)",
+        "node %s (w = %d)\n",
         src_id1, net->tensors[node.src[0]].h, src_id2,
         net->tensors[node.src[1]].h);
     // Setup output tensor
@@ -95,7 +95,7 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
     BCNN_INFO(
         net->log_ctx,
         "[Concat] input1_shape= %dx%dx%d input2_shape= %dx%dx%d output_shape= "
-        "%dx%dx%d",
+        "%dx%dx%d\n",
         net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
         net->tensors[node.src[0]].c, net->tensors[node.src[1]].w,
         net->tensors[node.src[1]].h, net->tensors[node.src[1]].c,

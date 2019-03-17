@@ -53,7 +53,7 @@ bcnn_status bcnn_add_deconvolutional_layer(
         }
         BCNN_CHECK_AND_LOG(
             net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
-            "Deconvolution layer: invalid input node name %s", src_id);
+            "Deconvolution layer: invalid input node name %s\n", src_id);
     } else {
         bcnn_node_add_input(net, &node, 0);
     }

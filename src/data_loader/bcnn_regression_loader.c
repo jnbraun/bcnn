@@ -40,7 +40,7 @@ bcnn_status bcnn_loader_list_reg_init(bcnn_loader *iter, bcnn_net *net,
         net->log_ctx,
         net->tensors[0].w > 0 && net->tensors[0].h > 0 && net->tensors[0].c > 0,
         BCNN_INVALID_PARAMETER,
-        "Input's width, height and channels must be > 0");
+        "Input's width, height and channels must be > 0\n");
     iter->input_uchar = (uint8_t *)calloc(
         net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
         sizeof(uint8_t));
@@ -60,33 +60,20 @@ void bcnn_loader_list_reg_terminate(bcnn_loader *iter) {
 
 bcnn_status bcnn_loader_list_reg_next(bcnn_loader *iter, bcnn_net *net,
                                       int idx) {
-    /*char *line = bh_fgetline(iter->f_current);
-    if (line == NULL) {
-        rewind(iter->f_current);
-        line = bh_fgetline(iter->f_current);
-        BCNN_CHECK_AND_LOG(net->log_ctx, line != NULL, BCNN_INVALID_DATA,
-                           "Invalid regression format");
-    }
-    char **tok = NULL;
-    int num_toks = bh_strsplit(line, ' ', &tok);
-    if (tok == NULL || num_toks == 0) {
-        BCNN_WARNING(net->log_ctx, "Invalid regression format");
-        BCNN_PARSE_CLEANUP(line, tok, num_toks);
-    }*/
     char **tok = NULL;
     int num_toks = bh_fsplitline(iter->f_current, true, ' ', &tok);
     BCNN_CHECK_AND_LOG(net->log_ctx, num_toks > 0, BCNN_INVALID_DATA,
-                       "Invalid regression format");
+                       "Invalid regression format\n");
     // Load image, perform data augmentation if required and fill input tensor
     bcnn_fill_input_tensor(net, iter, tok[0], idx);
     // Fill label tensor
     if (net->mode != BCNN_MODE_PREDICT) {
         int label_sz = bcnn_tensor_size3d(&net->tensors[1]);
         if (num_toks - 1 != label_sz) {
-            BCNN_WARNING(
-                net->log_ctx,
-                "Unexpected label format. Found label size of %d, expected %d.",
-                num_toks - 1, label_sz);
+            BCNN_WARNING(net->log_ctx,
+                         "Unexpected label format. Found label size of %d, "
+                         "expected %d.\n",
+                         num_toks - 1, label_sz);
         }
         float *y = net->tensors[1].data + idx * label_sz;
         memset(y, 0, label_sz * sizeof(float));

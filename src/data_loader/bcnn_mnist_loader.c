@@ -42,17 +42,17 @@ static bcnn_status read_mnist_header(bcnn_net *net, bcnn_loader *iter) {
     // Read header
     char tmp[16] = {0};
     BCNN_CHECK_AND_LOG(net->log_ctx, fread(tmp, 1, 16, iter->f_current) == 16,
-                       BCNN_INVALID_DATA, "Corrupted Mnist data");
+                       BCNN_INVALID_DATA, "Corrupted Mnist data\n");
     uint32_t num_img = read_uint32(tmp + 4);
     iter->input_height = read_uint32(tmp + 8);
     iter->input_width = read_uint32(tmp + 12);
     BCNN_CHECK_AND_LOG(net->log_ctx,
                        fread(tmp, 1, 8, iter->f_current_extra) == 8,
-                       BCNN_INVALID_DATA, "Corrupted Mnist data");
+                       BCNN_INVALID_DATA, "Corrupted Mnist data\n");
     uint32_t num_labels = read_uint32(tmp + 4);
     BCNN_CHECK_AND_LOG(net->log_ctx, num_img == num_labels, BCNN_INVALID_DATA,
                        "Inconsistent MNIST data: number of images and labels "
-                       "must be the same");
+                       "must be the same\n");
     return BCNN_SUCCESS;
 }
 
@@ -69,7 +69,7 @@ bcnn_status bcnn_loader_mnist_init(bcnn_loader *iter, bcnn_net *net,
         net->log_ctx,
         net->tensors[0].w > 0 && net->tensors[0].h > 0 && net->tensors[0].c > 0,
         BCNN_INVALID_PARAMETER,
-        "Input's width, height and channels must be > 0");
+        "Input's width, height and channels must be > 0\n");
     // Read header
     BCNN_CHECK_STATUS(read_mnist_header(net, iter));
     iter->input_depth = 1;
@@ -123,7 +123,7 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
     BCNN_CHECK_AND_LOG(net->log_ctx,
                        fread((char *)&l, 1, sizeof(char),
                              iter->f_current_extra) == sizeof(char),
-                       BCNN_INVALID_DATA, "Corrupted Mnist data");
+                       BCNN_INVALID_DATA, "Corrupted Mnist data\n");
     int class_label = (int)l;
     // Read img
     int sz = iter->input_width * iter->input_height;
@@ -131,7 +131,7 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
         net->log_ctx,
         fread(iter->input_uchar, 1, iter->input_width * iter->input_height,
               iter->f_current) == (size_t)sz,
-        BCNN_INVALID_DATA, "Corrupted Mnist data");
+        BCNN_INVALID_DATA, "Corrupted Mnist data\n");
 
     // Data augmentation
     if (net->mode == BCNN_MODE_TRAIN) {

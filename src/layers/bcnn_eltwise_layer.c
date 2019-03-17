@@ -50,9 +50,9 @@ bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
         }
     }
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node1_found, BCNN_INVALID_PARAMETER,
-                       "Eltwise layer: invalid input node name %s", src_id1);
+                       "Eltwise layer: invalid input node name %s\n", src_id1);
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node2_found, BCNN_INVALID_PARAMETER,
-                       "Eltwise layer: invalid input node name %s", src_id2);
+                       "Eltwise layer: invalid input node name %s\n", src_id2);
     // Check spatial dimensions consistency
     BCNN_CHECK_AND_LOG(
         net->log_ctx,
@@ -60,7 +60,7 @@ bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
             net->tensors[node.src[0]].h == net->tensors[node.src[1]].h &&
             net->tensors[node.src[0]].c == net->tensors[node.src[1]].c,
         BCNN_INVALID_PARAMETER,
-        "Eltwise layer: inconsistent sizes between tensor %s and tensor %s",
+        "Eltwise layer: inconsistent sizes between tensor %s and tensor %s\n",
         src_id1, src_id2);
 
     // Setup node
@@ -87,7 +87,7 @@ bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
     BCNN_INFO(
         net->log_ctx,
         "[EltWise] input1_shape= %dx%dx%d input2_shape= %dx%dx%d output_shape= "
-        "%dx%dx%d",
+        "%dx%dx%d\n",
         net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
         net->tensors[node.src[0]].c, net->tensors[node.src[1]].w,
         net->tensors[node.src[1]].h, net->tensors[node.src[1]].c,

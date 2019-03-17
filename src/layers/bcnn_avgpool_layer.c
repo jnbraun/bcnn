@@ -39,9 +39,9 @@ bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, const char *src_id,
                 break;
             }
         }
-        BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found,
-                           BCNN_INVALID_PARAMETER,
-                           "Avgpool layer: invalid input node name %s", src_id);
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
+            "Avgpool layer: invalid input node name %s\n", src_id);
     } else {
         bcnn_node_add_input(net, &node, 0);
     }
@@ -67,7 +67,7 @@ bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, const char *src_id,
 
     BCNN_INFO(net->log_ctx,
               "[Avgpool] input_shape= %dx%dx%d ouput_shape= "
-              "%dx%dx%d",
+              "%dx%dx%d\n",
               net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
               net->tensors[node.src[0]].c, net->tensors[node.dst[0]].w,
               net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);

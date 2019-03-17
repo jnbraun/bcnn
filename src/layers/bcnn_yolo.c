@@ -19,7 +19,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
 
     BCNN_CHECK_AND_LOG(net->log_ctx, net->num_nodes >= 1,
                        BCNN_INVALID_PARAMETER,
-                       "Yolo layer can't be the first layer of the network");
+                       "Yolo layer can't be the first layer of the network\n");
     int is_src_node_found = 0;
     for (int i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, src_id) == 0) {
@@ -29,12 +29,12 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
         }
     }
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node_found, BCNN_INVALID_PARAMETER,
-                       "Yolo layer: invalid input node name %s", src_id);
+                       "Yolo layer: invalid input node name %s\n", src_id);
     BCNN_CHECK_AND_LOG(net->log_ctx,
                        num_boxes_per_cell * (classes + coords + 1) ==
                            net->tensors[node.src[0]].c,
                        BCNN_INVALID_PARAMETER,
-                       "Yolo layer: inconsistent number of channels %d",
+                       "Yolo layer: inconsistent number of channels %d\n",
                        num_boxes_per_cell * (classes + coords + 1));
 
     node.type = BCNN_LAYER_YOLOV3;
@@ -89,7 +89,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     bcnn_net_add_node(net, node);
     BCNN_INFO(net->log_ctx,
               "[Yolo] input_shape= %dx%dx%d num_classes= %d num_coords= %d "
-              "output_shape= %dx%dx%d",
+              "output_shape= %dx%dx%d\n",
               net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
               net->tensors[node.src[0]].c, classes, coords,
               net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,

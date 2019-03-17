@@ -107,7 +107,7 @@ static bcnn_status bcnn_load_image_from_path(bcnn_net *net, char *path, int w,
 
     bip_load_image(path, &buf, &w_img, &h_img, &c_img);
     BCNN_CHECK_AND_LOG(net->log_ctx, (w_img > 0 && h_img > 0 && buf),
-                       BCNN_INVALID_DATA, "Invalid image %s", path);
+                       BCNN_INVALID_DATA, "Invalid image %s\n", path);
     if (c != c_img) {
         bcnn_log(net->log_ctx, BCNN_LOG_ERROR,
                  "Unexpected number of channels of image %s\n", path);
@@ -446,25 +446,25 @@ bcnn_status bcnn_open_dataset(bcnn_loader *iter, bcnn_net *net,
     if (train_path != NULL) {
         iter->f_train = fopen(train_path, "rb");
         BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_train, BCNN_INVALID_PARAMETER,
-                           "Could not open file %s", train_path);
+                           "Could not open file %s\n", train_path);
     }
     if (test_path != NULL) {
         iter->f_test = fopen(test_path, "rb");
         BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_test, BCNN_INVALID_PARAMETER,
-                           "Could not open file %s", test_path);
+                           "Could not open file %s\n", test_path);
     }
     if (has_extra) {
         if (train_path_extra != NULL) {
             iter->f_train_extra = fopen(train_path_extra, "rb");
             BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_train_extra,
-                               BCNN_INVALID_PARAMETER, "Could not open file %s",
-                               train_path_extra);
+                               BCNN_INVALID_PARAMETER,
+                               "Could not open file %s\n", train_path_extra);
         }
         if (test_path_extra != NULL) {
             iter->f_test_extra = fopen(test_path_extra, "rb");
             BCNN_CHECK_AND_LOG(net->log_ctx, iter->f_test_extra,
-                               BCNN_INVALID_PARAMETER, "Could not open file %s",
-                               test_path_extra);
+                               BCNN_INVALID_PARAMETER,
+                               "Could not open file %s\n", test_path_extra);
         }
     }
     // Check that the provided dataset are consistent with the network mode
@@ -476,7 +476,7 @@ bcnn_status bcnn_open_dataset(bcnn_loader *iter, bcnn_net *net,
             valid = valid && (iter->f_current_extra != NULL);
         }
         BCNN_CHECK_AND_LOG(net->log_ctx, valid, BCNN_INVALID_DATA,
-                           "A training dataset must be provided");
+                           "A training dataset must be provided\n");
     } else {
         iter->f_current = iter->f_test;
         bool valid = (iter->f_current != NULL);
@@ -485,7 +485,7 @@ bcnn_status bcnn_open_dataset(bcnn_loader *iter, bcnn_net *net,
             valid = valid && (iter->f_current_extra != NULL);
         }
         BCNN_CHECK_AND_LOG(net->log_ctx, valid, BCNN_INVALID_DATA,
-                           "A testing dataset must be provided");
+                           "A testing dataset must be provided\n");
     }
     iter->has_extra_data = has_extra;
     return BCNN_SUCCESS;
@@ -500,19 +500,26 @@ bcnn_status bcnn_switch_data_handles(bcnn_net *net, bcnn_loader *iter) {
             valid = valid && (iter->f_current_extra != NULL);
         }
         BCNN_CHECK_AND_LOG(net->log_ctx, valid, BCNN_INVALID_DATA,
-                           "A training dataset must be provided");
+                           "A training dataset must be provided\n");
     } else {
         // We need to ensure that each time a prediction run is done, the same
-        // data samples are being processed.
-        rewind(iter->f_test);
+        // data samples are being processed therefore we rewind the test dataset
+        // streams.
+        BCNN_CHECK_AND_LOG(net->log_ctx, fseek(iter->f_test, 0L, SEEK_SET) == 0,
+                           BCNN_INVALID_DATA,
+                           "Could not rewind test dataset file\n");
         iter->f_current = iter->f_test;
         bool valid = (iter->f_current != NULL);
         if (iter->has_extra_data) {
+            BCNN_CHECK_AND_LOG(net->log_ctx,
+                               fseek(iter->f_test_extra, 0L, SEEK_SET) == 0,
+                               BCNN_INVALID_DATA,
+                               "Could not rewind extra test dataset file\n");
             iter->f_current_extra = iter->f_test_extra;
             valid = valid && (iter->f_current_extra != NULL);
         }
         BCNN_CHECK_AND_LOG(net->log_ctx, valid, BCNN_INVALID_DATA,
-                           "A testing dataset must be provided");
+                           "A testing dataset must be provided\n");
     }
 
     return BCNN_SUCCESS;

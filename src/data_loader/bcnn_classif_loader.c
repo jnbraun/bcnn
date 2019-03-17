@@ -42,7 +42,7 @@ bcnn_status bcnn_loader_list_classif_init(bcnn_loader *iter, bcnn_net *net,
         net->log_ctx,
         net->tensors[0].w > 0 && net->tensors[0].h > 0 && net->tensors[0].c > 0,
         BCNN_INVALID_PARAMETER,
-        "Input's width, height and channels must be > 0");
+        "Input's width, height and channels must be > 0\n");
     iter->input_uchar = (unsigned char *)calloc(
         net->tensors[0].w * net->tensors[0].h * net->tensors[0].c,
         sizeof(unsigned char));
@@ -76,11 +76,11 @@ bcnn_status bcnn_loader_list_classif_next(bcnn_loader *iter, bcnn_net *net,
     char **tok = NULL;
     int num_toks = bh_fsplitline(iter->f_current, true, ' ', &tok);
     BCNN_CHECK_AND_LOG(net->log_ctx, num_toks > 0, BCNN_INVALID_DATA,
-                       "Invalid regression format");
+                       "Invalid regression format\n");
     if (net->mode != BCNN_MODE_PREDICT && num_toks != 2) {
         BCNN_WARNING(
             net->log_ctx,
-            "Unexpected classif format. Found label size of %d, expected %d.",
+            "Unexpected classif format. Found label size of %d, expected %d.\n",
             num_toks - 1, 1);
         for (int i = 0; i < num_toks; ++i) {
             bh_free((tok[i]));

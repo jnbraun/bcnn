@@ -62,8 +62,8 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             int biases_size = bcnn_tensor_size(biases);
             int nb_read = fread(biases->data, sizeof(float), biases_size, fp);
             BCNN_INFO(net->log_ctx,
-                      "node_idx= %d nbread_bias= %lu bias_size_expected= %d", i,
-                      (unsigned long)nb_read, biases_size);
+                      "node_idx= %d nbread_bias= %lu bias_size_expected= %d\n",
+                      i, (unsigned long)nb_read, biases_size);
             if (node->type == BCNN_LAYER_CONV2D) {
                 bcnn_conv_param *param = (bcnn_conv_param *)node->param;
                 if (param->batch_norm == 1) {
@@ -79,18 +79,18 @@ void load_yolo_weights(bcnn_net *net, char *model) {
                                     bn_scales_size, fp);
                     BCNN_INFO(net->log_ctx,
                               "node_idx= %d nbread_scales= %lu "
-                              "scales_size_expected= %d",
+                              "scales_size_expected= %d\n",
                               i, (unsigned long)nb_read, bn_scales_size);
                     nb_read = fread(bn_mean->data, sizeof(float), sz, fp);
                     BCNN_INFO(
                         net->log_ctx,
                         "node_idx= %d nbread_mean= %lu mean_size_expected= "
-                        "%d",
+                        "%d\n",
                         i, (unsigned long)nb_read, sz);
                     nb_read = fread(bn_var->data, sizeof(float), sz, fp);
                     BCNN_INFO(net->log_ctx,
                               "node_idx= %d nbread_variance= %lu "
-                              "variance_size_expected= %d",
+                              "variance_size_expected= %d\n",
                               i, (unsigned long)nb_read, sz);
 #ifdef BCNN_USE_CUDA
                     bcnn_cuda_memcpy_host2dev(bn_mean->data_gpu, bn_mean->data,
@@ -105,7 +105,7 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             nb_read = fread(weights->data, sizeof(float), weights_size, fp);
             BCNN_INFO(
                 net->log_ctx,
-                "node_idx= %d nbread_weight= %lu weight_size_expected= %d", i,
+                "node_idx= %d nbread_weight= %lu weight_size_expected= %d\n", i,
                 (unsigned long)nb_read, weights_size);
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(weights->data_gpu, weights->data,
@@ -122,12 +122,12 @@ void load_yolo_weights(bcnn_net *net, char *model) {
             int nb_read = fread(bn_scales->data, sizeof(float), sz, fp);
             nb_read = fread(bn_mean->data, sizeof(float), sz, fp);
             BCNN_INFO(net->log_ctx,
-                      "batchnorm= %d nbread_mean= %lu mean_size_expected= %d",
+                      "batchnorm= %d nbread_mean= %lu mean_size_expected= %d\n",
                       i, (unsigned long)nb_read, sz);
             nb_read = fread(bn_var->data, sizeof(float), sz, fp);
             BCNN_INFO(net->log_ctx,
                       "batchnorm= %d nbread_variance= %lu "
-                      "variance_size_expected= %d",
+                      "variance_size_expected= %d\n",
                       i, (unsigned long)nb_read, sz);
 // nb_read = fread(bn_biases->data, sizeof(float), sz, fp);
 #ifdef BCNN_USE_CUDA

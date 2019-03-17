@@ -31,7 +31,7 @@ bcnn_status bcnn_node_add_output(bcnn_net *net, bcnn_node *node, int index) {
     node->num_dst++;
     p_dst = (int *)realloc(node->dst, node->num_dst * sizeof(int));
     BCNN_CHECK_AND_LOG(net->log_ctx, (p_dst != NULL), BCNN_FAILED_ALLOC,
-                       "Internal allocation error");
+                       "Internal allocation error\n");
     node->dst = p_dst;
     node->dst[node->num_dst - 1] = index;
     return BCNN_SUCCESS;
@@ -42,7 +42,7 @@ bcnn_status bcnn_node_add_input(bcnn_net *net, bcnn_node *node, int index) {
     node->num_src++;
     p_src = (int *)realloc(node->src, node->num_src * sizeof(int));
     BCNN_CHECK_AND_LOG(net->log_ctx, (p_src != NULL), BCNN_FAILED_ALLOC,
-                       "Internal allocation error");
+                       "Internal allocation error\n");
     node->src = p_src;
     node->src[node->num_src - 1] = index;
     return BCNN_SUCCESS;

@@ -545,13 +545,14 @@ BCNN_API void bcnn_set_weight_regularizer(bcnn_net *net, float weight_decay);
 
 /**
  * Converts an image (represented as an array of unsigned char) to floating
- * point values. Also perform a mean substraction and rescale the values
- * according to the following formula:
+ * point values and fill a tensor. Also perform a mean substraction and rescale
+ * the values according to the following formula:
  * output_val = (input_pixel - mean) * norm_coeff
  *
  * \note: If the image has less than 3 channels, only the first mean values are
  * considered (up to the number of channels)
  *
+ * \param[in]   net             Pointer to net instance.
  * \param[in]   src             Pointer to input image pixels data.
  * \param[in]   w               Image width.
  * \param[in]   h               Image height.
@@ -564,13 +565,14 @@ BCNN_API void bcnn_set_weight_regularizer(bcnn_net *net, float weight_decay);
  * \param[in]   mean_g          Value to be substracted to second channel pixels
  *                              (green).
  * \param[in]   mean_b          Value to be substracted to third channel pixels
- * `                            (blue).
- * \param[out]  dst             Pointer to output float values array.
+ *                              (blue).
+ * \param[in]   tensor_index    Index of the tensor to be filled in.
+ * \param[in]   batch_index     Position of the tensor in the data batch.
  */
-BCNN_API void bcnn_convert_img_to_float(const uint8_t *src, int w, int h, int c,
-                                        float norm_coeff, int swap_to_bgr,
-                                        float mean_r, float mean_g,
-                                        float mean_b, float *dst);
+BCNN_API bcnn_status bcnn_transform_img_and_fill_tensor(
+    bcnn_net *net, const uint8_t *src, int w, int h, int c, float norm_coeff,
+    int swap_to_bgr, float mean_r, float mean_g, float mean_b, int tensor_index,
+    int batch_index);
 
 /**
  * \brief Computes the model prediction on the current batch data and computes

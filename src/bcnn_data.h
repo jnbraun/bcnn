@@ -106,6 +106,10 @@ typedef void (*bcnn_loader_terminate_func)(bcnn_loader *iter);
 
 bcnn_status bcnn_loader_next(bcnn_net *net);
 
+void bcnn_convert_img_to_float(const uint8_t *src, int w, int h, int c,
+                               float norm_coeff, int swap_to_bgr, float mean_r,
+                               float mean_g, float mean_b, float *dst);
+
 bcnn_status bcnn_apply_data_augmentation(unsigned char *img, int width,
                                          int height, int depth,
                                          bcnn_data_augmenter *param,

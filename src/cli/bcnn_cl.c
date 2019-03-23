@@ -772,11 +772,11 @@ void show_usage(char *argv) {
     fprintf(stderr, "\t Required:\n");
     fprintf(stderr,
             "\t\t <mode>: network mode. Possible values are: 'train', "
-            "'valid', 'predict'"
+            "'valid', 'predict'\n"
             "\t\t <config>: configuration file. See example here: ");
     fprintf(stderr,
             "https://github.com/jnbraun/bcnn/blob/master/examples/mnist_cl/"
-            "mnist.cfg\n");
+            "mnist.conf\n");
     fprintf(stderr, "\t Optional:\n");
     fprintf(stderr, "\t\t [gpu_device]: Gpu device id. Default: 0.\n");
 }

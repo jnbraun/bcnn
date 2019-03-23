@@ -170,14 +170,12 @@ bcnn_status bcnn_loader_mnist_next(bcnn_loader *iter, bcnn_net *net, int idx) {
         // Map [0;255] uint8 values to [-1;1] float values
         bcnn_convert_img_to_float(iter->input_net, net->tensors[0].w,
                                   net->tensors[0].h, net->tensors[0].c,
-                                  1 / 127.5f, net->data_aug->swap_to_bgr,
-                                  127.5f, 127.5f, 127.5f, x);
+                                  1 / 127.5f, 0, 127.5f, 127.5f, 127.5f, x);
     } else {
         // Map [0;255] uint8 values to [-1;1] float values
         bcnn_convert_img_to_float(iter->input_uchar, net->tensors[0].w,
                                   net->tensors[0].h, net->tensors[0].c,
-                                  1 / 127.5f, net->data_aug->swap_to_bgr,
-                                  127.5f, 127.5f, 127.5f, x);
+                                  1 / 127.5f, 0, 127.5f, 127.5f, 127.5f, x);
     }
     // bip_write_image("test1.png", tmp_buf, net->tensors[0].w,
     // net->tensors[0].h, net->tensors[0].c, net->tensors[0].w *

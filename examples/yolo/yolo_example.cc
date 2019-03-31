@@ -17,523 +17,6 @@
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
-static void transpose_matrix(float *a, int rows, int cols) {
-    float *transpose = (float *)calloc(rows * cols, sizeof(float));
-    int x, y;
-    for (x = 0; x < rows; ++x) {
-        for (y = 0; y < cols; ++y) {
-            transpose[y * rows + x] = a[x * cols + y];
-        }
-    }
-    memcpy(a, transpose, rows * cols * sizeof(float));
-    free(transpose);
-}
-
-void load_yolo_weights(bcnn_net *net, char *model) {
-    FILE *fp = NULL;
-    fp = fopen(model, "rb");
-    if (fp == NULL) {
-        fprintf(stderr, "[ERROR] Could not open file %s\n", model);
-    }
-    int major;
-    int minor;
-    int revision;
-    size_t nr = fread(&major, sizeof(int), 1, fp);
-    nr = fread(&minor, sizeof(int), 1, fp);
-    nr = fread(&revision, sizeof(int), 1, fp);
-    uint64_t num_samples_seen = 0;
-    if ((major * 10 + minor) >= 2 && major < 1000 && minor < 1000) {
-        size_t lseen = 0;
-        nr = fread(&lseen, sizeof(uint64_t), 1, fp);
-        num_samples_seen = (uint64_t)lseen;
-    } else {
-        int iseen = 0;
-        nr = fread(&iseen, sizeof(int), 1, fp);
-        num_samples_seen = (uint64_t)iseen;
-    }
-    fprintf(stderr, "version %d.%d seen %ld\n", major, minor, num_samples_seen);
-    int transpose = (major > 1000) || (minor > 1000);
-    for (int i = 0; i < net->num_nodes; ++i) {
-        bcnn_node *node = &net->nodes[i];
-        if (node->type == BCNN_LAYER_CONV2D) {
-            bcnn_tensor *weights = &net->tensors[net->nodes[i].src[1]];
-            bcnn_tensor *biases = &net->tensors[net->nodes[i].src[2]];
-            int weights_size = bcnn_tensor_size(weights);
-            int biases_size = bcnn_tensor_size(biases);
-            int nb_read = fread(biases->data, sizeof(float), biases_size, fp);
-            BCNN_INFO(net->log_ctx,
-                      "node_idx= %d nbread_bias= %lu bias_size_expected= %d\n",
-                      i, (unsigned long)nb_read, biases_size);
-            if (node->type == BCNN_LAYER_CONV2D) {
-                bcnn_conv_param *param = (bcnn_conv_param *)node->param;
-                if (param->batch_norm == 1) {
-                    bcnn_tensor *bn_mean = &net->tensors[net->nodes[i].src[3]];
-                    bcnn_tensor *bn_var = &net->tensors[net->nodes[i].src[4]];
-                    bcnn_tensor *bn_scales =
-                        &net->tensors[net->nodes[i].src[5]];
-                    int bn_mean_size = bcnn_tensor_size(bn_mean);
-                    int bn_var_size = bcnn_tensor_size(bn_var);
-                    int sz = net->tensors[net->nodes[i].dst[0]].c;
-                    int bn_scales_size = bcnn_tensor_size(bn_scales);
-                    nb_read = fread(bn_scales->data, sizeof(float),
-                                    bn_scales_size, fp);
-                    BCNN_INFO(net->log_ctx,
-                              "node_idx= %d nbread_scales= %lu "
-                              "scales_size_expected= %d\n",
-                              i, (unsigned long)nb_read, bn_scales_size);
-                    nb_read = fread(bn_mean->data, sizeof(float), sz, fp);
-                    BCNN_INFO(
-                        net->log_ctx,
-                        "node_idx= %d nbread_mean= %lu mean_size_expected= "
-                        "%d\n",
-                        i, (unsigned long)nb_read, sz);
-                    nb_read = fread(bn_var->data, sizeof(float), sz, fp);
-                    BCNN_INFO(net->log_ctx,
-                              "node_idx= %d nbread_variance= %lu "
-                              "variance_size_expected= %d\n",
-                              i, (unsigned long)nb_read, sz);
-#ifdef BCNN_USE_CUDA
-                    bcnn_cuda_memcpy_host2dev(bn_mean->data_gpu, bn_mean->data,
-                                              bn_mean_size);
-                    bcnn_cuda_memcpy_host2dev(bn_var->data_gpu, bn_var->data,
-                                              bn_var_size);
-                    bcnn_cuda_memcpy_host2dev(bn_scales->data_gpu,
-                                              bn_scales->data, bn_scales_size);
-#endif
-                }
-            }
-            nb_read = fread(weights->data, sizeof(float), weights_size, fp);
-            BCNN_INFO(
-                net->log_ctx,
-                "node_idx= %d nbread_weight= %lu weight_size_expected= %d\n", i,
-                (unsigned long)nb_read, weights_size);
-#ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_host2dev(weights->data_gpu, weights->data,
-                                      weights_size);
-            bcnn_cuda_memcpy_host2dev(biases->data_gpu, biases->data,
-                                      biases_size);
-#endif
-        } else if (node->type == BCNN_LAYER_BATCHNORM) {
-            bcnn_tensor *bn_mean = &net->tensors[net->nodes[i].src[1]];
-            bcnn_tensor *bn_var = &net->tensors[net->nodes[i].src[2]];
-            bcnn_tensor *bn_scales = &net->tensors[net->nodes[i].src[3]];
-            bcnn_tensor *bn_biases = &net->tensors[net->nodes[i].src[4]];
-            int sz = net->tensors[net->nodes[i].dst[0]].c;
-            int nb_read = fread(bn_scales->data, sizeof(float), sz, fp);
-            nb_read = fread(bn_mean->data, sizeof(float), sz, fp);
-            BCNN_INFO(net->log_ctx,
-                      "batchnorm= %d nbread_mean= %lu mean_size_expected= %d\n",
-                      i, (unsigned long)nb_read, sz);
-            nb_read = fread(bn_var->data, sizeof(float), sz, fp);
-            BCNN_INFO(net->log_ctx,
-                      "batchnorm= %d nbread_variance= %lu "
-                      "variance_size_expected= %d\n",
-                      i, (unsigned long)nb_read, sz);
-// nb_read = fread(bn_biases->data, sizeof(float), sz, fp);
-#ifdef BCNN_USE_CUDA
-            bcnn_cuda_memcpy_host2dev(bn_mean->data_gpu, bn_mean->data, sz);
-            bcnn_cuda_memcpy_host2dev(bn_var->data_gpu, bn_var->data, sz);
-            bcnn_cuda_memcpy_host2dev(bn_scales->data_gpu, bn_scales->data, sz);
-// bcnn_cuda_memcpy_host2dev(bn_biases->data_gpu, bn_biases->data, sz);
-#endif
-        }
-    }
-
-    fclose(fp);
-    return;
-}
-
-void setup_yolov3_tiny_net(bcnn_net *net, int input_width, int input_height,
-                           char *model) {
-    int num_classes = 80;
-    int boxes_per_cell = 3;
-    bcnn_set_input_shape(net, input_width, input_height, 3, 1);
-    bcnn_add_convolutional_layer(net, 16, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"input",
-                                 (char *)"conv1");
-    bcnn_add_maxpool_layer(net, 2, 2, BCNN_PADDING_SAME, (char *)"conv1",
-                           (char *)"pool1");
-
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"pool1",
-                                 (char *)"conv2");
-    bcnn_add_maxpool_layer(net, 2, 2, BCNN_PADDING_SAME, (char *)"conv2",
-                           (char *)"pool2");
-
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"pool2",
-                                 (char *)"conv3");
-    bcnn_add_maxpool_layer(net, 2, 2, BCNN_PADDING_SAME, (char *)"conv3",
-                           (char *)"pool3");
-
-    bcnn_add_convolutional_layer(net, 128, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"pool3",
-                                 (char *)"conv4");
-    bcnn_add_maxpool_layer(net, 2, 2, BCNN_PADDING_SAME, (char *)"conv4",
-                           (char *)"pool4");
-
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"pool4",
-                                 (char *)"conv5");
-    bcnn_add_maxpool_layer(net, 2, 2, BCNN_PADDING_SAME, (char *)"conv5",
-                           (char *)"pool5");
-
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"pool5",
-                                 (char *)"conv6");
-    bcnn_add_maxpool_layer(net, 2, 1, BCNN_PADDING_SAME, (char *)"conv6",
-                           (char *)"pool6");
-
-    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"pool6",
-                                 (char *)"conv7");
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv7",
-                                 (char *)"conv8");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv8",
-                                 (char *)"conv9");
-    bcnn_add_convolutional_layer(net, (boxes_per_cell * (5 + num_classes)), 1,
-                                 1, 0, 1, 0, BCNN_FILLER_XAVIER, BCNN_ACT_NONE,
-                                 0, (char *)"conv9", (char *)"conv10");
-    int mask[3] = {3, 4, 5};
-    float anchors[12] = {10, 14, 23, 27, 37, 58, 81, 82, 135, 169, 344, 319};
-    bcnn_add_yolo_layer(net, boxes_per_cell, num_classes, 4, 6, mask, anchors,
-                        (char *)"conv10", (char *)"yolo1");
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv8",
-                                 (char *)"conv11");
-    bcnn_add_upsample_layer(net, 2, (char *)"conv11", (char *)"conv11_up");
-    bcnn_add_concat_layer(net, (char *)"conv11_up", (char *)"conv5",
-                          (char *)"conv12");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv12",
-                                 (char *)"conv13");
-    bcnn_add_convolutional_layer(net, (boxes_per_cell * (5 + num_classes)), 1,
-                                 1, 0, 1, 0, BCNN_FILLER_XAVIER, BCNN_ACT_NONE,
-                                 0, (char *)"conv13", (char *)"conv14");
-    int mask2[3] = {0, 1, 2};
-    float anchors2[12] = {10, 14, 23, 27, 37, 58, 81, 82, 135, 169, 344, 319};
-    bcnn_add_yolo_layer(net, boxes_per_cell, num_classes, 4, 6, mask2, anchors2,
-                        (char *)"conv14", (char *)"yolo2");
-    bcnn_compile_net(net);
-    // Load yolo parameters
-    load_yolo_weights(net, model);
-}
-
-void setup_yolov3_net(bcnn_net *net, int input_width, int input_height,
-                      char *model) {
-    int num_classes = 80;
-    int boxes_per_cell = 3;
-    float anchors[18] = {10, 13, 16,  30,  33, 23,  30,  61,  62,
-                         45, 59, 119, 116, 90, 156, 198, 373, 326};
-    bcnn_set_input_shape(net, input_width, input_height, 3, 1);
-    bcnn_add_convolutional_layer(net, 32, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"input",
-                                 (char *)"conv1");
-    // Downsample
-    bcnn_add_convolutional_layer(net, 64, 3, 2, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv1",
-                                 (char *)"conv1_1");
-    bcnn_add_convolutional_layer(net, 32, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv1_1",
-                                 (char *)"conv1_2");
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv1_2",
-                                 (char *)"conv1_3");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv1_3",
-                           (char *)"conv1_1", (char *)"conv1_add");
-    // Downsample
-    bcnn_add_convolutional_layer(net, 128, 3, 2, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv1_add",
-                                 (char *)"conv2_1");
-    bcnn_add_convolutional_layer(net, 64, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_1",
-                                 (char *)"conv2_2");
-    bcnn_add_convolutional_layer(net, 128, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_2",
-                                 (char *)"conv2_3");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv2_3",
-                           (char *)"conv2_1", (char *)"conv2_add");
-    bcnn_add_convolutional_layer(net, 64, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_add",
-                                 (char *)"conv2_4");
-    bcnn_add_convolutional_layer(net, 128, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_4",
-                                 (char *)"conv2_5");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv2_5",
-                           (char *)"conv2_add", (char *)"conv2_add2");
-
-    // Downsample
-    bcnn_add_convolutional_layer(net, 256, 3, 2, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_add2",
-                                 (char *)"conv2_1");
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_1",
-                                 (char *)"conv2_2");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_2",
-                                 (char *)"conv2_3");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv2_3",
-                           (char *)"conv2_1", (char *)"conv2_add");
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_add",
-                                 (char *)"conv2_4");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_4",
-                                 (char *)"conv2_5");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv2_5",
-                           (char *)"conv2_add", (char *)"conv2_add2");
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_add2",
-                                 (char *)"conv2_6");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_6",
-                                 (char *)"conv2_7");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv2_7",
-                           (char *)"conv2_add2", (char *)"conv2_add3");
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_add3",
-                                 (char *)"conv2_8");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_8",
-                                 (char *)"conv2_9");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv2_9",
-                           (char *)"conv2_add3", (char *)"conv2_add4");
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_add4",
-                                 (char *)"conv2_10");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_10",
-                                 (char *)"conv2_11");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv2_11",
-                           (char *)"conv2_add4", (char *)"conv2_add5");
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_add5",
-                                 (char *)"conv2_12");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_12",
-                                 (char *)"conv2_13");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv2_13",
-                           (char *)"conv2_add5", (char *)"conv2_add6");
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_add6",
-                                 (char *)"conv2_14");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_14",
-                                 (char *)"conv2_15");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv2_15",
-                           (char *)"conv2_add6", (char *)"conv2_add7");
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_add7",
-                                 (char *)"conv2_16");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_16",
-                                 (char *)"conv2_17");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv2_17",
-                           (char *)"conv2_add7", (char *)"conv2_add8");
-
-    // Downsample
-    bcnn_add_convolutional_layer(net, 512, 3, 2, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv2_add8",
-                                 (char *)"conv3_1");
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_1",
-                                 (char *)"conv3_2");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_2",
-                                 (char *)"conv3_3");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv3_3",
-                           (char *)"conv3_1", (char *)"conv3_add");
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_add",
-                                 (char *)"conv3_4");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_4",
-                                 (char *)"conv3_5");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv3_5",
-                           (char *)"conv3_add", (char *)"conv3_add2");
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_add2",
-                                 (char *)"conv3_6");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_6",
-                                 (char *)"conv3_7");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv3_7",
-                           (char *)"conv3_add2", (char *)"conv3_add3");
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_add3",
-                                 (char *)"conv3_8");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_8",
-                                 (char *)"conv3_9");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv3_9",
-                           (char *)"conv3_add3", (char *)"conv3_add4");
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_add4",
-                                 (char *)"conv3_10");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_10",
-                                 (char *)"conv3_11");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv3_11",
-                           (char *)"conv3_add4", (char *)"conv3_add5");
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_add5",
-                                 (char *)"conv3_12");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_12",
-                                 (char *)"conv3_13");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv3_13",
-                           (char *)"conv3_add5", (char *)"conv3_add6");
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_add6",
-                                 (char *)"conv3_14");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_14",
-                                 (char *)"conv3_15");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv3_15",
-                           (char *)"conv3_add6", (char *)"conv3_add7");
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_add7",
-                                 (char *)"conv3_16");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_16",
-                                 (char *)"conv3_17");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv3_17",
-                           (char *)"conv3_add7", (char *)"conv3_add8");
-
-    // Downsample
-    bcnn_add_convolutional_layer(net, 1024, 3, 2, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv3_add8",
-                                 (char *)"conv4_1");
-    bcnn_add_convolutional_layer(net, 512, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv4_1",
-                                 (char *)"conv4_2");
-    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv4_2",
-                                 (char *)"conv4_3");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv4_3",
-                           (char *)"conv4_1", (char *)"conv4_add");
-    bcnn_add_convolutional_layer(net, 512, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv4_add",
-                                 (char *)"conv4_4");
-    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv4_4",
-                                 (char *)"conv4_5");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv4_5",
-                           (char *)"conv4_add", (char *)"conv4_add2");
-    bcnn_add_convolutional_layer(net, 512, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv4_add2",
-                                 (char *)"conv4_6");
-    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv4_6",
-                                 (char *)"conv4_7");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv4_7",
-                           (char *)"conv4_add2", (char *)"conv4_add3");
-    bcnn_add_convolutional_layer(net, 512, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv4_add3",
-                                 (char *)"conv4_8");
-    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv4_8",
-                                 (char *)"conv4_9");
-    bcnn_add_eltwise_layer(net, BCNN_ACT_NONE, (char *)"conv4_9",
-                           (char *)"conv4_add3", (char *)"conv4_add4");
-
-    //////////////////////////////////////////////
-    bcnn_add_convolutional_layer(net, 512, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv4_add4",
-                                 (char *)"conv5");
-    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv5",
-                                 (char *)"conv6");
-    bcnn_add_convolutional_layer(net, 512, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv6",
-                                 (char *)"conv7");
-    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv7",
-                                 (char *)"conv8");
-    bcnn_add_convolutional_layer(net, 512, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv8",
-                                 (char *)"conv9");
-    bcnn_add_convolutional_layer(net, 1024, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv9",
-                                 (char *)"conv10");
-    bcnn_add_convolutional_layer(net, (boxes_per_cell * (5 + num_classes)), 1,
-                                 1, 0, 1, 0, BCNN_FILLER_XAVIER, BCNN_ACT_NONE,
-                                 0, (char *)"conv10", (char *)"conv11");
-    int mask[3] = {6, 7, 8};
-    bcnn_add_yolo_layer(net, boxes_per_cell, num_classes, 4, 9, mask, anchors,
-                        (char *)"conv11", (char *)"yolo1");
-
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv9",
-                                 (char *)"conv12");
-    bcnn_add_upsample_layer(net, 2, (char *)"conv12", (char *)"conv12_up");
-    bcnn_add_concat_layer(net, (char *)"conv12_up", (char *)"conv3_add8",
-                          (char *)"conv13");
-
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv13",
-                                 (char *)"conv14");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv14",
-                                 (char *)"conv15");
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv15",
-                                 (char *)"conv16");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv16",
-                                 (char *)"conv17");
-    bcnn_add_convolutional_layer(net, 256, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv17",
-                                 (char *)"conv18");
-    bcnn_add_convolutional_layer(net, 512, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv18",
-                                 (char *)"conv19");
-    bcnn_add_convolutional_layer(net, (boxes_per_cell * (5 + num_classes)), 1,
-                                 1, 0, 1, 0, BCNN_FILLER_XAVIER, BCNN_ACT_NONE,
-                                 0, (char *)"conv19", (char *)"conv20");
-    int mask2[3] = {3, 4, 5};
-    bcnn_add_yolo_layer(net, boxes_per_cell, num_classes, 4, 9, mask2, anchors,
-                        (char *)"conv20", (char *)"yolo2");
-
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv18",
-                                 (char *)"conv21");
-    bcnn_add_upsample_layer(net, 2, (char *)"conv21", (char *)"conv21_up");
-    bcnn_add_concat_layer(net, (char *)"conv21_up", (char *)"conv2_add8",
-                          (char *)"conv22");
-
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv22",
-                                 (char *)"conv23");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv23",
-                                 (char *)"conv24");
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv24",
-                                 (char *)"conv25");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv25",
-                                 (char *)"conv26");
-    bcnn_add_convolutional_layer(net, 128, 1, 1, 0, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv26",
-                                 (char *)"conv27");
-    bcnn_add_convolutional_layer(net, 256, 3, 1, 1, 1, 1, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_LRELU, 0, (char *)"conv27",
-                                 (char *)"conv28");
-    bcnn_add_convolutional_layer(net, (boxes_per_cell * (5 + num_classes)), 1,
-                                 1, 0, 1, 0, BCNN_FILLER_XAVIER, BCNN_ACT_NONE,
-                                 0, (char *)"conv28", (char *)"conv29");
-    int mask3[3] = {0, 1, 2};
-    bcnn_add_yolo_layer(net, boxes_per_cell, num_classes, 4, 9, mask3, anchors,
-                        (char *)"conv29", (char *)"yolo3");
-
-    bcnn_compile_net(net);
-    // Load yolo parameters
-    load_yolo_weights(net, model);
-}
-
 #ifdef USE_OPENCV
 void prepare_frame(cv::Mat frame, float *img, int w, int h) {
 #else
@@ -703,44 +186,35 @@ void display_detections(unsigned char *img, int w, int h, int c,
 #endif
 
 void show_usage(int argc, char **argv) {
-    fprintf(stderr, "Usage: ./%s <mode> <video path/source> <model>\n",
-            argv[0]);
-    fprintf(stderr,
-            "\t<mode>: can either be 'img' or 'video' for video on disk or "
-            "webcam stream.\n"
-            "\t<model>: can either be 'yolov3-tiny.weights' or "
-            "'yolov3.weights'.\n");
+    fprintf(stderr, "Usage: ./%s <mode> <input> <config> <model>\n", argv[0]);
+    fprintf(
+        stderr,
+        "\t<mode>: can either be 'img' or 'video' for video on disk or "
+        "webcam stream.\n"
+        "\t<input>: path to video or img path or source if webcam is used.\n"
+        "\t<config>: can either be 'yolov3-tiny.cfg' or "
+        "'yolov3.cfg'.\n"
+        "\t<model>: can either be 'yolov3-tiny.weights' or "
+        "'yolov3.weights'.\n");
 }
 
-int run(int argc, char **argv) {
+int main(int argc, char **argv) {
+    if (argc < 4) {
+        show_usage(argc, argv);
+        return 1;
+    }
     // Init net
     bcnn_net *net = NULL;
     bcnn_init_net(&net, BCNN_MODE_PREDICT);
-    // net->prediction_type = DETECTION;
-    // Setup net and weights
-    char **toks = NULL;
-    int ntoks = bh_strsplit(argv[3], '/', &toks);
-    if (ntoks < 1) {
-        show_usage(argc, argv);
-        return -1;
-    }
-    int w = 416, h = 416;
-    if (strcmp(toks[ntoks - 1], "yolov3-tiny.weights") == 0) {
-        setup_yolov3_tiny_net(net, w, h, argv[3]);
-    } else if (strcmp(toks[ntoks - 1], "yolov3.weights") == 0) {
-        w = 608;
-        h = 608;
-        setup_yolov3_net(net, w, h, argv[3]);
-    } else {
+    // Load net config and weights
+    if (bcnn_load_net(net, argv[3], argv[4]) != BCNN_SUCCESS) {
         bcnn_end_net(&net);
-        show_usage(argc, argv);
         return -1;
     }
-    for (int i = 0; i < ntoks; ++i) {
-        bh_free(toks[i]);
+    if (bcnn_compile_net(net) != BCNN_SUCCESS) {
+        bcnn_end_net(&net);
+        return -1;
     }
-    bh_free(toks);
-
     int out_sz = bcnn_tensor_size(&net->tensors[net->num_tensors - 1]);
     if (strcmp(argv[1], "video") == 0) {
 #ifdef USE_OPENCV
@@ -752,12 +226,13 @@ int run(int argc, char **argv) {
         cap >> frame;
         while (!frame.empty()) {
             cap >> frame;
-            prepare_frame(frame, net->tensors[0].data, w, h);
+            prepare_frame(frame, net->tensors[0].data, net->tensors[0].w,
+                          net->tensors[0].h);
             int num_dets = 0;
             bcnn_output_detection *dets =
                 run_inference(frame.cols, frame.rows, net, &num_dets);
             display_detections(frame, dets, num_dets, 0.45, 80);
-            cv::imshow("yolov3-tiny example", frame);
+            cv::imshow("yolov3 example", frame);
             free_detection_results(dets, num_dets);
             free(dets);
             int q = cv::waitKey(10);
@@ -792,11 +267,13 @@ int run(int argc, char **argv) {
 #endif
         int num_dets = 0;
 #ifdef USE_OPENCV
-        prepare_frame(img, net->tensors[0].data, w, h);
+        prepare_frame(img, net->tensors[0].data, net->tensors[0].w,
+                      net->tensors[0].h);
         bcnn_output_detection *dets =
             run_inference(img.cols, img.rows, net, &num_dets);
 #else
-        prepare_frame(img, w_frame, h_frame, net->tensors[0].data, w, h);
+        prepare_frame(img, w_frame, h_frame, net->tensors[0].data,
+                      net->tensors[0].w, net->tensors[0].h);
         bcnn_output_detection *dets =
             run_inference(w_frame, h_frame, net, &num_dets);
 #endif
@@ -815,19 +292,10 @@ int run(int argc, char **argv) {
         fprintf(stderr, "[ERROR] Incorrect mode %s. Should be 'img' or 'video'",
                 argv[1]);
         show_usage(argc, argv);
+        bcnn_end_net(&net);
         return -1;
     }
 
     bcnn_end_net(&net);
-    return 0;
-}
-
-int main(int argc, char **argv) {
-    if (argc < 4) {
-        show_usage(argc, argv);
-        return 1;
-    }
-    run(argc, argv);
-
     return 0;
 }

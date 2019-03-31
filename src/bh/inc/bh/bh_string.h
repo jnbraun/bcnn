@@ -23,15 +23,15 @@
 #ifndef BH_STRING_H
 #define BH_STRING_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef bh_free
 #define bh_free(buf)      \
@@ -87,10 +87,13 @@ static inline int bh_strsplit(char *str, char c, char ***arr) {
     int cnt = 1;
     int token_len = 1;
     int i = 0;
-    char *p;
     char *t;
 
-    p = str;
+    if (str == NULL) {
+        return 0;
+    }
+
+    char *p = str;
     while (*p != '\0') {
         if (*p == c) cnt++;
         p++;

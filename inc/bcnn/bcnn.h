@@ -91,6 +91,7 @@ typedef enum {
     BCNN_SUCCESS,
     BCNN_INVALID_PARAMETER,
     BCNN_INVALID_DATA,
+    BCNN_INVALID_MODEL,
     BCNN_FAILED_ALLOC,
     BCNN_INTERNAL_ERROR,
     BCNN_CUDA_FAILED_ALLOC,
@@ -359,28 +360,41 @@ BCNN_API int bcnn_get_batch_size(bcnn_net *net);
 BCNN_API bcnn_status bcnn_compile_net(bcnn_net *net);
 
 /**
- * \brief Loads the model parameters (=weights) from disk.
+ * \brief Loads the model weights from disk.
  *
- * \param[in]   net         Pointer to net instance.
- * \param[in]   filename    Path to the model weights to be loaded.
+ * \param[in]   net           Pointer to net instance.
+ * \param[in]   model_path    Path to the model weights to be loaded.
  *
- * \return Possible erros include BCNN_INVALID_DATA and BCNN_INVALID_PARAMETER.
+ * \return Possible erros include BCNN_INVALID_MODEL and BCNN_INVALID_PARAMETER.
  */
-BCNN_API bcnn_status bcnn_load_model(bcnn_net *net, const char *filename);
-
-/* For compatibility with older versions */
-BCNN_API bcnn_status bcnn_load_model_legacy(bcnn_net *net,
-                                            const char *filename);
+BCNN_API bcnn_status bcnn_load_weights(bcnn_net *net, const char *model_path);
 
 /**
- * \brief Writes the model on disk.
+ * \brief Defines the net architecture and loads the model weights if required.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   config_path     Path to configuration file that defines the net
+ *                              architecture.
+ * \param[in]   model_path      Path to the model weights to be loaded.
+ *
+ * \note The model weights should be consistent with the net architecture
+ * defined in the configuration file.
+ *
+ * \return Possible erros include
+ * BCNN_INVALID_MODEL and BCNN_INVALID_PARAMETER.
+ */
+BCNN_API bcnn_status bcnn_load_net(bcnn_net *net, const char *config_path,
+                                   const char *model_path);
+
+/**
+ * \brief Writes the model weights on disk.
  *
  * \param[in]   net         Pointer to net instance.
  * \param[in]   filename    Path where to save the model weights.
  *
  * \return BCNN_INVALID_PARAMETER if file failed to be open.
  */
-BCNN_API bcnn_status bcnn_write_model(bcnn_net *net, const char *filename);
+BCNN_API bcnn_status bcnn_save_weights(bcnn_net *net, const char *filename);
 
 /**
  * \brief Setups the dataset loader.
@@ -569,7 +583,7 @@ BCNN_API void bcnn_set_weight_regularizer(bcnn_net *net, float weight_decay);
  * \param[in]   tensor_index    Index of the tensor to be filled in.
  * \param[in]   batch_index     Position of the tensor in the data batch.
  */
-BCNN_API bcnn_status bcnn_transform_img_and_fill_tensor(
+BCNN_API bcnn_status bcnn_fill_tensor_with_image(
     bcnn_net *net, const uint8_t *src, int w, int h, int c, float norm_coeff,
     int swap_to_bgr, float mean_r, float mean_g, float mean_b, int tensor_index,
     int batch_index);

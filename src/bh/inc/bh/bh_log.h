@@ -23,12 +23,12 @@
 #ifndef BH_LOG_H
 #define BH_LOG_H
 
+#include <stdarg.h> /* va_list, va_start, va_arg, va_end */
+#include <stdio.h>  /* printf */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stdarg.h> /* va_list, va_start, va_arg, va_end */
-#include <stdio.h>  /* printf */
 
 #define BH_MAX_LENGTH_MSG 2048
 
@@ -47,15 +47,15 @@ static inline void bh_log(bh_log_level level, const char *fmt, ...) {
     va_end(args);
     switch (level) {
         case BH_LOG_INFO: {
-            fprintf(stderr, "[INFO] %s", msg);
+            fprintf(stderr, "\e[0;36m[INFO]\e[0m %s", msg);
             break;
         }
         case BH_LOG_WARNING: {
-            fprintf(stderr, "\33[35;1m[WARNING] %s\33[0m", msg);
+            fprintf(stderr, "\e[1;35m[WARNING] %s\e[0m", msg);
             break;
         }
         case BH_LOG_ERROR: {
-            fprintf(stderr, "\33[31;1m[ERROR] %s\33[0m", msg);
+            fprintf(stderr, "\e[1;31m[ERROR] %s\e[0m", msg);
             break;
         }
         case BH_LOG_SILENT: {

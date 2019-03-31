@@ -23,11 +23,12 @@
 #ifndef BH_ASSERT_H
 #define BH_ASSERT_H
 
+#include <stdarg.h> /* va_list, va_start, va_arg, va_end */
+#include <stdio.h>  /* printf */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-#include <stdarg.h> /* va_list, va_start, va_arg, va_end */
-#include <stdio.h>  /* printf */
 
 static inline void bh_assert(int exp, int err, const char *fmt, ...) {
     if (!exp) {

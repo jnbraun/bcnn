@@ -162,9 +162,8 @@ export_tensors(bcnn_net* net, FlatBufferBuilder* builder,
                         // Special case for Prelu as TFlite only
                         // supports 3-D tensor as Prelu slope(=alpha) shape
                         shape.clear();
-                        shape = {1, 1,
-                                 net->tensors[i].c * net->tensors[i].h *
-                                     net->tensors[i].w};
+                        shape = {1, 1, net->tensors[i].c * net->tensors[i].h *
+                                           net->tensors[i].w};
                     }
                 }
             }
@@ -836,7 +835,7 @@ int main(int argc, char** argv) {
     bcnn_net* net = NULL;
     bcnn_init_net(&net, BCNN_MODE_PREDICT);
     init_from_config(net, argv[1], &param);
-    bcnn_load_model(net, argv[2]);
+    bcnn_load_weights(net, argv[2]);
     run_bcnn_reference(net, argv[2]);
     bcnn_end_net(&net);
     return 0;
@@ -852,7 +851,7 @@ int main(int argc, char** argv) {
     config_param param;
     bcnn_init_net(&net, BCNN_MODE_PREDICT);
     init_from_config(net, argv[1], &param);
-    bcnn_load_model(net, argv[2]);
+    bcnn_load_weights(net, argv[2]);
     convert_bcnn_to_flatbuffers_tflite(net, argv[3]);
     bcnn_end_net(&net);
     return 0;

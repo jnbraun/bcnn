@@ -23,9 +23,6 @@
 #ifndef BH_TIMER_H
 #define BH_TIMER_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 #if defined(__GNUC__) || (defined(_MSC_VER) && (_MSC_VER >= 1600))
 #include <stdint.h>
 #else
@@ -37,6 +34,10 @@ typedef unsigned __int64 uint64_t;
 #elif defined(__linux__)
 #include <sys/time.h>
 #include <time.h>
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /**

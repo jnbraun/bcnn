@@ -39,10 +39,11 @@
 #include "data_loader/bcnn_mnist_loader.h"
 #include "data_loader/bcnn_regression_loader.h"
 
-bcnn_status bcnn_transform_img_and_fill_tensor(
-    bcnn_net *net, const uint8_t *src, int w, int h, int c, float norm_coeff,
-    int swap_to_bgr, float mean_r, float mean_g, float mean_b, int tensor_index,
-    int batch_index) {
+bcnn_status bcnn_fill_tensor_with_image(bcnn_net *net, const uint8_t *src,
+                                        int w, int h, int c, float norm_coeff,
+                                        int swap_to_bgr, float mean_r,
+                                        float mean_g, float mean_b,
+                                        int tensor_index, int batch_index) {
     BCNN_CHECK_AND_LOG(
         net->log_ctx, (tensor_index >= 0 && tensor_index < net->num_tensors),
         BCNN_INVALID_PARAMETER, "Invalid tensor index %d. ", tensor_index);

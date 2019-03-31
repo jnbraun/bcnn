@@ -23,11 +23,12 @@
 #ifndef BH_MEM_H
 #define BH_MEM_H
 
+#include <stdlib.h>
+#include <string.h> /* memset */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-#include <stdlib.h>
-#include <string.h>  // memset
 
 #ifndef bh_free
 #define bh_free(buf)      \

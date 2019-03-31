@@ -23,11 +23,11 @@
 #ifndef BH_MACROS_H
 #define BH_MACROS_H
 
+#include <stdlib.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stdlib.h>
 
 #define bh_clamp(x, a, b) (((x) < (a)) ? (a) : (((x) > (b)) ? (b) : (x)))
 #define bh_min(a, b) (((a) < (b)) ? (a) : (b))

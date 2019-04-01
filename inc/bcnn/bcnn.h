@@ -893,17 +893,17 @@ BCNN_API bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, const char *src_id,
 
 /**
  * \brief Concatenation layer.
+ * Concatenates input tensors along the channel axis.
  *
  * \param[in]   net             Pointer to net instance.
- * \param[in]   src_id1         First input tensor name.
- * \param[in]   src_id2         Second input tensor name.
+ * \param[in]   num_src         Number of input tensors to be concatenated.
+ * \param[in]   src_ids         Array of input tensors names.
  * \param[in]   dst_id          Output tensor name.
  *
  * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
  */
-BCNN_API bcnn_status bcnn_add_concat_layer(bcnn_net *net, const char *src_id1,
-                                           const char *src_id2,
-                                           const char *dst_id);
+bcnn_status bcnn_add_concat_layer(bcnn_net *net, int num_src,
+                                  char *const *src_ids, const char *dst_id);
 
 /**
  * \brief Elementwise addition layer.

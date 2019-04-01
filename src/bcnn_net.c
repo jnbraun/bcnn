@@ -557,6 +557,7 @@ typedef struct {
     int num_classes;
     int num_coords;
     int keep_routed;
+    int num_srcs;
     float alpha;
     float beta;
     float k;
@@ -567,9 +568,8 @@ typedef struct {
     bcnn_loss_metric cost;
     bcnn_loss loss;
     bcnn_mode mode;
-    char *src_id;
+    char **src_id;
     char *dst_id;
-    char *src_id2;
     int *anchors_mask;
     float *anchors;
 } bcnn_layer_param;
@@ -599,14 +599,20 @@ static void bcnn_layer_param_reset(bcnn_layer_param *lp) {
     lp->cost = BCNN_METRIC_SSE;
     lp->loss = BCNN_LOSS_EUCLIDEAN;
     lp->mode = BCNN_MODE_PREDICT;
+    if (lp->keep_routed == 0 && lp->src_id) {
+        bh_free(lp->src_id[0]);
+    }
+    lp->keep_routed = 0;
+    for (int i = 1; i < lp->num_srcs; ++i) {
+        bh_free(lp->src_id[i]);
+    }
     if (lp->keep_routed == 0) {
         bh_free(lp->src_id);
     }
-    lp->keep_routed = 0;
-    bh_free(lp->src_id2);
     bh_free(lp->dst_id);
     bh_free(lp->anchors_mask);
     bh_free(lp->anchors);
+    lp->num_srcs = 0;
 }
 
 static bcnn_status bcnn_layer_param_set(bcnn_net *net, int section_idx,
@@ -684,9 +690,10 @@ static bcnn_status bcnn_layer_param_set(bcnn_net *net, int section_idx,
     } else if (strcmp(name, "src") == 0) {
         char **srcids = NULL;
         int num_srcids = bh_strsplit((char *)val, ',', &srcids);
-        bh_strfill(&lp->src_id, srcids[0]);
-        if (num_srcids > 1) {
-            bh_strfill(&lp->src_id2, srcids[1]);
+        lp->num_srcs = num_srcids;
+        lp->src_id = (char **)calloc(num_srcids, sizeof(char *));
+        for (int i = 1; i < lp->num_srcs; ++i) {
+            bh_strfill(&lp->src_id[i], srcids[i]);
         }
         for (int i = 0; i < num_srcids; ++i) {
             bh_free(srcids[i]);
@@ -771,46 +778,43 @@ static bcnn_status bcnn_layer_param_set(bcnn_net *net, int section_idx,
         char **str_layers = NULL;
         int sz = bh_strsplit((char *)val, ',', &str_layers);
         if (sz > 0) {
+            lp->num_srcs = sz;
+            lp->src_id = (char **)calloc(lp->num_srcs, sizeof(char *));
             lp->keep_routed = 1;
             int l1 = atoi(str_layers[0]);
             char lid[32];
-            if (l1 >= 0) {
-                snprintf(lid, sizeof(lid), "lid%d", l1 + 1);
-                bh_strfill(&lp->src_id, lid);
-            } else {
-                snprintf(lid, sizeof(lid), "lid%d", section_idx + l1);
-                bh_strfill(&lp->src_id, lid);
+            for (int i = 0; i < lp->num_srcs; ++i) {
+                int l = atoi(str_layers[i]);
+                char lid[32];
+                if (l >= 0) {
+                    snprintf(lid, sizeof(lid), "lid%d", l + 1);
+                    bh_strfill(&lp->src_id[i], lid);
+                } else {
+                    snprintf(lid, sizeof(lid), "lid%d", section_idx + l);
+                    bh_strfill(&lp->src_id[i], lid);
+                }
             }
             if (sz > 1) {
                 lp->keep_routed = 0;
-                int l2 = atoi(str_layers[1]);
-                char lid[32];
-                if (l2 >= 0) {
-                    snprintf(lid, sizeof(lid), "lid%d", l2 + 1);
-                    bh_strfill(&lp->src_id2, lid);
-                } else {
-                    snprintf(lid, sizeof(lid), "lid%d", section_idx + l2);
-                    bh_strfill(&lp->src_id2, lid);
-                }
             }
             for (int i = 0; i < sz; ++i) {
                 bh_free(str_layers[i]);
             }
             bh_free(str_layers);
-            if (sz > 2) {
-                BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER,
-                           "Concat only supports 2 layers at once\n");
-            }
         }
     } else if (strcmp(name, "from") == 0) {  // Darknet format
-        int l = atoi(val);
+        lp->num_srcs = 2;
+        lp->src_id = (char **)calloc(lp->num_srcs, sizeof(char *));
         char lid[32];
+        snprintf(lid, sizeof(lid), "lid%d", section_idx - 1);
+        bh_strfill(&lp->src_id[0], lid);
+        int l = atoi(val);
         if (l >= 0) {
             snprintf(lid, sizeof(lid), "lid%d", l + 1);
-            bh_strfill(&lp->src_id2, lid);
+            bh_strfill(&lp->src_id[1], lid);
         } else {
             snprintf(lid, sizeof(lid), "lid%d", section_idx + l);
-            bh_strfill(&lp->src_id2, lid);
+            bh_strfill(&lp->src_id[1], lid);
         }
     }
     return BCNN_SUCCESS;
@@ -829,12 +833,13 @@ static bcnn_status bcnn_add_layer(bcnn_net *net, const char *name,
         BCNN_CHECK_AND_LOG(net->log_ctx, net->tensors[0].n > 0,
                            BCNN_INVALID_PARAMETER, "Batch size must be > 0\n");
     }
-    BCNN_CHECK_AND_LOG(net->log_ctx, lp->src_id, BCNN_INVALID_PARAMETER,
-                       "Invalid input node name."
+    BCNN_CHECK_AND_LOG(net->log_ctx, lp->src_id && lp->src_id[0],
+                       BCNN_INVALID_PARAMETER,
+                       "Invalid input node name. "
                        "Hint: Are you sure that 'src' field is correctly "
                        "setup?\n");
     if (strcmp(name, "[input]") == 0) {
-        bcnn_add_input(net, lp->in_w, lp->in_h, lp->in_c, lp->src_id);
+        bcnn_add_input(net, lp->in_w, lp->in_h, lp->in_c, lp->src_id[0]);
     } else if (strcmp(name, "[conv]") == 0 ||
                strcmp(name, "[convolutional]") == 0) {
         BCNN_CHECK_AND_LOG(net->log_ctx, lp->dst_id, BCNN_INVALID_PARAMETER,
@@ -843,7 +848,7 @@ static bcnn_status bcnn_add_layer(bcnn_net *net, const char *name,
                            "correctly setup?\n");
         bcnn_add_convolutional_layer(
             net, lp->n_filts, lp->size, lp->stride, lp->pad, lp->num_groups,
-            lp->batchnorm, lp->init, lp->a, 0, lp->src_id, lp->dst_id);
+            lp->batchnorm, lp->init, lp->a, 0, lp->src_id[0], lp->dst_id);
     } else if (strcmp(name, "[deconv]") == 0 ||
                strcmp(name, "[deconvolutional]") == 0) {
         BCNN_CHECK_AND_LOG(net->log_ctx, lp->dst_id, BCNN_INVALID_PARAMETER,
@@ -851,7 +856,7 @@ static bcnn_status bcnn_add_layer(bcnn_net *net, const char *name,
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?\n");
         bcnn_add_deconvolutional_layer(net, lp->n_filts, lp->size, lp->stride,
-                                       lp->pad, lp->init, lp->a, lp->src_id,
+                                       lp->pad, lp->init, lp->a, lp->src_id[0],
                                        lp->dst_id);
     } else if (strcmp(name, "[depthwise-conv]") == 0 ||
                strcmp(name, "[dw-conv]") == 0) {
@@ -860,22 +865,23 @@ static bcnn_status bcnn_add_layer(bcnn_net *net, const char *name,
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?\n");
         bcnn_add_depthwise_conv_layer(net, lp->size, lp->stride, lp->pad, 0,
-                                      lp->init, lp->a, lp->src_id, lp->dst_id);
+                                      lp->init, lp->a, lp->src_id[0],
+                                      lp->dst_id);
     } else if (strcmp(name, "[activation]") == 0 || strcmp(name, "[nl]") == 0) {
-        bcnn_add_activation_layer(net, lp->a, lp->src_id);
+        bcnn_add_activation_layer(net, lp->a, lp->src_id[0]);
     } else if (strcmp(name, "[batchnorm]") == 0 || strcmp(name, "[bn]") == 0) {
         BCNN_CHECK_AND_LOG(net->log_ctx, lp->dst_id, BCNN_INVALID_PARAMETER,
                            "Invalid output node name. "
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?\n");
-        bcnn_add_batchnorm_layer(net, lp->src_id, lp->dst_id);
+        bcnn_add_batchnorm_layer(net, lp->src_id[0], lp->dst_id);
     } else if (strcmp(name, "[lrn]") == 0) {
         BCNN_CHECK_AND_LOG(net->log_ctx, lp->dst_id, BCNN_INVALID_PARAMETER,
                            "Invalid output node name. "
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?\n");
         bcnn_add_lrn_layer(net, lp->size, lp->alpha, lp->beta, lp->k,
-                           lp->src_id, lp->dst_id);
+                           lp->src_id[0], lp->dst_id);
     } else if (strcmp(name, "[connected]") == 0 ||
                strcmp(name, "[fullconnected]") == 0 ||
                strcmp(name, "[fc]") == 0 || strcmp(name, "[ip]") == 0) {
@@ -883,42 +889,42 @@ static bcnn_status bcnn_add_layer(bcnn_net *net, const char *name,
                            "Invalid output node name. "
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?\n");
-        bcnn_add_fullc_layer(net, lp->outputs, lp->init, lp->a, 0, lp->src_id,
-                             lp->dst_id);
+        bcnn_add_fullc_layer(net, lp->outputs, lp->init, lp->a, 0,
+                             lp->src_id[0], lp->dst_id);
     } else if (strcmp(name, "[softmax]") == 0) {
         BCNN_CHECK_AND_LOG(net->log_ctx, lp->dst_id, BCNN_INVALID_PARAMETER,
                            "Invalid output node name. "
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?\n");
-        bcnn_add_softmax_layer(net, lp->src_id, lp->dst_id);
+        bcnn_add_softmax_layer(net, lp->src_id[0], lp->dst_id);
     } else if (strcmp(name, "[max]") == 0 || strcmp(name, "[maxpool]") == 0) {
         BCNN_CHECK_AND_LOG(net->log_ctx, lp->dst_id, BCNN_INVALID_PARAMETER,
                            "Invalid output node name. "
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?\n");
         bcnn_add_maxpool_layer(net, lp->size, lp->stride, lp->padding_type,
-                               lp->src_id, lp->dst_id);
+                               lp->src_id[0], lp->dst_id);
     } else if (strcmp(name, "[avgpool]") == 0) {
         BCNN_CHECK_AND_LOG(net->log_ctx, lp->dst_id, BCNN_INVALID_PARAMETER,
                            "Invalid output node name. "
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?\n");
-        bcnn_add_avgpool_layer(net, lp->src_id, lp->dst_id);
+        bcnn_add_avgpool_layer(net, lp->src_id[0], lp->dst_id);
     } else if (strcmp(name, "[upsample]") == 0) {
         BCNN_CHECK_AND_LOG(net->log_ctx, lp->dst_id, BCNN_INVALID_PARAMETER,
                            "Invalid output node name. "
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?\n");
-        bcnn_add_upsample_layer(net, lp->stride, lp->src_id, lp->dst_id);
+        bcnn_add_upsample_layer(net, lp->stride, lp->src_id[0], lp->dst_id);
     } else if (strcmp(name, "[dropout]") == 0) {
-        bcnn_add_dropout_layer(net, lp->rate, lp->src_id);
+        bcnn_add_dropout_layer(net, lp->rate, lp->src_id[0]);
     } else if (strcmp(name, "[concat]") == 0 || strcmp(name, "[route]") == 0) {
         BCNN_CHECK_AND_LOG(net->log_ctx, lp->dst_id, BCNN_INVALID_PARAMETER,
                            "Invalid output node name. "
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?\n");
-        if (lp->src_id2 != NULL) {
-            bcnn_add_concat_layer(net, lp->src_id, lp->src_id2, lp->dst_id);
+        if (lp->src_id != NULL) {
+            bcnn_add_concat_layer(net, lp->num_srcs, lp->src_id, lp->dst_id);
         }
     } else if (strcmp(name, "[eltwise]") == 0 ||
                strcmp(name, "[shortcut]") == 0) {
@@ -926,7 +932,10 @@ static bcnn_status bcnn_add_layer(bcnn_net *net, const char *name,
                            "Invalid output node name. "
                            "Hint: Are you sure that 'dst' field is "
                            "correctly setup?\n");
-        bcnn_add_eltwise_layer(net, lp->a, lp->src_id, lp->src_id2, lp->dst_id);
+        if (lp->src_id != NULL) {
+            bcnn_add_eltwise_layer(net, lp->a, lp->src_id[0], lp->src_id[1],
+                                   lp->dst_id);
+        }
     } else if (strcmp(name, "[yolo]") == 0) {
         BCNN_CHECK_AND_LOG(net->log_ctx, lp->dst_id, BCNN_INVALID_PARAMETER,
                            "Cost layer: invalid input node name. "
@@ -935,18 +944,18 @@ static bcnn_status bcnn_add_layer(bcnn_net *net, const char *name,
                            "setup?\n");
         bcnn_add_yolo_layer(net, lp->boxes_per_cell, lp->num_classes,
                             lp->num_coords, lp->num_anchors, lp->anchors_mask,
-                            lp->anchors, lp->src_id, lp->dst_id);
+                            lp->anchors, lp->src_id[0], lp->dst_id);
     } else if (strcmp(name, "[cost]") == 0) {
         BCNN_CHECK_AND_LOG(
-            net->log_ctx, lp->src_id, BCNN_INVALID_PARAMETER,
+            net->log_ctx, lp->src_id[0], BCNN_INVALID_PARAMETER,
             "Cost layer: invalid input node name. "
             "Hint: Are you sure that 'src' field is correctly setup?\n");
         BCNN_CHECK_AND_LOG(
             net->log_ctx, lp->dst_id, BCNN_INVALID_PARAMETER,
             "Cost layer: invalid input node name. "
             "Hint: Are you sure that 'dst' field is correctly setup?\n");
-        bcnn_add_cost_layer(net, lp->loss, lp->cost, 1.0f, lp->src_id, "label",
-                            lp->dst_id);
+        bcnn_add_cost_layer(net, lp->loss, lp->cost, 1.0f, lp->src_id[0],
+                            "label", lp->dst_id);
     } else {
         BCNN_ERROR(net->log_ctx, BCNN_INVALID_PARAMETER, "Unknown Layer %s\n",
                    name);
@@ -1030,9 +1039,11 @@ bcnn_status bcnn_load_net(bcnn_net *net, const char *config_path,
             }
             if (format == 1) {
                 if (lp.src_id == NULL) {
+                    lp.num_srcs = 1;
+                    lp.src_id = (char **)calloc(lp.num_srcs, sizeof(char *));
                     char lid[32];
                     snprintf(lid, sizeof(lid), "lid%d", i - 1);
-                    bh_strfill(&lp.src_id, lid);
+                    bh_strfill(&lp.src_id[0], lid);
                 }
                 if (lp.dst_id == NULL) {
                     char lid[32];
@@ -1103,13 +1114,12 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 "Inconsistent batchnorm means size: expected %d but found "
                 "%lu\n",
                 m_sz, (unsigned long)nr);
-            BCNN_CHECK_AND_LOG(
-                net->log_ctx,
-                (nr = fread(v->data, sizeof(float), v_sz, fp)) == v_sz,
-                BCNN_INVALID_MODEL,
-                "Inconsistent batchnorm variances size: "
-                "expected %d but found %lu\n",
-                v_sz, (unsigned long)nr);
+            BCNN_CHECK_AND_LOG(net->log_ctx, (nr = fread(v->data, sizeof(float),
+                                                         v_sz, fp)) == v_sz,
+                               BCNN_INVALID_MODEL,
+                               "Inconsistent batchnorm variances size: "
+                               "expected %d but found %lu\n",
+                               v_sz, (unsigned long)nr);
             if (format == 0) {
                 BCNN_CHECK_AND_LOG(
                     net->log_ctx,

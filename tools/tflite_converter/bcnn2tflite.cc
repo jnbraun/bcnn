@@ -802,7 +802,7 @@ int init_from_config(bcnn_net* net, char* config_file, config_param* param) {
                         loss = BCNN_LOSS_EUCLIDEAN;
                     }
                 } else {
-                    bcnn_set_param(net, tok[0], tok[1]);
+                    bcnn_net_set_param(net, tok[0], tok[1]);
                 }
 
                 bh_free(tok[0]);

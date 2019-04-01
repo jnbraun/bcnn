@@ -46,28 +46,29 @@ typedef struct bcnn_cuda_context {
  */
 struct bcnn_net {
     int batch_size;
-    int num_nodes;
+    int num_nodes;   /* Number of nodes hold in the network */
     int num_tensors; /* Number of tensors hold in the network */
     bcnn_mode mode;
-    bcnn_log_context log_ctx;
-    bcnn_node *nodes;
-    bcnn_tensor *tensors;  /* Array of tensors hold in the network */
-    bcnn_learner *learner; /* Learner/optimizer parameters */
-    bcnn_loader *data_loader;
-    bcnn_data_augmenter *data_aug; /* Parameters for online data augmentation */
+    bcnn_log_context log_ctx; /* Logging stuff */
+    bcnn_node *nodes;         /* Array of 'num_nodes' nodes */
+    bcnn_tensor *tensors;     /* Array of 'num_tensors' tensors */
+    bcnn_learner *learner;    /* Learner/optimizer parameters */
+    bcnn_loader *data_loader; /* Handles the loading and iteration over training
+                                 / testing datasets */
+    bcnn_data_augmenter *data_aug; /* Handles the online data augmentation */
     void *gemm_ctx;
 #ifdef BCNN_USE_CUDA
     void *cuda_ctx;
 #endif
 };
 
-bcnn_status bcnn_create_gemm_context(bcnn_net *net);
+bcnn_status bcnn_net_create_gemm_context(bcnn_net *net);
 #ifdef BCNN_USE_CUDA
-bcnn_status bcnn_create_cuda_context(bcnn_net *net);
+bcnn_status bcnn_net_create_cuda_context(bcnn_net *net);
 #endif
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node);
 bcnn_status bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor);
-void bcnn_set_param(bcnn_net *net, const char *name, const char *val);
+void bcnn_net_set_param(bcnn_net *net, const char *name, const char *val);
 
 #ifdef __cplusplus
 }

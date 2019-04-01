@@ -74,11 +74,11 @@ bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
     }
 
 #ifdef BCNN_USE_CUDA
-    BCNN_CHECK_STATUS(bcnn_create_cuda_context(p_net));
+    BCNN_CHECK_STATUS(bcnn_net_create_cuda_context(p_net));
 #endif
 #ifndef BCNN_USE_BLAS
     // Internal context for gemm
-    BCNN_CHECK_STATUS(bcnn_create_gemm_context(p_net));
+    BCNN_CHECK_STATUS(bcnn_net_create_gemm_context(p_net));
 #endif
     *net = p_net;
     return BCNN_SUCCESS;
@@ -145,7 +145,7 @@ void bcnn_set_log_context(bcnn_net *net, bcnn_log_callback fct,
     net->log_ctx.lvl = level;
 }
 
-bcnn_status bcnn_create_gemm_context(bcnn_net *net) {
+bcnn_status bcnn_net_create_gemm_context(bcnn_net *net) {
     net->gemm_ctx = bh_align_calloc(sizeof(bcnn_gemm_context), 32);
     if (net->gemm_ctx) {
         return BCNN_SUCCESS;
@@ -155,7 +155,7 @@ bcnn_status bcnn_create_gemm_context(bcnn_net *net) {
 }
 
 #ifdef BCNN_USE_CUDA
-bcnn_status bcnn_create_cuda_context(bcnn_net *net) {
+bcnn_status bcnn_net_create_cuda_context(bcnn_net *net) {
     net->cuda_ctx = calloc(1, sizeof(bcnn_cuda_context));
     if (net->cuda_ctx) {
         return BCNN_SUCCESS;
@@ -364,7 +364,7 @@ bcnn_status bcnn_set_mode(bcnn_net *net, bcnn_mode mode) {
     return BCNN_SUCCESS;
 }
 
-void bcnn_set_param(bcnn_net *net, const char *name, const char *val) {
+void bcnn_net_set_param(bcnn_net *net, const char *name, const char *val) {
     if (strcmp(name, "input_width") == 0 || strcmp(name, "width") == 0) {
         net->tensors[0].w = atoi(val);
     } else if (strcmp(name, "input_height") == 0 ||
@@ -1008,8 +1008,8 @@ bcnn_status bcnn_load_net(bcnn_net *net, const char *config_path,
         for (int i = 0; i < config->sections[0].num_keys; ++i) {
             /*fprintf(stderr, "%s %s\n", config->sections[0].keys[i].name,
                     config->sections[0].keys[i].val);*/
-            bcnn_set_param(net, config->sections[0].keys[i].name,
-                           config->sections[0].keys[i].val);
+            bcnn_net_set_param(net, config->sections[0].keys[i].name,
+                               config->sections[0].keys[i].val);
         }
         // Parse layers
         bcnn_layer_param lp = {0};

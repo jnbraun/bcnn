@@ -136,7 +136,8 @@ void bcnn_forward_concat_layer_gpu(bcnn_net *net, bcnn_node *node) {
         int src_sz = bcnn_tensor_size3d(src_tensor);
         for (int j = 0; j < src_tensor->n; ++j) {
             bcnn_cuda_copy_f32(src_sz, src_tensor->data_gpu + j * src_sz, 1,
-                               dst_tensor->data_gpu + j * dst_sz, 1);
+                               dst_tensor->data_gpu + dst_offset + j * dst_sz,
+                               1);
         }
         dst_offset += src_sz;
     }

@@ -18,6 +18,8 @@ void show_usage(int argc, char **argv) {
             "\t<runs>: number of inferences to be run.\n");
 }
 
+/* This demonstrates how to run a network inference given an input image and and
+ * benchmark the inference speed */
 int main(int argc, char **argv) {
     if (argc != 5) {
         show_usage(argc, argv);

@@ -232,7 +232,7 @@ bcnn_status bcnn_compile_net(bcnn_net *net) {
     return bcnn_init_workload(net);
 }
 
-static void bcnn_reset_node_gradients(bcnn_net *net, bcnn_node *node) {
+static void bcnn_reset_gradients(bcnn_net *net, bcnn_node *node) {
     for (int i = 0; i < node->num_dst; ++i) {
         int sz = bcnn_tensor_size(&net->tensors[node->dst[i]]);
 #ifdef BCNN_USE_CUDA
@@ -276,7 +276,7 @@ void bcnn_forward(bcnn_net *net) {
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
         if (net->mode == BCNN_MODE_TRAIN) {
-            bcnn_reset_node_gradients(net, node);
+            bcnn_reset_gradients(net, node);
         }
         node->forward(net, node);
     }
@@ -626,7 +626,16 @@ static bcnn_status bcnn_layer_param_set(bcnn_net *net, int section_idx,
         lp->size = atoi(val);
     else if (strcmp(name, "stride") == 0)
         lp->stride = atoi(val);
-    else if (strcmp(name, "pad") == 0) {
+    else if (strcmp(name, "padding") == 0) {
+        if (format == 1) {
+            lp->pad = atoi(val);
+            if (lp->pad) {
+                lp->padding_type = BCNN_PADDING_SAME;
+            } else {
+                lp->padding_type = BCNN_PADDING_VALID;
+            }
+        }
+    } else if (strcmp(name, "pad") == 0) {
         if (format == 0) {  // BCNN format
             lp->pad = atoi(val);
         } else {  // Darknet format
@@ -639,7 +648,7 @@ static bcnn_status bcnn_layer_param_set(bcnn_net *net, int section_idx,
                 lp->pad = 0;
             }
         }
-    } else if (strcmp(name, "num_groups") == 0)
+    } else if (strcmp(name, "num_groups") == 0 || strcmp(name, "groups") == 0)
         lp->num_groups = atoi(val);
     else if (strcmp(name, "boxes_per_cell") == 0) {
         lp->boxes_per_cell = atoi(val);
@@ -692,7 +701,7 @@ static bcnn_status bcnn_layer_param_set(bcnn_net *net, int section_idx,
         int num_srcids = bh_strsplit((char *)val, ',', &srcids);
         lp->num_srcs = num_srcids;
         lp->src_id = (char **)calloc(num_srcids, sizeof(char *));
-        for (int i = 1; i < lp->num_srcs; ++i) {
+        for (int i = 0; i < lp->num_srcs; ++i) {
             bh_strfill(&lp->src_id[i], srcids[i]);
         }
         for (int i = 0; i < num_srcids; ++i) {
@@ -1076,18 +1085,18 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
     int w_sz = bcnn_tensor_size(w);
     int b_sz = bcnn_tensor_size(b);
     int nr = 0;
-    BCNN_CHECK_AND_LOG(net->log_ctx,
-                       (nr = fread(b->data, sizeof(float), b_sz, fp)) == b_sz,
-                       BCNN_INVALID_MODEL,
-                       "Inconsistent biases size: expected %d but found %lu\n",
-                       b_sz, (unsigned long)nr);
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx, (nr = fread(b->data, sizeof(float), b_sz, fp)) == b_sz,
+        BCNN_INVALID_MODEL,
+        "Inconsistent biases size %s: expected %d but found %lu\n", b->name,
+        b_sz, (unsigned long)nr);
     if (format == 0) {
         BCNN_CHECK_AND_LOG(
             net->log_ctx,
             (nr = fread(w->data, sizeof(float), w_sz, fp)) == w_sz,
             BCNN_INVALID_MODEL,
-            "Inconsistent weights size: expected %d but found %lu\n", w_sz,
-            (unsigned long)nr);
+            "Inconsistent weights size %s: expected %d but found %lu\n",
+            w->name, w_sz, (unsigned long)nr);
     }
     if (node->type == BCNN_LAYER_CONV2D) {
         bcnn_conv_param *param = (bcnn_conv_param *)node->param;
@@ -1114,12 +1123,13 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 "Inconsistent batchnorm means size: expected %d but found "
                 "%lu\n",
                 m_sz, (unsigned long)nr);
-            BCNN_CHECK_AND_LOG(net->log_ctx, (nr = fread(v->data, sizeof(float),
-                                                         v_sz, fp)) == v_sz,
-                               BCNN_INVALID_MODEL,
-                               "Inconsistent batchnorm variances size: "
-                               "expected %d but found %lu\n",
-                               v_sz, (unsigned long)nr);
+            BCNN_CHECK_AND_LOG(
+                net->log_ctx,
+                (nr = fread(v->data, sizeof(float), v_sz, fp)) == v_sz,
+                BCNN_INVALID_MODEL,
+                "Inconsistent batchnorm variances size: "
+                "expected %d but found %lu\n",
+                v_sz, (unsigned long)nr);
             if (format == 0) {
                 BCNN_CHECK_AND_LOG(
                     net->log_ctx,
@@ -1141,8 +1151,8 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
             net->log_ctx,
             (nr = fread(w->data, sizeof(float), w_sz, fp)) == w_sz,
             BCNN_INVALID_MODEL,
-            "Inconsistent weights size: expected %d but found %lu\n", w_sz,
-            (unsigned long)nr);
+            "Inconsistent weights size %s: expected %d but found %lu\n",
+            w->name, w_sz, (unsigned long)nr);
     }
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(w->data_gpu, w->data, w_sz);
@@ -1230,20 +1240,24 @@ static bcnn_status bcnn_load_fullc_weights(bcnn_net *net, bcnn_node *node,
     int w_sz = bcnn_tensor_size(w);
     int b_sz = bcnn_tensor_size(b);
     int nr = 0;
-    BCNN_CHECK_AND_LOG(net->log_ctx,
-                       (nr = fread(b->data, sizeof(float), b_sz, fp)) == b_sz,
-                       BCNN_INVALID_MODEL,
-                       "Inconsistent biases size: expected %d but found %lu\n",
-                       b_sz, (unsigned long)nr);
-    BCNN_CHECK_AND_LOG(net->log_ctx,
-                       (nr = fread(w->data, sizeof(float), w_sz, fp)) == w_sz,
-                       BCNN_INVALID_MODEL,
-                       "Inconsistent weights size: expected %d but found %lu\n",
-                       w_sz, (unsigned long)nr);
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx, (nr = fread(b->data, sizeof(float), b_sz, fp)) == b_sz,
+        BCNN_INVALID_MODEL,
+        "Inconsistent biases size %s: expected %d but found %lu\n", b->name,
+        b_sz, (unsigned long)nr);
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx, (nr = fread(w->data, sizeof(float), w_sz, fp)) == w_sz,
+        BCNN_INVALID_MODEL,
+        "Inconsistent weights size %s: expected %d but found %lu\n", w->name,
+        w_sz, (unsigned long)nr);
     if (need_transpose) {
         bcnn_transpose(w->data, bcnn_tensor_size3d(&net->tensors[node->src[0]]),
                        bcnn_tensor_size3d(&net->tensors[node->dst[0]]));
     }
+#ifdef BCNN_USE_CUDA
+    bcnn_cuda_memcpy_host2dev(w->data_gpu, w->data, w_sz);
+    bcnn_cuda_memcpy_host2dev(b->data_gpu, b->data, b_sz);
+#endif
     return BCNN_SUCCESS;
 }
 
@@ -1304,6 +1318,7 @@ bcnn_status bcnn_load_weights(bcnn_net *net, const char *filename) {
         }
         BCNN_INFO(net->log_ctx, "Darknet version %d.%d seen %ld\n", major,
                   minor, num_samples_seen);
+
         need_transpose = (major > 1000) || (minor > 1000);
     } else {
         bcnn_log(net->log_ctx, BCNN_LOG_ERROR,

@@ -10,18 +10,26 @@
 #include "bcnn_utils.h"
 
 void show_usage(int argc, char **argv) {
-    fprintf(stderr, "Usage: ./%s <input> <config> <model> <runs>\n", argv[0]);
     fprintf(stderr,
-            "\t<input>: path to input image.\n"
-            "\t<config>: path to configuration file.\n"
-            "\t<model>: path to model weights file.\n"
-            "\t<runs>: number of inferences to be run.\n");
+            "Usage: ./%s <input> <config> <model> <runs> [mean] [scale]\n",
+            argv[0]);
+    fprintf(stderr,
+            "\tRequired:\n"
+            "\t\t<input>: path to input image.\n"
+            "\t\t<config>: path to configuration file.\n"
+            "\t\t<model>: path to model weights file.\n"
+            "\t\t<runs>: number of inferences to be run.\n"
+            "\tOptional:\n"
+            "\t\t[mean]: value between [0;255] to be substracted to input "
+            "pixel values. Default: 127.5f"
+            "\t\t[scale]: scale value to be applied to pixel values. Default: "
+            "1 / 127.5.");
 }
 
 /* This demonstrates how to run a network inference given an input image and and
  * benchmark the inference speed */
 int main(int argc, char **argv) {
-    if (argc != 5) {
+    if (argc < 5) {
         show_usage(argc, argv);
         return 1;
     }
@@ -66,10 +74,15 @@ int main(int argc, char **argv) {
     }
 
     /* Fill the input tensor with the current image data */
+    float mean = 127.5f;
+    float scale = 1 / 127.5f;
+    if (argc == 7) {
+        mean = atof(argv[5]);
+        scale = atof(argv[6]);
+    }
     bcnn_fill_tensor_with_image(net, img, input_tensor->w, input_tensor->h, c,
-                                1 / 127.5f, 0, 127.5f, 127.5f, 127.5f,
+                                scale, 0, mean, mean, mean,
                                 /*tensor_index=*/0, /*batch_index=*/0);
-
     /* Setup timer */
     bh_timer t = {0};
     double elapsed_min = DBL_MAX;

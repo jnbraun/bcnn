@@ -21,12 +21,12 @@ void show_usage(int argc, char **argv) {
             "\t\t<runs>: number of inferences to be run.\n"
             "\tOptional:\n"
             "\t\t[mean]: value between [0;255] to be substracted to input "
-            "pixel values. Default: 127.5f"
+            "pixel values. Default: 127.5f\n"
             "\t\t[scale]: scale value to be applied to pixel values. Default: "
-            "1 / 127.5.");
+            "1 / 127.5\n");
 }
 
-/* This demonstrates how to run a network inference given an input image and and
+/* This demonstrates how to run a network inference given an input image and
  * benchmark the inference speed */
 int main(int argc, char **argv) {
     if (argc < 5) {
@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
         "model %s %s img %s : min= %lf msecs max= %lf msecs avg= %lf msecs\n",
         argv[2], argv[3], argv[1], elapsed_min, elapsed_max, elapsed_avg);
     /* Get the output tensor pointer */
-    /* Note: input tensor is by default named 'out' */
+    /* Note: output tensor is expected to be named 'out' */
     bcnn_tensor *out = bcnn_get_tensor_by_name(net, "out");
     if (out != NULL) {
         float max_p = -1.f;

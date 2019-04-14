@@ -161,6 +161,26 @@ int bcnn_axpby(int n, float a, float *x, float b, float *y) {
     return 0;
 }
 
+void bcnn_axpy_strided(int num_batches, float a, float *x, float *y,
+                       int stride[2], int x_dim[3], int y_dim[3],
+                       int min_dim[3]) {
+    for (int n = 0; n < num_batches; ++n) {
+        for (int k = 0; k < min_dim[0]; ++k) {
+            for (int j = 0; j < min_dim[1]; ++j) {
+                for (int i = 0; i < min_dim[2]; ++i) {
+                    int dst_ind = i * stride[0] +
+                                  y_dim[2] * (j * stride[0] +
+                                              y_dim[1] * (y_dim[0] * n + k));
+                    int src1_ind = i * stride[1] +
+                                   x_dim[2] * (j * stride[1] +
+                                               x_dim[1] * (x_dim[0] * n + k));
+                    y[dst_ind] += a * x[src1_ind];
+                }
+            }
+        }
+    }
+}
+
 int bcnn_pow(int n, float *x, float a, float *y) {
     int i;
     for (i = 0; i < n; ++i) {

@@ -101,6 +101,9 @@ typedef struct bcnn_gemm_context {
 int bcnn_fill_f32(int n, float a, float *x);
 int bcnn_copy_f32(int n, float *x, float *y);
 int bcnn_axpy(int n, float a, float *x, float *y);
+void bcnn_axpy_strided(int num_batches, float a, float *x, float *y,
+                       int stride[2], int x_dim[3], int y_dim[3],
+                       int min_dim[3]);
 int bcnn_scal(int n, float a, float *x);
 int bcnn_add_scalar(int n, float a, float *x);
 int bcnn_pow(int n, float *x, float a, float *y);
@@ -151,6 +154,9 @@ void bcnn_cuda_axpy(int n, float alpha, float *x, int incx, float *y, int incy);
 void bcnn_cuda_scal(int n, float alpha, float *x, int incx);
 void bcnn_cuda_pow(int n, float *x, float a, float *y);
 void bcnn_cuda_axpby(int n, float a, float *x, float b, float *y);
+void bcnn_cuda_axpy_strided(int num_batches, float a, float *x, float *y,
+                            int stride[2], int x_dim[3], int y_dim[3],
+                            int min_dim[3]);
 void bcnn_cuda_add_scalar(int n, float a, float *y);
 void bcnn_cuda_vadd(int n, float *a, float *b, float *y);
 void bcnn_cuda_vsub(int n, float *a, float *b, float *y);

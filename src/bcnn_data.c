@@ -59,10 +59,11 @@ bcnn_status bcnn_fill_tensor_with_image(bcnn_net *net, const uint8_t *src,
                   batch_index * bcnn_tensor_size3d(&net->tensors[tensor_index]);
     bcnn_convert_img_to_float(src, w, h, c, norm_coeff, swap_to_bgr, mean_r,
                               mean_g, mean_b, data);
-    fprintf(stderr, "src %d %d %d dst %f %f %f\n", src[0], src[1], src[2],
-            net->tensors[tensor_index].data[0],
-            net->tensors[tensor_index].data[1],
-            net->tensors[tensor_index].data[2]);
+#ifdef BCNN_USE_CUDA
+    bcnn_cuda_memcpy_host2dev(net->tensors[tensor_index].data_gpu,
+                              net->tensors[tensor_index].data,
+                              bcnn_tensor_size(&net->tensors[tensor_index]));
+#endif
     return BCNN_SUCCESS;
 }
 

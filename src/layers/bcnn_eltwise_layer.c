@@ -22,6 +22,7 @@
 
 #include "bcnn_eltwise_layer.h"
 
+#include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 
 #include "bcnn_activation_layer.h"
@@ -53,22 +54,33 @@ bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
                        "Eltwise layer: invalid input node name %s\n", src_id1);
     BCNN_CHECK_AND_LOG(net->log_ctx, is_src_node2_found, BCNN_INVALID_PARAMETER,
                        "Eltwise layer: invalid input node name %s\n", src_id2);
-    // Check spatial dimensions consistency
-    BCNN_CHECK_AND_LOG(
-        net->log_ctx,
-        net->tensors[node.src[0]].w == net->tensors[node.src[1]].w &&
-            net->tensors[node.src[0]].h == net->tensors[node.src[1]].h &&
-            net->tensors[node.src[0]].c == net->tensors[node.src[1]].c,
-        BCNN_INVALID_PARAMETER,
-        "Eltwise layer: inconsistent sizes between tensor %s and tensor %s\n",
-        src_id1, src_id2);
-
+    // Check spatial dimension ratios consistency
+    int stride[2] = {net->tensors[node.src[0]].w / net->tensors[node.src[1]].w,
+                     net->tensors[node.src[1]].w / net->tensors[node.src[0]].w};
+    BCNN_CHECK_AND_LOG(net->log_ctx,
+                       (stride[0] == (net->tensors[node.src[0]].h /
+                                      net->tensors[node.src[1]].h)) &&
+                           (stride[1] == (net->tensors[node.src[1]].h /
+                                          net->tensors[node.src[0]].h)),
+                       BCNN_INVALID_PARAMETER,
+                       "Eltwise layer: inconsistent spatial "
+                       "size between tensor %s and "
+                       "tensor %s\n",
+                       src_id1, src_id2);
     // Setup node
     node.type = BCNN_LAYER_ELTWISE;
     node.param_size = sizeof(bcnn_eltwise_param);
-    node.param = (bcnn_eltwise_param *)calloc(1, sizeof(node.param_size));
+    node.param = (bcnn_eltwise_param *)calloc(1, node.param_size);
     bcnn_eltwise_param *param = (bcnn_eltwise_param *)node.param;
     param->activation = activation;
+    param->min_dim[2] =
+        bh_min(net->tensors[node.src[0]].w, net->tensors[node.src[1]].w);
+    param->min_dim[1] =
+        bh_min(net->tensors[node.src[0]].h, net->tensors[node.src[1]].h);
+    param->min_dim[0] =
+        bh_min(net->tensors[node.src[0]].c, net->tensors[node.src[1]].c);
+    param->stride[0] = bh_max(1, stride[0]);
+    param->stride[1] = bh_max(1, stride[1]);
     node.forward = bcnn_forward_eltwise_layer;
     node.backward = bcnn_backward_eltwise_layer;
     // Setup output tensor
@@ -104,7 +116,15 @@ void bcnn_forward_eltwise_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int sz = bcnn_tensor_size(dst_tensor);
 
     bcnn_copy_f32(sz, src0_tensor->data, dst_tensor->data);
-    bcnn_axpy(sz, 1.0f, src1_tensor->data, dst_tensor->data);
+    if (param->stride[0] == 1 && param->stride[1] == 1) {
+        bcnn_axpy(sz, 1.0f, src1_tensor->data, dst_tensor->data);
+    } else {
+        int x_dim[3] = {src1_tensor->c, src1_tensor->h, src1_tensor->w};
+        int y_dim[3] = {dst_tensor->c, dst_tensor->h, dst_tensor->w};
+        bcnn_axpy_strided(src0_tensor->n, 1.f, src1_tensor->data,
+                          dst_tensor->data, param->stride, x_dim, y_dim,
+                          param->min_dim);
+    }
     bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
 
     return;
@@ -120,7 +140,16 @@ void bcnn_backward_eltwise_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_backward_activation_cpu(dst_tensor->data, dst_tensor->grad_data, sz,
                                  param->activation);
     bcnn_axpy(sz, 1.0f, dst_tensor->grad_data, src0_tensor->grad_data);
-    bcnn_axpy(sz, 1.0f, dst_tensor->grad_data, src1_tensor->grad_data);
+    if (param->stride[0] == 1 && param->stride[1] == 1) {
+        bcnn_axpy(sz, 1.0f, dst_tensor->grad_data, src1_tensor->grad_data);
+    } else {
+        int x_dim[3] = {dst_tensor->c, dst_tensor->h, dst_tensor->w};
+        int y_dim[3] = {src1_tensor->c, src1_tensor->h, src1_tensor->w};
+        int stride[2] = {param->stride[1], param->stride[0]};
+        bcnn_axpy_strided(src0_tensor->n, 1.f, dst_tensor->grad_data,
+                          src1_tensor->grad_data, stride, x_dim, y_dim,
+                          param->min_dim);
+    }
 
     return;
 }
@@ -134,7 +163,16 @@ void bcnn_forward_eltwise_layer_gpu(bcnn_net *net, bcnn_node *node) {
     int sz = bcnn_tensor_size(dst_tensor);
 
     bcnn_cuda_copy_f32(sz, src0_tensor->data_gpu, 1, dst_tensor->data_gpu, 1);
-    bcnn_cuda_axpy(sz, 1.0f, src1_tensor->data_gpu, 1, dst_tensor->data_gpu, 1);
+    if (param->stride[0] == 1 && param->stride[1] == 1) {
+        bcnn_cuda_axpy(sz, 1.0f, src1_tensor->data_gpu, 1, dst_tensor->data_gpu,
+                       1);
+    } else {
+        int x_dim[3] = {src1_tensor->c, src1_tensor->h, src1_tensor->w};
+        int y_dim[3] = {dst_tensor->c, dst_tensor->h, dst_tensor->w};
+        bcnn_cuda_axpy_strided(src0_tensor->n, 1.f, src1_tensor->data_gpu,
+                               dst_tensor->data_gpu, param->stride, x_dim,
+                               y_dim, param->min_dim);
+    }
     bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, param->activation);
 
     return;
@@ -151,8 +189,17 @@ void bcnn_backward_eltwise_layer_gpu(bcnn_net *net, bcnn_node *node) {
         dst_tensor->data_gpu, dst_tensor->grad_data_gpu, sz, param->activation);
     bcnn_cuda_axpy(sz, 1.0f, dst_tensor->grad_data_gpu, 1,
                    src0_tensor->grad_data_gpu, 1);
-    bcnn_cuda_axpy(sz, 1.0f, dst_tensor->grad_data_gpu, 1,
-                   src1_tensor->grad_data_gpu, 1);
+    if (param->stride[0] == 1 && param->stride[1] == 1) {
+        bcnn_cuda_axpy(sz, 1.0f, dst_tensor->grad_data_gpu, 1,
+                       src1_tensor->grad_data_gpu, 1);
+    } else {
+        int x_dim[3] = {dst_tensor->c, dst_tensor->h, dst_tensor->w};
+        int y_dim[3] = {src1_tensor->c, src1_tensor->h, src1_tensor->w};
+        int stride[2] = {param->stride[1], param->stride[0]};
+        bcnn_cuda_axpy_strided(src0_tensor->n, 1.f, dst_tensor->grad_data_gpu,
+                               src1_tensor->grad_data_gpu, stride, x_dim, y_dim,
+                               param->min_dim);
+    }
 
     return;
 }

@@ -32,6 +32,8 @@ extern "C" {
 
 typedef struct bcnn_eltwise_param {
     bcnn_activation activation;
+    int stride[2];  /* strides to apply to the 2 inputs */
+    int min_dim[3]; /* Min C/H/W dims between the 2 inputs */
 } bcnn_eltwise_param;
 
 void bcnn_forward_eltwise_layer(bcnn_net *net, bcnn_node *node);

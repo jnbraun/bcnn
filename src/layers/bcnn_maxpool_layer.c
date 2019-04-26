@@ -85,7 +85,7 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
                           out_h,                        // height
                           out_w,                        // width
                           1);
-    bcnn_tensor_allocate(&dst_tensor, net->mode);
+    bcnn_tensor_allocate(&dst_tensor, net);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);

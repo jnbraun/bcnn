@@ -64,6 +64,9 @@ typedef struct bcnn_conv_param {
     cudnnConvolutionBwdFilterAlgo_t bwd_filter_algo;
 #endif
 #endif
+#ifdef BCNN_USE_OPENCL
+    cl_mem conv_workspace_gpu;
+#endif
 } bcnn_conv_param;
 
 void bcnn_forward_conv_layer(bcnn_net *net, bcnn_node *node);

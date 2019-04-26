@@ -21,6 +21,7 @@
  */
 
 #include "bcnn_tensor.h"
+#include "bcnn_net.h"
 
 #include <math.h>
 
@@ -29,6 +30,9 @@
 #include <bh/bh_string.h>
 
 #include "bcnn_utils.h"
+#ifdef BCNN_USE_OPENCL
+#include "bcnn_ocl_utils.h"
+#endif
 
 #define BCNN_CHECK_ALLOC(p)                  \
     do {                                     \
@@ -41,9 +45,9 @@
 static const size_t align_offset_ = 32;
 
 void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
-                        int has_grad, const char *name, int net_state) {
+                        int has_grad, const char *name, bcnn_net *net) {
     bcnn_tensor_set_shape(t, n, c, h, w, has_grad);
-    bcnn_tensor_allocate(t, net_state);
+    bcnn_tensor_allocate(t, net);
     bh_strfill(&t->name, name);
 }
 
@@ -103,7 +107,7 @@ int bcnn_tensor_size3d(const bcnn_tensor *t) { return t->w * t->h * t->c; }
 
 int bcnn_tensor_size2d(const bcnn_tensor *t) { return t->w * t->h; }
 
-bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
+bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, bcnn_net *net) {
     int size = t->n * t->c * t->h * t->w;
 
     bcnn_tensor_free(t);
@@ -112,33 +116,58 @@ bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
     }
     t->data = (float *)bh_align_calloc(size * sizeof(float), align_offset_);
     BCNN_CHECK_ALLOC(t->data);
-    if (t->has_grad && net_state == BCNN_MODE_TRAIN) {
+    if (t->has_grad && net->mode == BCNN_MODE_TRAIN) {
         t->grad_data =
             (float *)bh_align_calloc(size * sizeof(float), align_offset_);
         BCNN_CHECK_ALLOC(t->grad_data);
     }
-#ifdef BCNN_USE_CUDA
+#if defined(BCNN_USE_CUDA)
     t->data_gpu = bcnn_cuda_memcpy_f32(t->data, size);
-    if (t->has_grad && net_state == BCNN_MODE_TRAIN) {
+    if (t->has_grad && net->mode == BCNN_MODE_TRAIN) {
         t->grad_data_gpu = bcnn_cuda_memcpy_f32(t->grad_data, size);
     }
+#elif defined(BCNN_USE_OPENCL)
+    cl_int rc;
+    t->data_gpu =
+        (cl_mem)clCreateBuffer(net->opencl_ctx->ctx, CL_MEM_READ_WRITE,
+                               size * sizeof(cl_float), t->data, &rc);
+    BCNN_OPENCL_CHECK(rc);
+    if (t->has_grad && net->mode == BCNN_MODE_TRAIN) {
+        t->grad_data_gpu =
+            (cl_mem)clCreateBuffer(net->opencl_ctx->ctx, CL_MEM_READ_WRITE,
+                                   size * sizeof(cl_float), t->data, &rc);
+        BCNN_OPENCL_CHECK(rc);
+    }
 #endif
+
     return BCNN_SUCCESS;
 }
 
-void bcnn_tensor_free(bcnn_tensor *t) {
+bcnn_status bcnn_tensor_free(bcnn_tensor *t) {
     bh_align_free(t->data);
     t->data = NULL;
     if (t->has_grad) {
         bh_align_free(t->grad_data);
         t->grad_data = NULL;
     }
-#ifdef BCNN_USE_CUDA
+#if defined(BCNN_USE_CUDA)
     bcnn_cuda_free(t->data_gpu);
     t->data_gpu = NULL;
     if (t->has_grad) {
         bcnn_cuda_free(t->grad_data_gpu);
         t->grad_data_gpu = NULL;
     }
+#elif defined(BCNN_USE_OPENCL)
+    if (t->data_gpu) {
+        BCNN_OPENCL_CHECK(clReleaseMemObject((cl_mem)t->data_gpu));
+        t->data_gpu = NULL;
+    }
+    if (t->has_grad) {
+        if (t->grad_data_gpu) {
+            BCNN_OPENCL_CHECK(clReleaseMemObject((cl_mem)t->grad_data_gpu));
+            t->grad_data_gpu = NULL;
+        }
+    }
 #endif
+    return BCNN_SUCCESS;
 }

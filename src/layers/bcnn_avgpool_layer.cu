@@ -49,8 +49,8 @@ void bcnn_forward_avgpool_layer_gpu(bcnn_tensor *src_tensor,
 
     _bcnn_forward_avgpool_layer_kernel<<<bcnn_cuda_blocks(sz),
                                          BCNN_CUDA_THREADS>>>(
-        sz, src_tensor->c, src_tensor->h, src_tensor->w, src_tensor->data_gpu,
-        dst_tensor->data_gpu);
+        sz, src_tensor->c, src_tensor->h, src_tensor->w,
+        (float *)src_tensor->data_gpu, (float *)dst_tensor->data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
 
     return;
@@ -80,7 +80,7 @@ void bcnn_backward_avgpool_layer_gpu(bcnn_tensor *src_tensor,
     _bcnn_backward_avgpool_layer_kernel<<<bcnn_cuda_blocks(sz),
                                           BCNN_CUDA_THREADS>>>(
         sz, src_tensor->c, src_tensor->h, src_tensor->w,
-        src_tensor->grad_data_gpu, dst_tensor->grad_data_gpu);
+        (float *)src_tensor->grad_data_gpu, (float *)dst_tensor->grad_data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
 
     return;

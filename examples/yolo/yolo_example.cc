@@ -52,6 +52,7 @@ void prepare_frame(unsigned char *frame, int w_frame, int h_frame, float *img,
 #ifdef USE_OPENCV
     bip_resize_bilinear(frame.data, frame.cols, frame.rows, frame.step, img_rz,
                         new_w, new_h, new_w * 3, 3);
+    cv::imwrite("toto.png", frame);
 #else
     bip_resize_bilinear(frame, w_frame, h_frame, w_frame * 3, img_rz, new_w,
                         new_h, new_w * 3, 3);
@@ -71,8 +72,10 @@ void prepare_frame(unsigned char *frame, int w_frame, int h_frame, float *img,
             }
         }
     }
-    bcnn_convert_img_to_float(canvas, w, h, 3, 1.0f / 255.0f, 1, 0.0f, 0.0f,
-                              0.0f, img);
+    /*bcnn_convert_img_to_float(canvas, w, h, 3, 1.0f / 127.5f, 1, 127.5f,
+       127.5f,
+                              127.5f, img);*/
+    bcnn_convert_img_to_float(canvas, w, h, 3, 1.0f / 255.0f, 1, 0, 0, 0, img);
     bh_free(img_rz);
     bh_free(canvas);
     return;
@@ -89,7 +92,8 @@ bcnn_output_detection *run_inference(int w_frame, int h_frame, bcnn_net *net,
                                      int *num_dets) {
     float nms_tresh = 0.45f;
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
+    bcnn_cuda_memcpy_host2dev((float *)net->tensors[0].data_gpu,
+                              net->tensors[0].data,
                               bcnn_tensor_size(&net->tensors[0]));
 #endif
     bh_timer t = {0};
@@ -124,7 +128,11 @@ bool open_video(std::string video_path, cv::VideoCapture &capture) {
 }
 #endif
 
-static std::string str_objs[80] = {
+static std::string str_objs[9] = {"paper", "scissors", "rock",
+                                  "OK",    "thumb",    "index",
+                                  "shape", "number6",  "number3"};
+
+/*static std::string str_objs[80] = {
     "person",      "bicycle",    "car",          "motorbike",   "aeroplane",
     "bus",         "train",      "truck",        "boat",        "traffic",
     "fire",        "stop",       "parking",      "bench",       "bird",
@@ -140,16 +148,19 @@ static std::string str_objs[80] = {
     "diningtable", "toilet",     "tvmonitor",    "laptop",      "mouse",
     "remote",      "keyboard",   "cell",         "microwave",   "oven",
     "toaster",     "sink",       "refrigerator", "book",        "clock",
-    "vase",        "scissors",   "teddy",        "hair",        "toothbrush"};
+    "vase",        "scissors",   "teddy",        "hair",        "toothbrush"};*/
 
 #ifdef USE_OPENCV
 void display_detections(cv::Mat &frame, bcnn_output_detection *dets,
                         int num_dets, float thresh, int num_classes) {
+    fprintf(stderr, "nd %d nc %d\n", num_dets, num_classes);
     for (int i = 0; i < num_dets; ++i) {
         for (int j = 0; j < num_classes; ++j) {
             if (dets[i].prob[j] > thresh) {
                 int x_tl = (dets[i].x - dets[i].w / 2) * frame.cols;
                 int y_tl = (dets[i].y - dets[i].h / 2) * frame.rows;
+                fprintf(stderr, "x_tl %f y_tl %f w %f h %f\n", dets[i].x,
+                        dets[i].y, dets[i].w, dets[i].h);
                 cv::Rect box = cv::Rect(x_tl, y_tl, dets[i].w * frame.cols,
                                         dets[i].h * frame.rows);
                 int r, g, b;
@@ -216,6 +227,7 @@ int main(int argc, char **argv) {
         return -1;
     }
     int out_sz = bcnn_tensor_size(&net->tensors[net->num_tensors - 1]);
+    fprintf(stderr, "out_sz %d\n", out_sz);
     if (strcmp(argv[1], "video") == 0) {
 #ifdef USE_OPENCV
         cv::VideoCapture cap;
@@ -231,7 +243,7 @@ int main(int argc, char **argv) {
             int num_dets = 0;
             bcnn_output_detection *dets =
                 run_inference(frame.cols, frame.rows, net, &num_dets);
-            display_detections(frame, dets, num_dets, 0.45, 80);
+            display_detections(frame, dets, num_dets, 0.45, /*80*/ 9);
             cv::imshow("yolov3 example", frame);
             free_detection_results(dets, num_dets);
             free(dets);
@@ -277,6 +289,16 @@ int main(int argc, char **argv) {
         bcnn_output_detection *dets =
             run_inference(w_frame, h_frame, net, &num_dets);
 #endif
+        for (int i = 2; i < net->num_tensors; ++i) {
+#ifdef BCNN_USE_CUDA
+            bcnn_cuda_memcpy_dev2host((float *)net->tensors[i].data_gpu,
+                                      net->tensors[i].data,
+                                      bcnn_tensor_size(&net->tensors[i]));
+#endif
+            fprintf(stderr, "%d : %s %f %f %f\n", i, net->tensors[i].name,
+                    net->tensors[i].data[0], net->tensors[i].data[10],
+                    net->tensors[i].data[100]);
+        }
         std::string in_path = argv[2];
         std::string out_path = in_path + "_dets.png";
 #ifdef USE_OPENCV
@@ -284,7 +306,7 @@ int main(int argc, char **argv) {
         cv::imwrite(out_path, img);
 #else
         display_detections(img, w_frame, h_frame, c_frame, dets, num_dets, 0.45,
-                           80, out_path);
+                           /*80*/ 9, out_path);
 #endif
         free_detection_results(dets, num_dets);
         free(dets);

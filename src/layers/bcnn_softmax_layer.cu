@@ -58,7 +58,8 @@ void bcnn_forward_softmax_layer_gpu(bcnn_net *net, bcnn_node *node) {
 
     _bcnn_forward_softmax_layer_kernel<<<bcnn_cuda_blocks(batch_size),
                                          BCNN_CUDA_THREADS>>>(
-        src_size, batch_size, src_tensor->data_gpu, dst_tensor->data_gpu);
+        src_size, batch_size, (float *)src_tensor->data_gpu,
+        (float *)dst_tensor->data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
 
     return;
@@ -69,8 +70,8 @@ void bcnn_backward_softmax_layer_gpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     int size = bcnn_tensor_size(src_tensor);
 
-    bcnn_cuda_axpy(size, 1, dst_tensor->grad_data_gpu, 1,
-                   src_tensor->grad_data_gpu, 1);
+    bcnn_cuda_axpy(size, 1, (float *)dst_tensor->grad_data_gpu, 1,
+                   (float *)src_tensor->grad_data_gpu, 1);
 
     return;
 }

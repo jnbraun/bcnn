@@ -36,7 +36,7 @@ typedef struct tensor_filler {
 } bcnn_tensor_filler;
 
 void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
-                        int has_grad, const char *name, int net_state);
+                        int has_grad, const char *name, bcnn_net *net);
 
 void bcnn_tensor_fill(bcnn_tensor *t, bcnn_tensor_filler filler);
 
@@ -45,9 +45,9 @@ void bcnn_tensor_destroy(bcnn_tensor *t);
 void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w,
                            int has_grad);
 
-bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state);
+bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, bcnn_net *net);
 
-void bcnn_tensor_free(bcnn_tensor *t);
+bcnn_status bcnn_tensor_free(bcnn_tensor *t);
 
 /**
  * Tensor manipulation helpers

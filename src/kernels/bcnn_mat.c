@@ -41,6 +41,10 @@
 #include "openblas/openblas_sgemm.h"
 #endif
 
+#if defined(BCNN_USE_OPENCL)
+#include "clblast_c.h"
+#endif
+
 int bcnn_fill_f32(int n, float a, float *x) {
     int i;
     for (i = 0; i < n; ++i) {
@@ -1394,7 +1398,7 @@ static void sgemm(bcnn_gemm_context *ctx, int m, int n, int k, float alpha,
 int bcnn_gemm(bcnn_gemm_context *ctx, int trans_a, int trans_b, int m, int n,
               int k, float alpha, float *A, int lda, float *B, int ldb,
               float beta, float *C, int ldc) {
-#if (defined(__aarch64__))
+#if (defined(__aarch64__) && defined(BCNN_USE_NEON))
     // Switch A and B as OpenBlas is column major
     openblas_sgemm(ctx, trans_b, trans_a, n, m, k, alpha, B, ldb, A, lda, beta,
                    C, ldc);
@@ -1415,3 +1419,29 @@ int bcnn_gemm(bcnn_gemm_context *ctx, int trans_a, int trans_b, int m, int n,
 #endif
     return 0;
 }
+
+#ifdef BCNN_USE_OPENCL
+
+void bcnn_gemm_opencl(bcnn_net *net, int TA, int TB, int M, int N, int K,
+                      float ALPHA, cl_mem A_gpu, const size_t a_offset, int lda,
+                      cl_mem B_gpu, const size_t b_offset, int ldb, float BETA,
+                      cl_mem C_gpu, const size_t c_offset, int ldc) {
+    cl_event e;
+
+    CLBlastTranspose transA = (TA ? CLBlastTransposeYes : CLBlastTransposeNo);
+    CLBlastTranspose transB = (TB ? CLBlastTransposeYes : CLBlastTransposeNo);
+    bcnn_opencl_context *opencl_ctx = net->opencl_ctx;
+    CLBlastStatusCode status = CLBlastSgemm(
+        CLBlastLayoutColMajor,  // Make column major the same with cublasSgemm
+        transB, transA, N, M, K, ALPHA, B_gpu, b_offset, ldb, A_gpu, a_offset,
+        lda, BETA, C_gpu, c_offset, ldc,
+        &(opencl_ctx->cmd_queue),  // cl_command_queue *commandQueues,
+        &e                         // cl_event *events
+        );
+    if (status == CLBlastSuccess) {
+        clWaitForEvents(1, &e);
+        clReleaseEvent(e);
+    }
+}
+
+#endif

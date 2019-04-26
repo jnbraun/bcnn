@@ -54,7 +54,7 @@ bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
     bcnn_tensor_set_shape(
         &dst_tensor, net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
         net->tensors[node.src[0]].h, net->tensors[node.src[0]].w, 1);
-    bcnn_tensor_allocate(&dst_tensor, net->mode);
+    bcnn_tensor_allocate(&dst_tensor, net);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);
@@ -81,27 +81,27 @@ bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
     sprintf(scales_name, "%s_scales", src_id);
     sprintf(biases_name, "%s_b", src_id);
     bcnn_tensor_create(&param->saved_mean, 1, 1, 1, channels, 1,
-                       saved_mean_name, net->mode);
+                       saved_mean_name, net);
     bcnn_tensor_create(&param->saved_variance, 1, 1, 1, channels, 1,
-                       saved_var_name, net->mode);
+                       saved_var_name, net);
     bcnn_tensor running_mean = {0};
     bcnn_tensor_create(&running_mean, 1, 1, 1, channels, 0, running_mean_name,
-                       net->mode);  // no gradients
+                       net);  // no gradients
     bcnn_net_add_tensor(net, running_mean);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
     bcnn_tensor running_var = {0};
     bcnn_tensor_create(&running_var, 1, 1, 1, channels, 0, running_var_name,
-                       net->mode);  // no gradients
+                       net);  // no gradients
     bcnn_net_add_tensor(net, running_var);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
     bcnn_tensor scales = {0};
-    bcnn_tensor_create(&scales, 1, 1, 1, channels, 1, scales_name, net->mode);
+    bcnn_tensor_create(&scales, 1, 1, 1, channels, 1, scales_name, net);
     bcnn_tensor_filler filler = {.value = 1.0f, .type = BCNN_FILLER_FIXED};
     bcnn_tensor_fill(&scales, filler);
     bcnn_net_add_tensor(net, scales);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
     bcnn_tensor biases = {0};
-    bcnn_tensor_create(&biases, 1, 1, 1, channels, 1, biases_name, net->mode);
+    bcnn_tensor_create(&biases, 1, 1, 1, channels, 1, biases_name, net);
     bcnn_net_add_tensor(net, biases);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
     // Internal data

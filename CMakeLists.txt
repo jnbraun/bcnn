@@ -1,12 +1,22 @@
 cmake_minimum_required (VERSION 2.9)
 project (bcnn)
 
+#if (MTK2712)
+#    message(STATUS "Building with MTK2712 toolchain")
+#    set(STANDALONE_TOOLCHAIN "/opt/poky-agl/5.0.3-v3.1.0/sysroots")
+#    set(INCLUDE_PATH ${STANDALONE_TOOLCHAIN}/aarch64-agl-linux/usr/include)
+#    set(CMAKE_C_COMPILER ${STANDALONE_TOOLCHAIN}/x86_64-aglsdk-linux/usr/bin/aarch64-agl-linux/aarch64-agl-linux-gcc)
+#    set(CMAKE_CXX_COMPILER ${STANDALONE_TOOLCHAIN}/x86_64-aglsdk-linux/usr/bin/aarch64-agl-linux/aarch64-agl-linux-g++)
+#    set(CMAKE_SYSTEM_PROCESSOR "aarch64")
+#endif()
+
 # User configuration settings
 option(USE_AVX "Build with AVX instructions" ON)
 option(USE_CUDA "Build with CUDA libraries" OFF)
 option(USE_CUDNN "Build with CuDNN library" OFF)
 option(USE_BLAS "Build with BLAS library" ON)
 option(USE_NEON "Build with Neon instructions" OFF)
+option(USE_OPENCL "Build with OpenCL library" OFF)
 # Building examples
 option(BUILD_EXAMPLES "Build examples" ON)
 # Building tools
@@ -24,7 +34,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 enable_language(C ASM)
 # C99
-set (CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD 99)
+
+# CXX11
+set(CMAKE_CXX_STANDARD 11)
 
 # Compiler flags
 set(CMAKE_C_FLAGS "-O3 -fPIC")
@@ -36,7 +49,7 @@ message(STATUS "[bcnn] Targeted system processor: " ${CMAKE_SYSTEM_PROCESSOR})
 # Blas backend
 if (USE_BLAS)
     # Check that USE_CUDA is turn off when using Blas
-    if (USE_CUDA OR USE_CUDNN)
+    if (USE_CUDA OR USE_CUDNN OR USE_OPENCL)
         message(FATAL_ERROR 
         "[bcnn] Can not use Blas when USE_CUDA is turned ON.
         Please turn off USE_CUDA option if you want to run on CPU or
@@ -57,7 +70,7 @@ if (USE_BLAS)
     find_library(OpenBLAS_LIB NAMES openblas PATHS ${OpenBLAS_LIB_PATHS})
     if(OpenBLAS_INCLUDE AND OpenBLAS_LIB)
         set(OpenBLAS_FOUND ON)
-        message(STATUS "[bcnn] Found OpenBlas here: " ${OpenBLAS_LIB})
+        message(STATUS "[bcnn] Build with OpenBlas found here: " ${OpenBLAS_LIB})
 	include_directories(${OpenBLAS_INC_PATHS})
         set(BLAS_LIBRARY ${OpenBLAS_LIB})
     endif()
@@ -66,7 +79,7 @@ if (USE_BLAS)
         find_package(BLAS QUIET)
         find_library(CBLAS_LIB NAMES cblas PATHS)
         if (BLAS_FOUND AND CBLAS_LIB)
-            message(STATUS "[bcnn] Found Blas here: " ${CBLAS_LIB})
+            message(STATUS "[bcnn] Build with Blas found here: " ${CBLAS_LIB})
             set(BLAS_LIBRARY ${CBLAS_LIB})
         elseif(NOT CBLAS_FOUND)
             message(FATAL_ERROR "[bcnn] Could not find any Blas library")
@@ -81,8 +94,7 @@ if (USE_CUDA)
     if (USE_BLAS)
         add_definitions(-DBCNN_USE_BLAS=OFF)
     endif()
-    message(STATUS "[bcnn] Build with Cuda")
-    message(STATUS "[bcnn] Found Cuda libraries: " ${CUDA_CUBLAS_LIBRARIES})
+    message(STATUS "[bcnn] Build with Cuda found here: " ${CUDA_CUBLAS_LIBRARIES})
     # Uncomment the proper line according to the system cuda arch
     set(CUDA_ARCH 
         #"-gencode arch=compute_30,code=sm_30;"
@@ -95,7 +107,7 @@ if (USE_CUDA)
     )
     set(CUDA_NVCC_FLAGS ${CUDA_ARCH} "-lcuda -lcudart -lcublas -lcurand")
     if (USE_CUDNN)
-        message(STATUS "[bcnn] Build with CuDNN")
+        message(STATUS "[bcnn] Build with CuDNN found here: " ${CUDNN_LIBRARY})
         set(CUDNN_ROOT_DIR "" CACHE PATH "Folder contains NVIDIA cuDNN")
         find_path(CUDNN_INCLUDE_DIR cudnn.h HINTS ${CUDNN_ROOT_DIR} ${CUDA_TOOLKIT_ROOT_DIR}
             PATH_SUFFIXES cuda/include include)
@@ -105,6 +117,15 @@ if (USE_CUDA)
         set(CUDNN_LIBRARIES ${CUDNN_LIBRARY})
         add_definitions(-DBCNN_USE_CUDNN)
     endif()
+endif()
+
+# Find OpenCL
+if (USE_OPENCL)
+    find_package(OpenCL REQUIRED)
+    message(STATUS "[bcnn] Build with OpenCL found here: " ${OpenCL_LIBRARY})
+    #set(OPENCL_INCLUDE ${OpenCL_LIBRARY})
+    #set(OPENCL_INC ${OpenCL_INCLUDE_DIR})
+    add_definitions(-DBCNN_USE_OPENCL -DOPENCL_API)
 endif()
 
 if (USE_AVX)
@@ -153,6 +174,7 @@ include_directories (
     ${PROJECT_SOURCE_DIR}/src/bip/inc
     ${PROJECT_SOURCE_DIR}/src/bh/inc
     ${PROJECT_SOURCE_DIR}/src/bip/thirdparty
+    ${PROJECT_SOURCE_DIR}/src/kernels/clblast
     )
 
 add_subdirectory(src/bip) 
@@ -168,6 +190,10 @@ else()
     else()
         file(GLOB SRC_LIB src/*.c src/kernels/*.c src/layers/*.c src/data_loader/*.c)
     endif()
+    if (USE_OPENCL)
+        file(GLOB SRC_LIB src/*.c src/kernels/*.c src/layers/*.c src/data_loader/*.c 
+            src/*.c src/kernels/clblast/*.cpp)
+    endif()
 endif()
 file(GLOB SRC_CLI src/cli/*.c)
 
@@ -179,6 +205,9 @@ if (USE_CUDA)
     else()
         target_link_libraries(bcnn bip ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDA_curand_LIBRARY})
     endif()
+elseif(USE_OPENCL)
+    add_library(bcnn STATIC ${SRC_LIB})
+    target_link_libraries(bcnn bip ${OpenCL_LIBRARY})
 else()
     add_library(bcnn STATIC ${SRC_LIB})
     target_link_libraries(bcnn bip ${BLAS_LIBRARY})
@@ -202,6 +231,7 @@ if (BUILD_EXAMPLES)
     add_subdirectory(examples/cifar10)
     add_subdirectory(examples/yolo)
     add_subdirectory(examples/inference_bench)
+    add_subdirectory(examples/test_opencl)
 endif()
 
 if (BUILD_TOOLS)

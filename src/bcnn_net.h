@@ -29,6 +29,9 @@
 #include "bcnn_learner.h"
 #include "bcnn_node.h"
 #include "bcnn_utils.h"
+#ifdef BCNN_USE_OPENCL
+#include "bcnn_ocl_utils.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,6 +44,17 @@ typedef struct bcnn_cuda_context {
 } bcnn_cuda_context;
 #endif
 
+#ifdef BCNN_USE_OPENCL
+typedef struct bcnn_opencl_context {
+    cl_context ctx;
+    cl_device_id device;
+    cl_command_queue cmd_queue;
+    int workspace_size;
+    cl_mem workspace_gpu;
+} bcnn_opencl_context;
+
+#endif
+
 /**
  * Net definition
  */
@@ -49,22 +63,28 @@ struct bcnn_net {
     int num_nodes;   /* Number of nodes hold in the network */
     int num_tensors; /* Number of tensors hold in the network */
     bcnn_mode mode;
-    bcnn_log_context log_ctx; /* Logging stuff */
-    bcnn_node *nodes;         /* Array of 'num_nodes' nodes */
-    bcnn_tensor *tensors;     /* Array of 'num_tensors' tensors */
-    bcnn_learner *learner;    /* Learner/optimizer parameters */
-    bcnn_loader *data_loader; /* Handles the loading and iteration over training
-                                 / testing datasets */
+    bcnn_log_context log_ctx;      /* Logging stuff */
+    bcnn_node *nodes;              /* Array of 'num_nodes' nodes */
+    bcnn_tensor *tensors;          /* Array of 'num_tensors' tensors */
+    bcnn_learner *learner;         /* Learner/optimizer parameters */
+    bcnn_loader *data_loader;      /* Handles the loading and iteration over
+                                      training / testing datasets */
     bcnn_data_augmenter *data_aug; /* Handles the online data augmentation */
     void *gemm_ctx;
 #ifdef BCNN_USE_CUDA
     void *cuda_ctx;
+#endif
+#ifdef BCNN_USE_OPENCL
+    bcnn_opencl_context *opencl_ctx;
 #endif
 };
 
 bcnn_status bcnn_net_create_gemm_context(bcnn_net *net);
 #ifdef BCNN_USE_CUDA
 bcnn_status bcnn_net_create_cuda_context(bcnn_net *net);
+#endif
+#ifdef BCNN_USE_OPENCL
+bcnn_status bcnn_net_create_opencl_context(bcnn_net *net);
 #endif
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node);
 bcnn_status bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor);

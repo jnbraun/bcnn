@@ -73,7 +73,7 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, int num_src,
     bcnn_tensor_set_shape(&dst_tensor, net->tensors[node.src[0]].n, out_c,
                           net->tensors[node.src[0]].h,
                           net->tensors[node.src[0]].w, 1);
-    bcnn_tensor_allocate(&dst_tensor, net->mode);
+    bcnn_tensor_allocate(&dst_tensor, net);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);
@@ -135,9 +135,9 @@ void bcnn_forward_concat_layer_gpu(bcnn_net *net, bcnn_node *node) {
         bcnn_tensor *src_tensor = &net->tensors[node->src[i]];
         int src_sz = bcnn_tensor_size3d(src_tensor);
         for (int j = 0; j < src_tensor->n; ++j) {
-            bcnn_cuda_copy_f32(src_sz, src_tensor->data_gpu + j * src_sz, 1,
-                               dst_tensor->data_gpu + dst_offset + j * dst_sz,
-                               1);
+            bcnn_cuda_copy_f32(
+                src_sz, (float *)src_tensor->data_gpu + j * src_sz, 1,
+                (float *)dst_tensor->data_gpu + dst_offset + j * dst_sz, 1);
         }
         dst_offset += src_sz;
     }
@@ -153,9 +153,11 @@ void bcnn_backward_concat_layer_gpu(bcnn_net *net, bcnn_node *node) {
         int src_sz = bcnn_tensor_size3d(src_tensor);
         if (src_tensor->grad_data) {
             for (int j = 0; j < src_tensor->n; ++j) {
-                bcnn_cuda_axpy(src_sz, 1.0f, dst_tensor->grad_data_gpu +
-                                                 dst_offset + j * dst_sz,
-                               1, src_tensor->grad_data_gpu + j * src_sz, 1);
+                bcnn_cuda_axpy(
+                    src_sz, 1.0f,
+                    (float *)dst_tensor->grad_data_gpu + dst_offset +
+                        j * dst_sz,
+                    1, (float *)src_tensor->grad_data_gpu + j * src_sz, 1);
             }
         }
         dst_offset += src_sz;

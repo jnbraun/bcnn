@@ -50,6 +50,10 @@
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
+#ifdef BCNN_USE_OPENCL
+#include "bcnn_ocl_utils.h"
+#endif
+
 bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
     bcnn_net *p_net = (bcnn_net *)calloc(1, sizeof(bcnn_net));
     if (p_net == NULL) {
@@ -79,6 +83,10 @@ bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
 #ifndef BCNN_USE_BLAS
     // Internal context for gemm
     BCNN_CHECK_STATUS(bcnn_net_create_gemm_context(p_net));
+#endif
+#ifdef BCNN_USE_OPENCL
+    fprintf(stderr, "opencl create\n");
+    BCNN_CHECK_STATUS(bcnn_net_create_opencl_context(p_net));
 #endif
     *net = p_net;
     return BCNN_SUCCESS;
@@ -165,6 +173,57 @@ bcnn_status bcnn_net_create_cuda_context(bcnn_net *net) {
 }
 #endif
 
+#ifdef BCNN_USE_OPENCL
+bcnn_status bcnn_net_create_opencl_context(bcnn_net *net) {
+    net->opencl_ctx =
+        (bcnn_opencl_context *)calloc(1, sizeof(bcnn_opencl_context));
+    if (net->opencl_ctx == NULL) {
+        return BCNN_FAILED_ALLOC;
+    }
+    cl_platform_id platform_id;
+    cl_uint num_platforms;
+    BCNN_OPENCL_CHECK(clGetPlatformIDs(1, &platform_id, &num_platforms));
+    if (num_platforms == 0) {
+        return BCNN_OPENCL_FAILED;
+    }
+
+    /* Get number of devices */
+    cl_uint num_devices;
+    BCNN_OPENCL_CHECK(clGetDeviceIDs(
+        platform_id, CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_ACCELERATOR, 0, 0,
+        &num_devices));
+    cl_device_id *device_ids =
+        (cl_device_id *)calloc(num_devices, sizeof(cl_device_id));
+    BCNN_OPENCL_CHECK(clGetDeviceIDs(
+        platform_id, CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_ACCELERATOR,
+        num_devices, device_ids, &num_devices));
+    int gpu_id = 0;
+    if (gpu_id >= (int)num_devices) {
+        fprintf(stderr, "[ERROR] Failed to find device index %d\n", gpu_id);
+        return BCNN_OPENCL_FAILED;
+    }
+    net->opencl_ctx->device = device_ids[gpu_id];
+    bh_free(device_ids);
+
+    /* Create OpenCL context */
+    cl_int rc;
+    net->opencl_ctx->ctx =
+        clCreateContext(0, 1, &(net->opencl_ctx->device), NULL, NULL, &rc);
+    BCNN_OPENCL_CHECK(rc);
+    /* Create command queue */
+    net->opencl_ctx->cmd_queue = clCreateCommandQueue(
+        net->opencl_ctx->ctx, net->opencl_ctx->device, 0, &rc);
+    BCNN_OPENCL_CHECK(rc);
+    fprintf(stderr, "end init opencl 0\n");
+    /* Init cl kernels */
+    BCNN_CHECK_STATUS(bcnn_opencl_im2col_kernel_create(net));
+    fprintf(stderr, "end init opencl\n");
+
+    return BCNN_SUCCESS;
+}
+
+#endif
+
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node) {
     bcnn_node *p_node = NULL;
     net->num_nodes++;
@@ -194,7 +253,7 @@ bcnn_status bcnn_add_input(bcnn_net *net, int w, int h, int c,
     // Create input node
     bcnn_tensor input = {0};
     bcnn_tensor_set_shape(&input, net->batch_size, c, h, w, 0);  // no gradient
-    bcnn_tensor_allocate(&input, net->mode);
+    bcnn_tensor_allocate(&input, net);
     bh_strfill(&input.name, name);
     // Add tensor to net
     return bcnn_net_add_tensor(net, input);
@@ -209,7 +268,7 @@ void bcnn_set_input_shape(bcnn_net *net, int input_width, int input_height,
 
 static bcnn_status bcnn_init_workload(bcnn_net *net) {
     // Allocate tensor for input node
-    BCNN_CHECK_STATUS(bcnn_tensor_allocate(&net->tensors[0], net->mode));
+    BCNN_CHECK_STATUS(bcnn_tensor_allocate(&net->tensors[0], net));
 
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_context *cuda_ctx = (bcnn_cuda_context *)net->cuda_ctx;
@@ -218,6 +277,20 @@ static bcnn_status bcnn_init_workload(bcnn_net *net) {
         if (net->nodes[i].type == BCNN_LAYER_CONV2D) {
             bcnn_conv_param *param = (bcnn_conv_param *)(net->nodes[i].param);
             param->conv_workspace_gpu = cuda_ctx->workspace_gpu;
+        }
+    }
+#endif
+#ifdef BCNN_USE_OPENCL
+    bcnn_opencl_context *opencl_ctx = (bcnn_opencl_context *)net->opencl_ctx;
+    cl_int rc;
+    opencl_ctx->workspace_gpu = (cl_mem)clCreateBuffer(
+        net->opencl_ctx->ctx, CL_MEM_READ_WRITE,
+        opencl_ctx->workspace_size * sizeof(cl_float), NULL, &rc);
+    BCNN_OPENCL_CHECK(rc);
+    for (int i = 0; i < net->num_nodes; ++i) {
+        if (net->nodes[i].type == BCNN_LAYER_CONV2D) {
+            bcnn_conv_param *param = (bcnn_conv_param *)(net->nodes[i].param);
+            param->conv_workspace_gpu = opencl_ctx->workspace_gpu;
         }
     }
 #endif
@@ -248,8 +321,8 @@ static void bcnn_reset_gradients(bcnn_net *net, bcnn_node *node) {
     }
 }
 
-/* Given a tensor name, return its index in the net tensors array or -1 if not
- * found */
+/* Given a tensor name, return its index in the net tensors array or -1 if
+ * not found */
 int bcnn_get_tensor_index_by_name(bcnn_net *net, const char *name) {
     for (int i = net->num_tensors - 1; i >= 0; --i) {
         if (strcmp(net->tensors[i].name, name) == 0) {

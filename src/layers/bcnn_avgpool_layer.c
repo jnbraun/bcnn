@@ -52,7 +52,7 @@ bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, const char *src_id,
                           1,                            // height
                           1,                            // width
                           1);
-    bcnn_tensor_allocate(&dst_tensor, net->mode);
+    bcnn_tensor_allocate(&dst_tensor, net);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);

@@ -77,7 +77,7 @@ extern "C" {
 
 typedef struct bcnn_gemm_context {
 #if !defined(BCNN_USE_BLAS) && !defined(BCNN_USE_CUDA)
-#if (defined(__aarch64__))  // use sgemm_openblas
+#if (defined(__aarch64__) && defined(BCNN_USE_NEON))  // use sgemm_openblas
     float buffer_a[(((MC + NC) * KC + GEMM_ALIGN) & ~(GEMM_ALIGN))]
         __attribute__((aligned(32)));
     float *buffer_b;
@@ -196,6 +196,20 @@ void bcnn_cuda_im2col(float *im, int channels, int height, int width, int ksize,
 void bcnn_cuda_col2im(float *data_col, int channels, int height, int width,
                       int ksize, int stride, int pad, float *data_im);
 
+#endif
+
+#ifdef BCNN_USE_OPENCL
+#include "bcnn_net.h"
+void bcnn_gemm_opencl(bcnn_net *net, int TA, int TB, int M, int N, int K,
+                      float ALPHA, cl_mem A_gpu, const size_t a_offset, int lda,
+                      cl_mem B_gpu, const size_t b_offset, int ldb, float BETA,
+                      cl_mem C_gpu, const size_t c_offset, int ldc);
+
+int bcnn_opencl_im2col_kernel_create(bcnn_net *net);
+void bcnn_opencl_im2col_kernel_release();
+void bcnn_opencl_im2col(bcnn_net *net, cl_mem im, int offset, int channels,
+                        int height, int width, int ksize, int stride, int pad,
+                        cl_mem data_col);
 #endif
 
 #ifdef __cplusplus

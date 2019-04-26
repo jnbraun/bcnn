@@ -53,8 +53,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     // Setup layer biases
     char biases_name[256];
     sprintf(biases_name, "%s_b", src_id);
-    bcnn_tensor_create(&param->biases, 1, 1, 1, total * 2, 0, biases_name,
-                       net->mode);
+    bcnn_tensor_create(&param->biases, 1, 1, 1, total * 2, 0, biases_name, net);
     bcnn_tensor_filler w_filler = {.value = 0.5f, .type = BCNN_FILLER_FIXED};
     bcnn_tensor_fill(&param->biases, w_filler);
     if (anchors != NULL) {
@@ -68,7 +67,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     if (net->mode != BCNN_MODE_PREDICT && net->tensors[1].data == NULL) {
         bcnn_tensor_set_shape(&net->tensors[1], net->tensors[node.src[0]].n, 1,
                               1, BCNN_DETECTION_MAX_BOXES * 5, 0);
-        bcnn_tensor_allocate(&net->tensors[1], net->mode);
+        bcnn_tensor_allocate(&net->tensors[1], net);
     }
     // Setup output tensor
     bcnn_tensor dst_tensor = {0};
@@ -78,7 +77,7 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
                           net->tensors[node.src[0]].h,  // height
                           net->tensors[node.src[0]].w,  // width
                           1);
-    bcnn_tensor_allocate(&dst_tensor, net->mode);
+    bcnn_tensor_allocate(&dst_tensor, net);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add tensor to net
     bcnn_net_add_tensor(net, dst_tensor);
@@ -98,7 +97,9 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
     return 0;
 }
 
-typedef struct bbox { float x, y, w, h; } bbox;
+typedef struct bbox {
+    float x, y, w, h;
+} bbox;
 
 static float overlap(float x1, float w1, float x2, float w2) {
     float l1 = x1 - w1 / 2;

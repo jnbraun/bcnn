@@ -95,6 +95,7 @@ typedef enum {
     BCNN_FAILED_ALLOC,
     BCNN_INTERNAL_ERROR,
     BCNN_CUDA_FAILED_ALLOC,
+    BCNN_OPENCL_FAILED,
     BCNN_UNKNOWN_ERROR
 } bcnn_status;
 
@@ -248,9 +249,9 @@ struct bcnn_tensor {
     char *name;       /* Tensor name */
     float *data;      /* Pointer to data */
     float *grad_data; /* Pointer to gradient data */
-#ifdef BCNN_USE_CUDA
-    float *data_gpu;      /* Pointer to data on gpu */
-    float *grad_data_gpu; /* Pointer to gradient data on gpu */
+#if defined(BCNN_USE_CUDA) || defined(BCNN_USE_OPENCL)
+    void *data_gpu;      /* Pointer to data on gpu */
+    void *grad_data_gpu; /* Pointer to gradient data on gpu */
 #endif
 };
 

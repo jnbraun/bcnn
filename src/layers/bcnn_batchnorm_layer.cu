@@ -203,11 +203,11 @@ void bcnn_forward_batchnorm_gpu(bcnn_tensor *src_tensor,
 #endif
 
     if (src_tensor != dst_tensor) {
-        bcnn_cuda_copy_f32(sz * batch_size, src_tensor->data_gpu, 1,
-                           dst_tensor->data_gpu, 1);
+        bcnn_cuda_copy_f32(sz * batch_size, (float *)src_tensor->data_gpu, 1,
+                           (float *)dst_tensor->data_gpu, 1);
     }
-    bcnn_cuda_copy_f32(sz * batch_size, dst_tensor->data_gpu, 1, workspace_gpu,
-                       1);
+    bcnn_cuda_copy_f32(sz * batch_size, (float *)dst_tensor->data_gpu, 1,
+                       workspace_gpu, 1);
 
     if (mode == BCNN_MODE_TRAIN) {
 #ifdef BCNN_USE_CUDNN
@@ -215,55 +215,62 @@ void bcnn_forward_batchnorm_gpu(bcnn_tensor *src_tensor,
             bcnn_cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &alpha, &beta,
             dst_tensor_desc,
             /*src_tensor->data_gpu*/ workspace_gpu, dst_tensor_desc,
-            dst_tensor->data_gpu, bias_desc, bn_scales->data_gpu,
-            bn_biases->data_gpu, 0.1, bn_mean->data_gpu, bn_var->data_gpu,
-            0.0001, saved_mean->data_gpu, saved_variance->data_gpu));
+            (float *)dst_tensor->data_gpu, bias_desc,
+            (float *)bn_scales->data_gpu, (float *)bn_biases->data_gpu, 0.1,
+            (float *)bn_mean->data_gpu, (float *)bn_var->data_gpu, 0.0001,
+            (float *)saved_mean->data_gpu, (float *)saved_variance->data_gpu));
 #else
-        fast_mean_gpu(dst_tensor->data_gpu, batch_size, dst_tensor->c,
-                      dst_tensor->h * dst_tensor->w, saved_mean->data_gpu);
-        fast_variance_gpu(dst_tensor->data_gpu, saved_mean->data_gpu,
-                          batch_size, dst_tensor->c,
-                          dst_tensor->h * dst_tensor->w,
-                          saved_variance->data_gpu);
+        fast_mean_gpu((float *)dst_tensor->data_gpu, batch_size, dst_tensor->c,
+                      dst_tensor->h * dst_tensor->w,
+                      (float *)saved_mean->data_gpu);
+        fast_variance_gpu((float *)dst_tensor->data_gpu,
+                          (float *)saved_mean->data_gpu, batch_size,
+                          dst_tensor->c, dst_tensor->h * dst_tensor->w,
+                          (float *)saved_variance->data_gpu);
 
-        bcnn_cuda_scal(dst_tensor->c, 0.9f, bn_mean->data_gpu, 1);
-        bcnn_cuda_axpy(dst_tensor->c, 0.1f, saved_mean->data_gpu, 1,
-                       bn_mean->data_gpu, 1);
-        bcnn_cuda_scal(dst_tensor->c, 0.9f, bn_var->data_gpu, 1);
-        bcnn_cuda_axpy(dst_tensor->c, 0.1f, saved_variance->data_gpu, 1,
-                       bn_var->data_gpu, 1);
-        bcnn_cuda_norm_forward(dst_tensor->data_gpu, saved_mean->data_gpu,
-                               saved_variance->data_gpu, batch_size,
+        bcnn_cuda_scal(dst_tensor->c, 0.9f, (float *)bn_mean->data_gpu, 1);
+        bcnn_cuda_axpy(dst_tensor->c, 0.1f, (float *)saved_mean->data_gpu, 1,
+                       (float *)bn_mean->data_gpu, 1);
+        bcnn_cuda_scal(dst_tensor->c, 0.9f, (float *)bn_var->data_gpu, 1);
+        bcnn_cuda_axpy(dst_tensor->c, 0.1f, (float *)saved_variance->data_gpu,
+                       1, (float *)bn_var->data_gpu, 1);
+        bcnn_cuda_norm_forward((float *)dst_tensor->data_gpu,
+                               (float *)saved_mean->data_gpu,
+                               (float *)saved_variance->data_gpu, batch_size,
                                dst_tensor->c, dst_tensor->h * dst_tensor->w);
-        bcnn_cuda_copy_f32(batch_size * sz, dst_tensor->data_gpu, 1, x_norm_gpu,
-                           1);
-        bcnn_scales_gpu(dst_tensor->data_gpu, bn_scales->data_gpu, batch_size,
-                        dst_tensor->c, dst_tensor->h * dst_tensor->w);
-        bcnn_cuda_add_bias(dst_tensor->data_gpu, bn_biases->data_gpu,
-                           batch_size, dst_tensor->c,
-                           dst_tensor->h * dst_tensor->w);
+        bcnn_cuda_copy_f32(batch_size * sz, (float *)dst_tensor->data_gpu, 1,
+                           x_norm_gpu, 1);
+        bcnn_scales_gpu((float *)dst_tensor->data_gpu,
+                        (float *)bn_scales->data_gpu, batch_size, dst_tensor->c,
+                        dst_tensor->h * dst_tensor->w);
+        bcnn_cuda_add_bias((float *)dst_tensor->data_gpu,
+                           (float *)bn_biases->data_gpu, batch_size,
+                           dst_tensor->c, dst_tensor->h * dst_tensor->w);
 #endif
     } else {
 #ifdef BCNN_USE_CUDNN
         bcnn_cudnn_check(cudnnBatchNormalizationForwardInference(
             bcnn_cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &alpha, &beta,
-            dst_tensor_desc, src_tensor->data_gpu, dst_tensor_desc,
-            dst_tensor->data_gpu, bias_desc, bn_scales->data_gpu,
-            bn_biases->data_gpu, bn_mean->data_gpu, bn_var->data_gpu, 0.0001));
+            dst_tensor_desc, (float *)src_tensor->data_gpu, dst_tensor_desc,
+            (float *)dst_tensor->data_gpu, bias_desc,
+            (float *)bn_scales->data_gpu, (float *)bn_biases->data_gpu,
+            (float *)bn_mean->data_gpu, (float *)bn_var->data_gpu, 0.0001));
 #else
-        bcnn_cuda_copy_f32(sz * batch_size, src_tensor->data_gpu, 1,
-                           dst_tensor->data_gpu, 1);
-        bcnn_cuda_copy_f32(sz * batch_size, dst_tensor->data_gpu, 1,
+        bcnn_cuda_copy_f32(sz * batch_size, (float *)src_tensor->data_gpu, 1,
+                           (float *)dst_tensor->data_gpu, 1);
+        bcnn_cuda_copy_f32(sz * batch_size, (float *)dst_tensor->data_gpu, 1,
                            workspace_gpu, 1);
         // Normalize with global mean / variance
-        bcnn_cuda_norm_forward(dst_tensor->data_gpu, bn_mean->data_gpu,
-                               bn_var->data_gpu, batch_size, dst_tensor->c,
-                               dst_tensor->h * dst_tensor->w);
-        bcnn_scales_gpu(dst_tensor->data_gpu, bn_scales->data_gpu, batch_size,
-                        dst_tensor->c, dst_tensor->h * dst_tensor->w);
-        bcnn_cuda_add_bias(dst_tensor->data_gpu, bn_biases->data_gpu,
-                           batch_size, dst_tensor->c,
-                           dst_tensor->h * dst_tensor->w);
+        bcnn_cuda_norm_forward((float *)dst_tensor->data_gpu,
+                               (float *)bn_mean->data_gpu,
+                               (float *)bn_var->data_gpu, batch_size,
+                               dst_tensor->c, dst_tensor->h * dst_tensor->w);
+        bcnn_scales_gpu((float *)dst_tensor->data_gpu,
+                        (float *)bn_scales->data_gpu, batch_size, dst_tensor->c,
+                        dst_tensor->h * dst_tensor->w);
+        bcnn_cuda_add_bias((float *)dst_tensor->data_gpu,
+                           (float *)bn_biases->data_gpu, batch_size,
+                           dst_tensor->c, dst_tensor->h * dst_tensor->w);
 #endif
     }
     return;
@@ -316,39 +323,43 @@ void bcnn_backward_batchnorm_gpu(
         bcnn_cudnn_handle(), CUDNN_BATCHNORM_SPATIAL, &a_data, &b_data,
         &a_param, &b_param, dst_tensor_desc,
         /*src_tensor->data_gpu*/ workspace_gpu, dst_tensor_desc,
-        dst_tensor->grad_data_gpu, dst_tensor_desc,
-        /*src_tensor->grad_data_gpu*/ x_norm_gpu, bias_desc,
-        bn_scales->data_gpu, bn_scales->grad_data_gpu, bn_biases->grad_data_gpu,
-        0.0001, saved_mean->data_gpu, saved_variance->data_gpu));
+        (float *)dst_tensor->grad_data_gpu, dst_tensor_desc,
+        /*(float *src_tensor->grad_data_gpu*/ x_norm_gpu, bias_desc,
+        (float *)bn_scales->data_gpu, (float *)bn_scales->grad_data_gpu,
+        (float *)bn_biases->grad_data_gpu, 0.0001,
+        (float *)saved_mean->data_gpu, (float *)saved_variance->data_gpu));
     bcnn_cuda_copy_f32(sz * batch_size, x_norm_gpu, 1,
-                       dst_tensor->grad_data_gpu, 1);
+                       (float *)dst_tensor->grad_data_gpu, 1);
 #else
-    bcnn_cuda_grad_bias(bn_biases->grad_data_gpu, dst_tensor->grad_data_gpu,
-                        batch_size, dst_tensor->c,
-                        dst_tensor->h * dst_tensor->w);
-    bcnn_grad_scales_gpu(x_norm_gpu, dst_tensor->grad_data_gpu, batch_size,
-                         dst_tensor->c, dst_tensor->h * dst_tensor->w,
-                         bn_scales->grad_data_gpu);
-    bcnn_scales_gpu(dst_tensor->grad_data_gpu, bn_scales->data_gpu, batch_size,
-                    dst_tensor->c, dst_tensor->h * dst_tensor->w);
+    bcnn_cuda_grad_bias((float *)bn_biases->grad_data_gpu,
+                        (float *)dst_tensor->grad_data_gpu, batch_size,
+                        dst_tensor->c, dst_tensor->h * dst_tensor->w);
+    bcnn_grad_scales_gpu(x_norm_gpu, (float *)dst_tensor->grad_data_gpu,
+                         batch_size, dst_tensor->c,
+                         dst_tensor->h * dst_tensor->w,
+                         (float *)bn_scales->grad_data_gpu);
+    bcnn_scales_gpu((float *)dst_tensor->grad_data_gpu,
+                    (float *)bn_scales->data_gpu, batch_size, dst_tensor->c,
+                    dst_tensor->h * dst_tensor->w);
 
-    fast_mean_delta_gpu(dst_tensor->grad_data_gpu, saved_variance->data_gpu,
-                        batch_size, dst_tensor->c,
-                        dst_tensor->w * dst_tensor->h,
-                        saved_mean->grad_data_gpu);
-    fast_variance_delta_gpu(
-        workspace_gpu, dst_tensor->grad_data_gpu, saved_mean->data_gpu,
-        saved_variance->data_gpu, batch_size, dst_tensor->c,
-        dst_tensor->w * dst_tensor->h, saved_variance->grad_data_gpu);
-    bcnn_cuda_norm_backward(workspace_gpu, saved_mean->data_gpu,
-                            saved_variance->data_gpu, saved_mean->grad_data_gpu,
-                            saved_variance->grad_data_gpu, src_tensor->n,
+    fast_mean_delta_gpu((float *)dst_tensor->grad_data_gpu,
+                        (float *)saved_variance->data_gpu, batch_size,
+                        dst_tensor->c, dst_tensor->w * dst_tensor->h,
+                        (float *)saved_mean->grad_data_gpu);
+    fast_variance_delta_gpu(workspace_gpu, (float *)dst_tensor->grad_data_gpu,
+                            (float *)saved_mean->data_gpu,
+                            (float *)saved_variance->data_gpu, batch_size,
                             dst_tensor->c, dst_tensor->w * dst_tensor->h,
-                            dst_tensor->grad_data_gpu);
+                            (float *)saved_variance->grad_data_gpu);
+    bcnn_cuda_norm_backward(
+        workspace_gpu, (float *)saved_mean->data_gpu,
+        (float *)saved_variance->data_gpu, (float *)saved_mean->grad_data_gpu,
+        (float *)saved_variance->grad_data_gpu, src_tensor->n, dst_tensor->c,
+        dst_tensor->w * dst_tensor->h, (float *)dst_tensor->grad_data_gpu);
 #endif
     if (src_tensor->grad_data_gpu && src_tensor != dst_tensor) {
-        bcnn_cuda_copy_f32(sz * batch_size, dst_tensor->grad_data_gpu, 1,
-                           src_tensor->grad_data_gpu, 1);
+        bcnn_cuda_copy_f32(sz * batch_size, (float *)dst_tensor->grad_data_gpu,
+                           1, (float *)src_tensor->grad_data_gpu, 1);
     }
     return;
 }

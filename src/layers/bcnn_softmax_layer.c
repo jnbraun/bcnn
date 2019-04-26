@@ -59,7 +59,7 @@ bcnn_status bcnn_add_softmax_layer(bcnn_net *net, const char *src_id,
                           net->tensors[node.src[0]].h,  // height
                           net->tensors[node.src[0]].w,  // width
                           1);
-    bcnn_tensor_allocate(&dst_tensor, net->mode);
+    bcnn_tensor_allocate(&dst_tensor, net);
     bh_strfill(&dst_tensor.name, dst_id);
     // Add node to net
     bcnn_net_add_tensor(net, dst_tensor);

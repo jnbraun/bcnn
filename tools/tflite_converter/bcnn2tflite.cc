@@ -74,7 +74,7 @@ void add_reshape_node(bcnn_net* net, int dst_n, int dst_c, int dst_h, int dst_w,
         bcnn_node_add_input(net, &node, 0);
     }
     bcnn_tensor_set_shape(&dst_tensor, dst_n, dst_c, dst_h, dst_w, 1);
-    bcnn_tensor_allocate(&dst_tensor, net->mode);
+    bcnn_tensor_allocate(&dst_tensor, net);
     // bh_strfill(&dst_tensor.name, dst_id);
     dst_tensor.name = dst_id;
     // Add node to net
@@ -162,8 +162,9 @@ export_tensors(bcnn_net* net, FlatBufferBuilder* builder,
                         // Special case for Prelu as TFlite only
                         // supports 3-D tensor as Prelu slope(=alpha) shape
                         shape.clear();
-                        shape = {1, 1, net->tensors[i].c * net->tensors[i].h *
-                                           net->tensors[i].w};
+                        shape = {1, 1,
+                                 net->tensors[i].c * net->tensors[i].h *
+                                     net->tensors[i].w};
                     }
                 }
             }

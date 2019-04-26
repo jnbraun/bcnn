@@ -1,15 +1,6 @@
 cmake_minimum_required (VERSION 2.9)
 project (bcnn)
 
-#if (MTK2712)
-#    message(STATUS "Building with MTK2712 toolchain")
-#    set(STANDALONE_TOOLCHAIN "/opt/poky-agl/5.0.3-v3.1.0/sysroots")
-#    set(INCLUDE_PATH ${STANDALONE_TOOLCHAIN}/aarch64-agl-linux/usr/include)
-#    set(CMAKE_C_COMPILER ${STANDALONE_TOOLCHAIN}/x86_64-aglsdk-linux/usr/bin/aarch64-agl-linux/aarch64-agl-linux-gcc)
-#    set(CMAKE_CXX_COMPILER ${STANDALONE_TOOLCHAIN}/x86_64-aglsdk-linux/usr/bin/aarch64-agl-linux/aarch64-agl-linux-g++)
-#    set(CMAKE_SYSTEM_PROCESSOR "aarch64")
-#endif()
-
 # User configuration settings
 option(USE_AVX "Build with AVX instructions" ON)
 option(USE_CUDA "Build with CUDA libraries" OFF)

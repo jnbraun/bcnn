@@ -68,7 +68,8 @@ void bcnn_opencl_im2col(bcnn_net* net, cl_mem im, int offset, int channels,
     int num_kernels = channels * height_col * width_col;
 
     dim2 dimGrid;
-    dimGrid = dim2_create(num_kernels, 1);
+    // dimGrid = dim2_create(num_kernels, 1);
+    dimGrid = dim2_create((num_kernels + 512 - 1) / 512, 512);
 
     int zero = 0;
     fprintf(stderr, "k0\n");

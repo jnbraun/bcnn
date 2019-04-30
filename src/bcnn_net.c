@@ -286,6 +286,7 @@ static bcnn_status bcnn_init_workload(bcnn_net *net) {
     opencl_ctx->workspace_gpu = (cl_mem)clCreateBuffer(
         net->opencl_ctx->ctx, CL_MEM_READ_WRITE,
         opencl_ctx->workspace_size * sizeof(cl_float), NULL, &rc);
+    fprintf(stderr, "opencl workspace size %d\n", opencl_ctx->workspace_size);
     BCNN_OPENCL_CHECK(rc);
     for (int i = 0; i < net->num_nodes; ++i) {
         if (net->nodes[i].type == BCNN_LAYER_CONV2D) {

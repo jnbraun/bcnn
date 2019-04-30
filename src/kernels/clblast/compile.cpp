@@ -99,7 +99,7 @@ Program CompileFromSource(
 
     // Compiles the kernel
     auto program = Program(context, kernel_string);
-    fprintf(stderr, "kernel: %s\n", kernel_string.c_str());
+    // fprintf(stderr, "kernel: %s\n", kernel_string.c_str());
     try {
         fprintf(stderr, "CompileProgram 0\n");
         program.Build(device, options);

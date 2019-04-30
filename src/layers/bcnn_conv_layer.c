@@ -268,7 +268,12 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         param->bn_workspace_gpu = bcnn_cuda_memcpy_f32(param->workspace, sz);
     }
 #elif defined(BCNN_USE_OPENCL)  // BCNN_USE_CUDA
-
+    bcnn_opencl_context *opencl_ctx = (bcnn_opencl_context *)net->opencl_ctx;
+    param->workspace_size =
+        net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
+        net->tensors[node.src[0]].c / num_groups * size * size;
+    opencl_ctx->workspace_size =
+        bh_max(opencl_ctx->workspace_size, param->workspace_size);
 #endif
     bcnn_net_add_node(net, node);
     BCNN_INFO(net->log_ctx,

@@ -20,6 +20,12 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Set input shape\n");
     bcnn_add_convolutional_layer(net, 128, 3, 1, 1, 1, 0, BCNN_FILLER_XAVIER,
                                  BCNN_ACT_NONE, 0, "input", "out");
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, 0, BCNN_FILLER_XAVIER,
+                                 BCNN_ACT_NONE, 0, "out", "out2");
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 1, 1, 0, BCNN_FILLER_XAVIER,
+                                 BCNN_ACT_NONE, 0, "out2", "out3");
+    bcnn_add_convolutional_layer(net, 128, 3, 1, 1, 1, 0, BCNN_FILLER_XAVIER,
+                                 BCNN_ACT_NONE, 0, "out3", "out4");
     fprintf(stderr, "Added conv layer\n");
     /* Compile net */
     if (bcnn_compile_net(net) != BCNN_SUCCESS) {

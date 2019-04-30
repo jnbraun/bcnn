@@ -47,10 +47,11 @@ int bcnn_opencl_run_kernel(bcnn_net *net, cl_kernel kernel,
     global_work_size[1] = globalItemSize.y;
 
     bcnn_opencl_context *context = net->opencl_ctx;
-    clErr = clEnqueueNDRangeKernel(context->cmd_queue, kernel, 2,
-                                   global_work_offset, global_work_size, NULL,
-                                   0, NULL, NULL);
 
+    cl_event e;
+    clErr = clEnqueueNDRangeKernel(context->cmd_queue, kernel, 2,
+                                   /*global_work_offset*/ 0, global_work_size,
+                                   NULL, 0, NULL, &e);
     if (clErr != CL_SUCCESS) {
         const size_t bufferSize = 2048;
         char *kernelName = (char *)calloc(bufferSize, sizeof(char));
@@ -59,7 +60,13 @@ int bcnn_opencl_run_kernel(bcnn_net *net, cl_kernel kernel,
                                           bufferSize, kernelName, NULL));
 
         free(kernelName);
+    } else {
+        fprintf(stderr, "enqueue kernel success\n");
     }
+    cl_int rc = clWaitForEvents(1, &e);
+    fprintf(stderr, "kernel0 %d\n", rc);
+    BCNN_OPENCL_CHECK(clReleaseEvent(e));
+
     return 0;
 }
 

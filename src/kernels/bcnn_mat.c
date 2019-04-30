@@ -1436,12 +1436,12 @@ void bcnn_gemm_opencl(bcnn_net *net, int TA, int TB, int M, int N, int K,
         transB, transA, N, M, K, ALPHA, B_gpu, b_offset, ldb, A_gpu, a_offset,
         lda, BETA, C_gpu, c_offset, ldc,
         &(opencl_ctx->cmd_queue),  // cl_command_queue *commandQueues,
-        &e                         // cl_event *events
+        /*&e*/ NULL                // cl_event *events
         );
-    if (status == CLBlastSuccess) {
+    /*if (status == CLBlastSuccess) {
         clWaitForEvents(1, &e);
         clReleaseEvent(e);
-    }
+    }*/
 }
 
 #endif

@@ -64,6 +64,11 @@ bcnn_status bcnn_fill_tensor_with_image(bcnn_net *net, const uint8_t *src,
                               net->tensors[tensor_index].data,
                               bcnn_tensor_size(&net->tensors[tensor_index]));
 #endif
+#ifdef BCNN_USE_OPENCL
+    bcnn_opencl_memcpy_host2dev(net, net->tensors[tensor_index].data_gpu,
+                                net->tensors[tensor_index].data,
+                                bcnn_tensor_size(&net->tensors[tensor_index]));
+#endif
     return BCNN_SUCCESS;
 }
 

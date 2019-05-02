@@ -70,4 +70,13 @@ int bcnn_opencl_run_kernel(bcnn_net *net, cl_kernel kernel,
     return 0;
 }
 
+int bcnn_opencl_memcpy_host2dev(bcnn_net *net, void *x_gpu, float *x, int n) {
+    size_t size = sizeof(float) * n;
+    bcnn_opencl_context *context = net->opencl_ctx;
+    cl_int status = clEnqueueWriteBuffer(context->cmd_queue, (cl_mem)x_gpu,
+                                         CL_TRUE, 0, size, x, 0, NULL, NULL);
+    BCNN_OPENCL_CHECK(status);
+    return 0;
+}
+
 #endif

@@ -200,10 +200,10 @@ void bcnn_cuda_col2im(float *data_col, int channels, int height, int width,
 
 #ifdef BCNN_USE_OPENCL
 #include "bcnn_net.h"
-void bcnn_gemm_opencl(bcnn_net *net, int TA, int TB, int M, int N, int K,
-                      float ALPHA, cl_mem A_gpu, const size_t a_offset, int lda,
-                      cl_mem B_gpu, const size_t b_offset, int ldb, float BETA,
-                      cl_mem C_gpu, const size_t c_offset, int ldc);
+int bcnn_gemm_opencl(bcnn_net *net, int TA, int TB, int M, int N, int K,
+                     float ALPHA, cl_mem A_gpu, const size_t a_offset, int lda,
+                     cl_mem B_gpu, const size_t b_offset, int ldb, float BETA,
+                     cl_mem C_gpu, const size_t c_offset, int ldc);
 
 int bcnn_opencl_im2col_kernel_create(bcnn_net *net);
 void bcnn_opencl_im2col_kernel_release();

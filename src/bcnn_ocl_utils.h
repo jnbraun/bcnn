@@ -12,7 +12,7 @@
 
 #include "bcnn_net.h"
 
-static inline const char* clGetErrorString(cl_int error) {
+static inline const char *clGetErrorString(cl_int error) {
     switch (error) {
         case CL_SUCCESS:
             return "CL_SUCCESS";
@@ -119,7 +119,7 @@ dim2 dim2_create(const int x, const int y);
 
 #define BCNN_CL_KERNEL_TO_STRING(...) #__VA_ARGS__
 
-int bcnn_opencl_run_kernel(bcnn_net* net, cl_kernel kernel,
+int bcnn_opencl_run_kernel(bcnn_net *net, cl_kernel kernel,
                            const dim2 globalItemSize, const int argc, ...);
 
 #define BCNN_OPENCL_CHECK(s)                                                  \
@@ -130,6 +130,8 @@ int bcnn_opencl_run_kernel(bcnn_net* net, cl_kernel kernel,
             return (rc);                                                      \
         }                                                                     \
     } while (0)
+
+int bcnn_opencl_memcpy_host2dev(bcnn_net *net, void *x_gpu, float *x, int n);
 
 #endif  // BCNN_USE_OPENCL
 

@@ -128,14 +128,16 @@ bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, bcnn_net *net) {
     }
 #elif defined(BCNN_USE_OPENCL)
     cl_int rc;
-    t->data_gpu =
-        (cl_mem)clCreateBuffer(net->opencl_ctx->ctx, CL_MEM_READ_WRITE,
-                               size * sizeof(cl_float), t->data, &rc);
+    t->data_gpu = (cl_mem)clCreateBuffer(
+        net->opencl_ctx->ctx,
+        CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR | CL_MEM_COPY_HOST_PTR,
+        size * sizeof(cl_float), t->data, &rc);
     BCNN_OPENCL_CHECK(rc);
     if (t->has_grad && net->mode == BCNN_MODE_TRAIN) {
-        t->grad_data_gpu =
-            (cl_mem)clCreateBuffer(net->opencl_ctx->ctx, CL_MEM_READ_WRITE,
-                                   size * sizeof(cl_float), t->data, &rc);
+        t->grad_data_gpu = (cl_mem)clCreateBuffer(
+            net->opencl_ctx->ctx,
+            CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR | CL_MEM_COPY_HOST_PTR,
+            size * sizeof(cl_float), t->data, &rc);
         BCNN_OPENCL_CHECK(rc);
     }
 #endif

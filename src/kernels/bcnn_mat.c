@@ -1422,10 +1422,10 @@ int bcnn_gemm(bcnn_gemm_context *ctx, int trans_a, int trans_b, int m, int n,
 
 #ifdef BCNN_USE_OPENCL
 
-void bcnn_gemm_opencl(bcnn_net *net, int TA, int TB, int M, int N, int K,
-                      float ALPHA, cl_mem A_gpu, const size_t a_offset, int lda,
-                      cl_mem B_gpu, const size_t b_offset, int ldb, float BETA,
-                      cl_mem C_gpu, const size_t c_offset, int ldc) {
+int bcnn_gemm_opencl(bcnn_net *net, int TA, int TB, int M, int N, int K,
+                     float ALPHA, cl_mem A_gpu, const size_t a_offset, int lda,
+                     cl_mem B_gpu, const size_t b_offset, int ldb, float BETA,
+                     cl_mem C_gpu, const size_t c_offset, int ldc) {
     cl_event e;
 
     CLBlastTranspose transA = (TA ? CLBlastTransposeYes : CLBlastTransposeNo);
@@ -1437,11 +1437,16 @@ void bcnn_gemm_opencl(bcnn_net *net, int TA, int TB, int M, int N, int K,
         lda, BETA, C_gpu, c_offset, ldc,
         &(opencl_ctx->cmd_queue),  // cl_command_queue *commandQueues,
         /*&e*/ NULL                // cl_event *events
-        );
+    );
     /*if (status == CLBlastSuccess) {
         clWaitForEvents(1, &e);
         clReleaseEvent(e);
     }*/
+    if (status == CLBlastSuccess) {
+        return 0;
+    } else {
+        return -1;
+    }
 }
 
 #endif

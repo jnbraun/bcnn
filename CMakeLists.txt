@@ -5,8 +5,9 @@ project (bcnn)
 option(USE_AVX "Build with AVX instructions" ON)
 option(USE_CUDA "Build with CUDA libraries" OFF)
 option(USE_CUDNN "Build with CuDNN library" OFF)
-option(USE_BLAS "Build with BLAS library" ON)
+option(USE_BLAS "Build with BLAS library" OFF)
 option(USE_NEON "Build with Neon instructions" OFF)
+option(USE_OPENMP "Enable OpenMP multithreading" ON)
 # Building examples
 option(BUILD_EXAMPLES "Build examples" ON)
 # Building tools
@@ -117,6 +118,18 @@ if (USE_NEON)
     # Note: Uncomment below line in case of older arm architecture
     #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpu=neon")
     add_definitions(-DBCNN_USE_NEON)
+endif()
+
+# OpenMP
+if (USE_OPENMP)
+    find_package(OpenMP REQUIRED)
+    if(OPENMP_FOUND)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+        message(STATUS "[bcnn] Found openmp")
+        add_definitions(-DBCNN_USE_OPENMP)
+    endif()
 endif()
 
 if (ENABLE_LOG)

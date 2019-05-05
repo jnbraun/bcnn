@@ -31,6 +31,10 @@
 #endif
 #include <math.h>
 
+#ifdef BCNN_USE_OPENMP
+#include <omp.h>
+#endif
+
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
@@ -767,6 +771,7 @@ void bcnn_add_bias(float *output, float *bias, int batch_size, int num_channels,
                    int spatial_size) {
     int i, j, b;
     for (b = 0; b < batch_size; ++b) {
+#pragma omp parallel for
         for (i = 0; i < num_channels; ++i) {
             bcnn_add_scalar(spatial_size, bias[i], output + i * spatial_size);
         }
@@ -778,6 +783,7 @@ void bcnn_scales(float *output, float *scales, int batch_size, int num_channels,
                  int spatial_size) {
     int i, j, b;
     for (b = 0; b < batch_size; ++b) {
+#pragma omp parallel for
         for (i = 0; i < num_channels; ++i) {
             bcnn_scal(spatial_size, scales[i], output + i * spatial_size);
         }
@@ -852,6 +858,41 @@ void bcnn_im2col(const float *data_im, const int channels, const int height,
                         }
                     }
                     input_row += stride;
+                }
+            }
+        }
+    }
+}
+
+void bcnn_im2col_mt(const float *data_im, const int channels, const int height,
+                    const int width, const int kernel_size, const int pad,
+                    const int stride, float *data_col) {
+    int dil_kernel_h = (kernel_size - 1) + 1;
+    int dil_kernel_w = (kernel_size - 1) + 1;
+    int height_col = (height + 2 * pad - kernel_size) / stride + 1;
+    int width_col = (width + 2 * pad - kernel_size) / stride + 1;
+    int channels_col = channels * kernel_size * kernel_size;
+
+#pragma omp parallel for
+    for (int c = 0; c < channels_col; ++c) {
+        int w_offset = c % kernel_size;
+        int h_offset = (c / kernel_size) % kernel_size;
+        int c_im = c / kernel_size / kernel_size;
+
+        const int hc0 = h_offset - pad;
+        const int wc0 = w_offset - pad;
+        for (int h = 0; h < height_col; ++h) {
+            int h_pad = h * stride + hc0;
+
+            const int row_offset = (c * height_col + h) * width_col;
+            const int srow_offset = (c_im * height + h_pad) * width;
+            for (int w = 0; w < width_col; ++w) {
+                int w_pad = w * stride + wc0;
+                if ((((unsigned)h_pad) < ((unsigned)height)) &&
+                    (((unsigned)w_pad) < ((unsigned)width)))
+                    data_col[row_offset + w] = data_im[srow_offset + w_pad];
+                else {
+                    data_col[row_offset + w] = 0.;
                 }
             }
         }

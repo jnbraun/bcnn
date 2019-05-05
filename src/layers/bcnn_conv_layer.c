@@ -315,9 +315,9 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
             if (param->size == 1) {
                 b = src;
             } else {
-                bcnn_im2col(src, src_tensor->c / param->num_groups,
-                            src_tensor->h, src_tensor->w, param->size,
-                            param->pad, param->stride, b);
+                bcnn_im2col_mt(src, src_tensor->c / param->num_groups,
+                               src_tensor->h, src_tensor->w, param->size,
+                               param->pad, param->stride, b);
             }
 #if BCNN_USE_BLAS
             cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k,

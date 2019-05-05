@@ -138,6 +138,9 @@ void bcnn_im2col(const float *data_im, const int channels, const int height,
 void bcnn_col2im(const float *data_col, const int channels, const int height,
                  const int width, const int kernel, const int pad,
                  const int stride, float *data_im);
+void bcnn_im2col_mt(const float *data_im, const int channels, const int height,
+                    const int width, const int kernel_size, const int pad,
+                    const int stride, float *data_col);
 
 /* Cuda kernels routines */
 #ifdef BCNN_USE_CUDA

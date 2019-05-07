@@ -77,6 +77,7 @@ bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, const char *src_id,
 void bcnn_forward_avgpool_layer_cpu(bcnn_tensor *src_tensor,
                                     bcnn_tensor *dst_tensor) {
     for (int b = 0; b < src_tensor->n; ++b) {
+#pragma omp parallel for
         for (int k = 0; k < src_tensor->c; ++k) {
             int idx = k + b * src_tensor->c;
             dst_tensor->data[idx] = 0;

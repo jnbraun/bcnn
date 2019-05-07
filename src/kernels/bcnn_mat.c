@@ -867,8 +867,6 @@ void bcnn_im2col(const float *data_im, const int channels, const int height,
 void bcnn_im2col_mt(const float *data_im, const int channels, const int height,
                     const int width, const int kernel_size, const int pad,
                     const int stride, float *data_col) {
-    int dil_kernel_h = (kernel_size - 1) + 1;
-    int dil_kernel_w = (kernel_size - 1) + 1;
     int height_col = (height + 2 * pad - kernel_size) / stride + 1;
     int width_col = (width + 2 * pad - kernel_size) / stride + 1;
     int channels_col = channels * kernel_size * kernel_size;

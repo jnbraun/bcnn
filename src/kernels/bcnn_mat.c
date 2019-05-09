@@ -864,6 +864,47 @@ void bcnn_im2col(const float *data_im, const int channels, const int height,
     }
 }
 
+static void bcnn_im2col_mt_st1(const float *data_im, const int channels,
+                               const int height, const int width,
+                               const int kernel_size, const int pad,
+                               float *data_col) {
+    int height_col = (height + 2 * pad - kernel_size) + 1;
+    int width_col = (width + 2 * pad - kernel_size) + 1;
+    int channels_col = channels * kernel_size * kernel_size;
+
+#pragma omp parallel for
+    for (int c = 0; c < channels_col; ++c) {
+        int w_offset = c % kernel_size;
+        int h_offset = (c / kernel_size) % kernel_size;
+        int c_im = c / kernel_size / kernel_size;
+
+        const int hc0 = h_offset - pad;
+        const int wc0 = w_offset - pad;
+        int wleft = bh_max(0, pad - w_offset);
+        int wmid = bh_min(width_col, width + pad - w_offset) - wleft;
+        int wright = bh_max(0, width_col - (width + pad - w_offset));
+        for (int h = 0; h < pad - h_offset; ++h) {
+            const int row_offset = (c * height_col + h) * width_col;
+            memset(data_col + row_offset, 0, width_col * sizeof(float));
+        }
+        for (int h = bh_max(0, pad - h_offset);
+             h < bh_min(height_col, height + pad - h_offset); ++h) {
+            int h_pad = h + hc0;
+            const int row_offset = (c * height_col + h) * width_col;
+            const int srow_offset = (c_im * height + h_pad) * width;
+            memset(data_col + row_offset, 0, wleft * sizeof(float));
+            memcpy(data_col + row_offset + wleft,
+                   data_im + srow_offset + wleft + wc0, wmid * sizeof(float));
+            memset(data_col + row_offset + wleft + wmid, 0,
+                   wright * sizeof(float));
+        }
+        for (int h = height + pad - h_offset; h < height_col; ++h) {
+            const int row_offset = (c * height_col + h) * width_col;
+            memset(data_col + row_offset, 0, width_col * sizeof(float));
+        }
+    }
+}
+
 void bcnn_im2col_mt(const float *data_im, const int channels, const int height,
                     const int width, const int kernel_size, const int pad,
                     const int stride, float *data_col) {

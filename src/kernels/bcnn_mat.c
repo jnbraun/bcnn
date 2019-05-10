@@ -872,7 +872,7 @@ static void bcnn_im2col_mt_st1(const float *data_im, const int channels,
     int width_col = (width + 2 * pad - kernel_size) + 1;
     int channels_col = channels * kernel_size * kernel_size;
 
-#pragma omp parallel for
+#pragma omp parallel for schedule(runtime)
     for (int c = 0; c < channels_col; ++c) {
         int w_offset = c % kernel_size;
         int h_offset = (c / kernel_size) % kernel_size;
@@ -912,26 +912,31 @@ void bcnn_im2col_mt(const float *data_im, const int channels, const int height,
     int width_col = (width + 2 * pad - kernel_size) / stride + 1;
     int channels_col = channels * kernel_size * kernel_size;
 
-#pragma omp parallel for
-    for (int c = 0; c < channels_col; ++c) {
-        int w_offset = c % kernel_size;
-        int h_offset = (c / kernel_size) % kernel_size;
-        int c_im = c / kernel_size / kernel_size;
+    if (stride == 1) {
+        bcnn_im2col_mt_st1(data_im, channels, height, width, kernel_size, pad,
+                           data_col);
+    } else {
+#pragma omp parallel for schedule(runtime)
+        for (int c = 0; c < channels_col; ++c) {
+            int w_offset = c % kernel_size;
+            int h_offset = (c / kernel_size) % kernel_size;
+            int c_im = c / kernel_size / kernel_size;
 
-        const int hc0 = h_offset - pad;
-        const int wc0 = w_offset - pad;
-        for (int h = 0; h < height_col; ++h) {
-            int h_pad = h * stride + hc0;
+            const int hc0 = h_offset - pad;
+            const int wc0 = w_offset - pad;
+            for (int h = 0; h < height_col; ++h) {
+                int h_pad = h * stride + hc0;
 
-            const int row_offset = (c * height_col + h) * width_col;
-            const int srow_offset = (c_im * height + h_pad) * width;
-            for (int w = 0; w < width_col; ++w) {
-                int w_pad = w * stride + wc0;
-                if ((((unsigned)h_pad) < ((unsigned)height)) &&
-                    (((unsigned)w_pad) < ((unsigned)width)))
-                    data_col[row_offset + w] = data_im[srow_offset + w_pad];
-                else {
-                    data_col[row_offset + w] = 0.;
+                const int row_offset = (c * height_col + h) * width_col;
+                const int srow_offset = (c_im * height + h_pad) * width;
+                for (int w = 0; w < width_col; ++w) {
+                    int w_pad = w * stride + wc0;
+                    if ((((unsigned)h_pad) < ((unsigned)height)) &&
+                        (((unsigned)w_pad) < ((unsigned)width)))
+                        data_col[row_offset + w] = data_im[srow_offset + w_pad];
+                    else {
+                        data_col[row_offset + w] = 0.;
+                    }
                 }
             }
         }
@@ -1039,27 +1044,27 @@ static void sgemm_nn_pack_A(int mc, int kc, const float *A, int inc_row_A,
     int _mr = mc % mr;
     int tmp1 = kc * mr;
     int tmp2 = mr * inc_row_A;
-    int i, j;
-
-    for (i = 0; i < mp; ++i) {
+    //#pragma omp parallel for
+    for (int i = 0; i < mp; ++i) {
 #ifdef BCNN_USE_NEON
 #if (defined(__aarch64__))
-        sgemm_nn_pack_MRxk8(kc, A, inc_row_A, inc_col_A, buffer, mr);
+        sgemm_nn_pack_MRxk8(kc, A + tmp2 * i, inc_row_A, inc_col_A,
+                            buffer + tmp1 * i, mr);
 #else
-        sgemm_nn_pack_MRxk4(kc, A, inc_row_A, inc_col_A, buffer, mr);
+        sgemm_nn_pack_MRxk4(kc, A + tmp2 * i, inc_row_A, inc_col_A,
+                            buffer + tmp1 * i, mr);
 #endif  // __aarch64__
 #else
-        sgemm_nn_pack_MRxk8(kc, A, inc_row_A, inc_col_A, buffer, mr);
+        sgemm_nn_pack_MRxk8(kc, A + tmp2 * i, inc_row_A, inc_col_A,
+                            buffer + tmp1 * i, mr);
 #endif
-        buffer += tmp1;
-        A += tmp2;
     }
     if (_mr > 0) {
-        for (j = 0; j < kc; ++j) {
-            for (i = 0; i < _mr; ++i) {
+        for (int j = 0; j < kc; ++j) {
+            for (int i = 0; i < _mr; ++i) {
                 buffer[i] = A[i * inc_row_A];
             }
-            for (i = _mr; i < mr; ++i) {
+            for (int i = _mr; i < mr; ++i) {
                 buffer[i] = 0.0;
             }
             A += 1;
@@ -1117,19 +1122,17 @@ static void sgemm_nn_pack_B(int kc, int nc, const float *B, int inc_row_B,
     int np = nc / nr;
     int _nr = nc % nr;
     int tmp1 = kc * nr;
-    int i, j;
-
-    for (j = 0; j < np; ++j) {
-        sgemm_nn_pack_kxNR(kc, B, inc_row_B, inc_col_B, buffer, nr);
-        B += nr;
-        buffer += tmp1;
+    //#pragma omp parallel for
+    for (int j = 0; j < np; ++j) {
+        sgemm_nn_pack_kxNR(kc, B + nr * j, inc_row_B, inc_col_B,
+                           buffer + tmp1 * j, nr);
     }
     if (_nr > 0) {
-        for (i = 0; i < kc; ++i) {
-            for (j = 0; j < _nr; ++j) {
+        for (int i = 0; i < kc; ++i) {
+            for (int j = 0; j < _nr; ++j) {
                 buffer[j] = B[j];
             }
-            for (j = _nr; j < nr; ++j) {
+            for (int j = _nr; j < nr; ++j) {
                 buffer[j] = 0.0;
             }
             buffer += nr;
@@ -1140,7 +1143,8 @@ static void sgemm_nn_pack_B(int kc, int nc, const float *B, int inc_row_B,
 
 static void sgemm_ukernel(int kc, float alpha, const float *A, const float *B,
                           float beta, float *C, int inc_row_C, int inc_col_C,
-                          int mr, int nr, float *AB) {
+                          int mr, int nr, float *AB0) {
+    float AB[MR * NR];
 #if (defined(BCNN_USE_AVX))
     __m256 abv0 = _mm256_setzero_ps();
     __m256 abv1 = _mm256_setzero_ps();
@@ -1357,15 +1361,12 @@ static void sgemm_mkernel(int mc, int nc, int kc, float alpha, float beta,
 
     int _mr = mc % mr;
     int _nr = nc % nr;
-
-    int i, j;
-
-    for (j = 0; j < np; ++j) {
+#pragma omp parallel for schedule(runtime)
+    for (int j = 0; j < np; ++j) {
         int nrj = (j != np - 1 || _nr == 0) ? nr : _nr;
-
-        for (i = 0; i < mp; ++i) {
+#pragma omp parallel for schedule(runtime)
+        for (int i = 0; i < mp; ++i) {
             int mri = (i != mp - 1 || _mr == 0) ? mr : _mr;
-
             if (mri == mr && nrj == nr) {
                 sgemm_ukernel(kc, alpha, &buffer_A[i * kc * mr],
                               &buffer_B[j * kc * nr], beta,
@@ -1392,30 +1393,24 @@ static void sgemm_nn(bcnn_gemm_context *ctx, int m, int n, int k, float alpha,
     int mb = (m + MC - 1) / MC;
     int nb = (n + NC - 1) / NC;
     int kb = (k + KC - 1) / KC;
-
     int _mc = m % MC;
     int _nc = n % NC;
     int _kc = k % KC;
-
-    int mc, nc, kc;
-    int i, j, l;
-
-    float _beta;
 
     if (equal(alpha, 0.0) || k == 0) {
         sgemm_scal(m, n, beta, C, inc_row_C, inc_col_C);
         return;
     }
 
-    for (j = 0; j < nb; ++j) {
-        nc = (j != nb - 1 || _nc == 0) ? NC : _nc;
-        for (l = 0; l < kb; ++l) {
-            kc = (l != kb - 1 || _kc == 0) ? KC : _kc;
-            _beta = (l == 0) ? beta : 1.0f;
+    for (int j = 0; j < nb; ++j) {
+        int nc = (j != nb - 1 || _nc == 0) ? NC : _nc;
+        for (int l = 0; l < kb; ++l) {
+            int kc = (l != kb - 1 || _kc == 0) ? KC : _kc;
+            float _beta = (l == 0) ? beta : 1.0f;
             sgemm_nn_pack_B(kc, nc, &B[l * KC * inc_row_B + j * NC], inc_row_B,
                             inc_col_B, ctx->buffer_b, NR);
-            for (i = 0; i < mb; ++i) {
-                mc = (i != mb - 1 || _mc == 0) ? MC : _mc;
+            for (int i = 0; i < mb; ++i) {
+                int mc = (i != mb - 1 || _mc == 0) ? MC : _mc;
                 sgemm_nn_pack_A(mc, kc, &A[i * MC * inc_row_A + l * KC],
                                 inc_row_A, inc_col_A, ctx->buffer_a, MR);
                 sgemm_mkernel(mc, nc, kc, alpha, _beta,
@@ -1434,32 +1429,25 @@ static void sgemm(bcnn_gemm_context *ctx, int m, int n, int k, float alpha,
     int mb = (m + MC - 1) / MC;
     int nb = (n + NC - 1) / NC;
     int kb = (k + KC - 1) / KC;
-
     int _mc = m % MC;
     int _nc = n % NC;
     int _kc = k % KC;
-
-    int mc, nc, kc;
-    int i, j, l;
-
-    float _beta;
 
     if (equal(alpha, 0.0) || k == 0) {
         sgemm_scal(m, n, beta, C, inc_row_C, inc_col_C);
         return;
     }
 
-    for (j = 0; j < nb; ++j) {
-        nc = (j != nb - 1 || _nc == 0) ? NC : _nc;
-
-        for (l = 0; l < kb; ++l) {
-            kc = (l != kb - 1 || _kc == 0) ? KC : _kc;
-            _beta = (l == 0) ? beta : 1.0f;
+    for (int j = 0; j < nb; ++j) {
+        int nc = (j != nb - 1 || _nc == 0) ? NC : _nc;
+        for (int l = 0; l < kb; ++l) {
+            int kc = (l != kb - 1 || _kc == 0) ? KC : _kc;
+            float _beta = (l == 0) ? beta : 1.0f;
 
             sgemm_pack_B(kc, nc, &B[l * KC * inc_row_B + j * NC], inc_row_B,
                          inc_col_B, ctx->buffer_b, NR);
-            for (i = 0; i < mb; ++i) {
-                mc = (i != mb - 1 || _mc == 0) ? MC : _mc;
+            for (int i = 0; i < mb; ++i) {
+                int mc = (i != mb - 1 || _mc == 0) ? MC : _mc;
                 sgemm_pack_A(mc, kc, &A[i * MC * inc_row_A + l * KC], inc_row_A,
                              inc_col_A, ctx->buffer_a, MR);
                 sgemm_mkernel(mc, nc, kc, alpha, _beta,

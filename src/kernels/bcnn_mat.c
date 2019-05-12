@@ -1044,7 +1044,7 @@ static void sgemm_nn_pack_A(int mc, int kc, const float *A, int inc_row_A,
     int _mr = mc % mr;
     int tmp1 = kc * mr;
     int tmp2 = mr * inc_row_A;
-    //#pragma omp parallel for
+#pragma omp parallel for
     for (int i = 0; i < mp; ++i) {
 #ifdef BCNN_USE_NEON
 #if (defined(__aarch64__))
@@ -1122,7 +1122,7 @@ static void sgemm_nn_pack_B(int kc, int nc, const float *B, int inc_row_B,
     int np = nc / nr;
     int _nr = nc % nr;
     int tmp1 = kc * nr;
-    //#pragma omp parallel for
+#pragma omp parallel for
     for (int j = 0; j < np; ++j) {
         sgemm_nn_pack_kxNR(kc, B + nr * j, inc_row_B, inc_col_B,
                            buffer + tmp1 * j, nr);
@@ -1361,10 +1361,10 @@ static void sgemm_mkernel(int mc, int nc, int kc, float alpha, float beta,
 
     int _mr = mc % mr;
     int _nr = nc % nr;
-#pragma omp parallel for schedule(runtime)
+#pragma omp parallel for
     for (int j = 0; j < np; ++j) {
         int nrj = (j != np - 1 || _nr == 0) ? nr : _nr;
-#pragma omp parallel for schedule(runtime)
+#pragma omp parallel for
         for (int i = 0; i < mp; ++i) {
             int mri = (i != mp - 1 || _mr == 0) ? mr : _mr;
             if (mri == mr && nrj == nr) {
@@ -1373,12 +1373,13 @@ static void sgemm_mkernel(int mc, int nc, int kc, float alpha, float beta,
                               &C[i * mr * inc_row_C + j * nr], inc_row_C,
                               inc_col_C, mr, nr, buffer_AB);
             } else {
+                float buf_c[MR * NR];
                 sgemm_ukernel(kc, alpha, &buffer_A[i * kc * mr],
-                              &buffer_B[j * kc * nr], 0.0, buffer_C, 1, mr, mr,
-                              nr, buffer_AB);
+                              &buffer_B[j * kc * nr], 0.0, buf_c, 1, mr, mr, nr,
+                              buffer_AB);
                 sgemm_scal(mri, nrj, beta, &C[i * mr * inc_row_C + j * nr],
                            inc_row_C, inc_col_C);
-                sgemm_axpy(mri, nrj, 1.0, buffer_C, 1, mr,
+                sgemm_axpy(mri, nrj, 1.0, buf_c, 1, mr,
                            &C[i * mr * inc_row_C + j * nr], inc_row_C,
                            inc_col_C);
             }

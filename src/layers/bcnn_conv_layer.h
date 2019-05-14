@@ -44,6 +44,8 @@ typedef struct bcnn_conv_param {
     bcnn_tensor saved_variance;
     float *conv_workspace;
     float *workspace;  // embedded batchnorm
+    float *weights_workspace;
+    float *biases_workspace;
     float *x_norm;
     float *adam_m;
     float *adam_v;

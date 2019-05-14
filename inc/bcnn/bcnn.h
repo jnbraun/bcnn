@@ -307,6 +307,15 @@ BCNN_API void bcnn_set_log_context(bcnn_net *net, bcnn_log_callback fct,
                                    bcnn_log_level level);
 
 /**
+ * \brief Sets the number of threads for BCNN to use (maximal: 8).
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   num_threads     Number of threads to use. BCNN_USE_OPENMP must
+ *                              be defined.
+ */
+BCNN_API void bcnn_set_num_threads(bcnn_net *net, int num_threads);
+
+/**
  * \brief Sets the shape of the primary input tensor.
  *
  * The primary input tensor holds the default name 'input'.

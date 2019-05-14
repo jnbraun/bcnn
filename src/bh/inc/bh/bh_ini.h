@@ -20,8 +20,8 @@
  * SOFTWARE.
  */
 
-#ifndef BH_LOG_H
-#define BH_LOG_H
+#ifndef BH_INI_H
+#define BH_INI_H
 
 #include <stdio.h> /* printf */
 #include <stdlib.h>
@@ -166,4 +166,4 @@ static inline bh_ini_parser *bh_ini_parser_create(const char *filename) {
 }
 #endif
 
-#endif  // BH_LOG_H
+#endif  // BH_INI_H

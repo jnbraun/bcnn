@@ -60,6 +60,7 @@ struct bcnn_net {
 #ifdef BCNN_USE_CUDA
     void *cuda_ctx;
 #endif
+    int num_threads; /* Number of threads (CPU only) */
 };
 
 bcnn_status bcnn_net_create_gemm_context(bcnn_net *net);

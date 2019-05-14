@@ -23,6 +23,10 @@
 #ifndef BCNN_MAT_H
 #define BCNN_MAT_H
 
+/* OpenMP */
+#ifdef BCNN_USE_OPENMP
+#include <omp.h>
+#endif
 /* Cuda include */
 #ifdef BCNN_USE_CUDA
 #include <cublas_v2.h>
@@ -40,6 +44,14 @@
 #include <arm_neon.h>
 #else
 #undef BCNN_USE_NEON
+#endif
+#endif
+/* x86 SSE/AVX */
+#ifdef BCNN_USE_AVX
+#if defined(_MSC_VER)
+#include <intrin.h>
+#else
+#include <x86intrin.h>
 #endif
 #endif
 
@@ -75,6 +87,18 @@ extern "C" {
 #endif  // BCNN_USE_NEON
 #endif  // __aarch64__
 
+#if (defined(__aarch64__))
+#define CONV_TILED 16
+#else
+#define CONV_TILED 8
+#endif  // __aarch64__
+
+#define CONV3x3_SRC_BLOCK 64
+#define CONV3x3_WEIGHT_BLOCK 256
+#define CONV3x3_SRC_BLOCK_VEC 16
+#define CONV3x3_SRC_BLOCK_UNIT 3
+#define CONV3x3_BLOCK_UNIT 4
+
 typedef struct bcnn_gemm_context {
 #if !defined(BCNN_USE_BLAS) && !defined(BCNN_USE_CUDA)
 #if (defined(__aarch64__))  // use sgemm_openblas
@@ -96,6 +120,16 @@ typedef struct bcnn_gemm_context {
     float *buffer_ab;
 #endif
 } bcnn_gemm_context;
+
+typedef struct bv_float4_t {
+#if defined(BCNN_USE_AVX)
+    __m128 val;
+#elif defined(BCNN_USE_NEON)
+    float32x4_t val;
+#else
+    float val[4];
+#endif
+} bv_float4;
 
 /* Matrix computation routines */
 int bcnn_fill_f32(int n, float a, float *x);
@@ -141,6 +175,70 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
 void bcnn_im2col_mt(const float *data_im, const int channels, const int height,
                     const int width, const int kernel_size, const int pad,
                     const int stride, float *data_col);
+void bcnn_conv3x3_convert_weights(const float *src, float *dst,
+                                  int src_channels, int dst_channels);
+void bcnn_conv3x3_convert_dst(const float *src, float *dst, size_t step);
+void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step);
+void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
+                           float *dst, int dst_w, int dst_h, int dst_c,
+                           int batch_size, int pad, float *weights,
+                           float *biases, float *workspace, int workspace_sz,
+                           int num_threads);
+
+static inline bv_float4 bv_float4_load(const float *x) {
+    bv_float4 v;
+#if defined(BCNN_USE_AVX)
+    v.val = _mm_load_ps(x);
+#elif defined(BCNN_USE_NEON)
+    v.val = vdupq_n_f32(x);
+#else
+    v.val[0] = x[0];
+    v.val[1] = x[1];
+    v.val[2] = x[2];
+    v.val[3] = x[3];
+#endif
+    return v;
+}
+static inline void bv_float4_store(bv_float4 v, float *x) {
+#if defined(BCNN_USE_AVX)
+    _mm_store_ps(x, v.val);
+#elif defined(BCNN_USE_NEON)
+    vst1q_f32(x, v.val);
+#else
+    x[0] = v.val[0];
+    x[1] = v.val[1];
+    x[0] = v.val[2];
+    x[1] = v.val[3];
+#endif
+}
+static inline bv_float4 bv_float4_add(bv_float4 va, bv_float4 vb) {
+    bv_float4 v;
+#if defined(BCNN_USE_AVX)
+    v.val = _mm_add_ps(va.val, vb.val);
+#elif defined(BCNN_USE_NEON)
+    v.val = vaddq_f32(va.val, vb.val);
+#else
+    v.val[0] = va.val[0] + vb.val[0];
+    v.val[1] = va.val[1] + vb.val[1];
+    v.val[2] = va.val[2] + vb.val[2];
+    v.val[3] = va.val[3] + vb.val[3];
+#endif
+    return v;
+}
+static inline bv_float4 bv_float4_sub(bv_float4 va, bv_float4 vb) {
+    bv_float4 v;
+#if defined(BCNN_USE_AVX)
+    v.val = _mm_sub_ps(va.val, vb.val);
+#elif defined(BCNN_USE_NEON)
+    v.val = vsubq_f32(va.val, vb.val);
+#else
+    v.val[0] = va.val[0] - vb.val[0];
+    v.val[1] = va.val[1] - vb.val[1];
+    v.val[2] = va.val[2] - vb.val[2];
+    v.val[3] = va.val[3] - vb.val[3];
+#endif
+    return v;
+}
 
 /* Cuda kernels routines */
 #ifdef BCNN_USE_CUDA

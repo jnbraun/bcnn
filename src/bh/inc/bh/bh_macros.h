@@ -46,6 +46,8 @@ extern "C" {
             (buf) = NULL; \
         }                 \
     }
+#define bh_div_up(a, b) (((a) + (b) - (1)) / (b))
+#define bh_round_up(x, y) (((x) + (y) - (1)) / (y) * (y))
 
 #ifdef __cplusplus
 }

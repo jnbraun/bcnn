@@ -22,6 +22,7 @@
 
 /* include bh helpers */
 #include <bh/bh_ini.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
@@ -79,6 +80,11 @@ bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
 #ifndef BCNN_USE_BLAS
     // Internal context for gemm
     BCNN_CHECK_STATUS(bcnn_net_create_gemm_context(p_net));
+#endif
+    p_net->num_threads = 1;
+#ifdef BCNN_USE_OPENMP
+    p_net->num_threads = bcnn_omp_get_num_threads();
+    fprintf(stderr, "init num_threads %d\n", p_net->num_threads);
 #endif
     *net = p_net;
     return BCNN_SUCCESS;
@@ -164,6 +170,14 @@ bcnn_status bcnn_net_create_cuda_context(bcnn_net *net) {
     }
 }
 #endif
+
+void bcnn_set_num_threads(bcnn_net *net, int num_threads) {
+    net->num_threads = 1;
+#ifdef BCNN_USE_OPENMP
+    net->num_threads = bh_clamp(num_threads, 1, 8);
+    omp_set_num_threads(net->num_threads);
+#endif
+}
 
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node) {
     bcnn_node *p_node = NULL;
@@ -1123,13 +1137,12 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 "Inconsistent batchnorm means size: expected %d but found "
                 "%lu\n",
                 m_sz, (unsigned long)nr);
-            BCNN_CHECK_AND_LOG(
-                net->log_ctx,
-                (nr = fread(v->data, sizeof(float), v_sz, fp)) == v_sz,
-                BCNN_INVALID_MODEL,
-                "Inconsistent batchnorm variances size: "
-                "expected %d but found %lu\n",
-                v_sz, (unsigned long)nr);
+            BCNN_CHECK_AND_LOG(net->log_ctx, (nr = fread(v->data, sizeof(float),
+                                                         v_sz, fp)) == v_sz,
+                               BCNN_INVALID_MODEL,
+                               "Inconsistent batchnorm variances size: "
+                               "expected %d but found %lu\n",
+                               v_sz, (unsigned long)nr);
             if (format == 0) {
                 BCNN_CHECK_AND_LOG(
                     net->log_ctx,

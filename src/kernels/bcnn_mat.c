@@ -22,18 +22,7 @@
 
 #include "bcnn_mat.h"
 
-#ifdef BCNN_USE_AVX
-#if defined(_MSC_VER)
-#include <intrin.h>
-#else
-#include <x86intrin.h>
-#endif
-#endif
 #include <math.h>
-
-#ifdef BCNN_USE_OPENMP
-#include <omp.h>
-#endif
 
 #include <bh/bh_log.h>
 #include <bh/bh_macros.h>
@@ -978,6 +967,627 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
             }
         }
     }
+}
+
+void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step) {
+    float *_x = (float *)src;
+    bv_float4 m00;
+    bv_float4 m01;
+    bv_float4 m02;
+    bv_float4 m03;
+    bv_float4 m10;
+    bv_float4 m11;
+    bv_float4 m12;
+    bv_float4 m13;
+    bv_float4 m20;
+    bv_float4 m21;
+    bv_float4 m22;
+    bv_float4 m23;
+    bv_float4 m30;
+    bv_float4 m31;
+    bv_float4 m32;
+    bv_float4 m33;
+    float *_y = dst;
+    m00 = bv_float4_sub(bv_float4_load(_x + 4 * 0), bv_float4_load(_x + 4 * 8));
+    m01 = bv_float4_sub(bv_float4_load(_x + 4 * 1), bv_float4_load(_x + 4 * 9));
+    m02 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 2), bv_float4_load(_x + 4 * 10));
+    m03 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 3), bv_float4_load(_x + 4 * 11));
+    m10 = bv_float4_add(bv_float4_load(_x + 4 * 4), bv_float4_load(_x + 4 * 8));
+    m11 = bv_float4_add(bv_float4_load(_x + 4 * 5), bv_float4_load(_x + 4 * 9));
+    m12 =
+        bv_float4_add(bv_float4_load(_x + 4 * 6), bv_float4_load(_x + 4 * 10));
+    m13 =
+        bv_float4_add(bv_float4_load(_x + 4 * 7), bv_float4_load(_x + 4 * 11));
+    m20 = bv_float4_sub(bv_float4_load(_x + 4 * 8), bv_float4_load(_x + 4 * 4));
+    m21 = bv_float4_sub(bv_float4_load(_x + 4 * 9), bv_float4_load(_x + 4 * 5));
+    m22 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 10), bv_float4_load(_x + 4 * 6));
+    m23 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 11), bv_float4_load(_x + 4 * 7));
+    m30 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 12), bv_float4_load(_x + 4 * 4));
+    m31 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 13), bv_float4_load(_x + 4 * 5));
+    m32 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 14), bv_float4_load(_x + 4 * 6));
+    m33 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 15), bv_float4_load(_x + 4 * 7));
+
+    bv_float4_store(bv_float4_sub(m00, m02), _y + step * 0);
+    bv_float4_store(bv_float4_add(m01, m02), _y + step * 1);
+    bv_float4_store(bv_float4_sub(m02, m01), _y + step * 2);
+    bv_float4_store(bv_float4_sub(m03, m01), _y + step * 3);
+    bv_float4_store(bv_float4_sub(m10, m12), _y + step * 4);
+    bv_float4_store(bv_float4_add(m11, m12), _y + step * 5);
+    bv_float4_store(bv_float4_sub(m12, m11), _y + step * 6);
+    bv_float4_store(bv_float4_sub(m13, m11), _y + step * 7);
+    bv_float4_store(bv_float4_sub(m20, m22), _y + step * 8);
+    bv_float4_store(bv_float4_add(m21, m22), _y + step * 9);
+    bv_float4_store(bv_float4_sub(m22, m21), _y + step * 10);
+    bv_float4_store(bv_float4_sub(m23, m21), _y + step * 11);
+    bv_float4_store(bv_float4_sub(m30, m32), _y + step * 12);
+    bv_float4_store(bv_float4_add(m31, m32), _y + step * 13);
+    bv_float4_store(bv_float4_sub(m32, m31), _y + step * 14);
+    bv_float4_store(bv_float4_sub(m33, m31), _y + step * 15);
+}
+
+void bcnn_conv3x3_convert_dst(const float *srcZ, float *dstBlock, size_t step) {
+    float *yy = dstBlock;
+    bv_float4 m00;
+    bv_float4 m01;
+    bv_float4 m02;
+    bv_float4 m03;
+    bv_float4 m10;
+    bv_float4 m11;
+    bv_float4 m12;
+    bv_float4 m13;
+    float *x = (float *)srcZ;
+    m00 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 0),
+                                      bv_float4_load(x + step * 4)),
+                        bv_float4_load(x + step * 8));
+    m01 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 1),
+                                      bv_float4_load(x + step * 5)),
+                        bv_float4_load(x + step * 9));
+    m02 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 2),
+                                      bv_float4_load(x + step * 6)),
+                        bv_float4_load(x + step * 10));
+    m03 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 3),
+                                      bv_float4_load(x + step * 7)),
+                        bv_float4_load(x + step * 11));
+    m10 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 4),
+                                      bv_float4_load(x + step * 8)),
+                        bv_float4_load(x + step * 12));
+    m11 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 5),
+                                      bv_float4_load(x + step * 9)),
+                        bv_float4_load(x + step * 13));
+    m12 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 6),
+                                      bv_float4_load(x + step * 10)),
+                        bv_float4_load(x + step * 14));
+    m13 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 7),
+                                      bv_float4_load(x + step * 11)),
+                        bv_float4_load(x + step * 15));
+    bv_float4_store(bv_float4_add(bv_float4_add(m00, m01), m02), yy + 4 * 0);
+    bv_float4_store(bv_float4_add(bv_float4_sub(m01, m02), m03), yy + 4 * 1);
+    bv_float4_store(bv_float4_add(bv_float4_add(m10, m11), m12), yy + 4 * 2);
+    bv_float4_store(bv_float4_add(bv_float4_sub(m11, m12), m13), yy + 4 * 3);
+}
+
+void bcnn_conv3x3_convert_weights(const float *src_weights, float *dst_weights,
+                                  int src_channels, int dst_channels) {
+    float weight[CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT];
+    int srcDepthD4 = bh_div_up(src_channels, 4);
+    int dstDepthD4 = bh_div_up(dst_channels, 4);
+
+    for (int dz = 0; dz < dst_channels; ++dz) {
+        int dz_4 = dz / CONV3x3_BLOCK_UNIT;
+        int mx = dz % CONV3x3_BLOCK_UNIT;
+        float *dst_dz = dst_weights + dz_4 * srcDepthD4 * 16;
+        for (int sz = 0; sz < src_channels; ++sz) {
+            int sz_4 = sz / CONV3x3_BLOCK_UNIT;
+            int my = sz % CONV3x3_BLOCK_UNIT;
+            float *dst_sz =
+                dst_dz + sz_4 * CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+            float *src = (float *)src_weights + 9 * (sz + dz * src_channels);
+            float *dst = weight;
+            float *k = (float *)src;
+            float m00;
+            float m01;
+            float m02;
+            float m10;
+            float m11;
+            float m12;
+            float m20;
+            float m21;
+            float m22;
+            float m30;
+            float m31;
+            float m32;
+            m00 = k[0];
+            m01 = k[1];
+            m02 = k[2];
+            m10 = 0.500000 * k[0] + 0.500000 * k[3] + 0.500000 * k[6];
+            m11 = 0.500000 * k[1] + 0.500000 * k[4] + 0.500000 * k[7];
+            m12 = 0.500000 * k[2] + 0.500000 * k[5] + 0.500000 * k[8];
+            m20 = 0.500000 * k[0] + -0.500000 * k[3] + 0.500000 * k[6];
+            m21 = 0.500000 * k[1] + -0.500000 * k[4] + 0.500000 * k[7];
+            m22 = 0.500000 * k[2] + -0.500000 * k[5] + 0.500000 * k[8];
+            m30 = 0 + k[6];
+            m31 = 0 + k[7];
+            m32 = 0 + k[8];
+
+            k = dst;
+            k[0] = m00;
+            k[1] = 0.500000 * m00 + 0.500000 * m01 + 0.500000 * m02;
+            k[2] = 0.500000 * m00 + -0.500000 * m01 + 0.500000 * m02;
+            k[3] = 0 + m02;
+            k[4] = m10;
+            k[5] = 0.500000 * m10 + 0.500000 * m11 + 0.500000 * m12;
+            k[6] = 0.500000 * m10 + -0.500000 * m11 + 0.500000 * m12;
+            k[7] = 0 + m12;
+            k[8] = m20;
+            k[9] = 0.500000 * m20 + 0.500000 * m21 + 0.500000 * m22;
+            k[10] = 0.500000 * m20 + -0.500000 * m21 + 0.500000 * m22;
+            k[11] = 0 + m22;
+            k[12] = m30;
+            k[13] = 0.500000 * m30 + 0.500000 * m31 + 0.500000 * m32;
+            k[14] = 0.500000 * m30 + -0.500000 * m31 + 0.500000 * m32;
+            k[15] = 0 + m32;
+
+            for (int ki = 0; ki < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+                 ++ki) {
+                float *dst_i = dst_sz + ki * srcDepthD4 * dstDepthD4 * 16;
+                dst_i[4 * my + mx] = weight[ki];
+            }
+        }
+    }
+}
+
+static void bcnn_gemm_kernel4x4(float *dst, const float *src,
+                                const float *weight, size_t src_depth_quad,
+                                size_t dst_step, size_t dst_depth_quad,
+                                size_t width, size_t weight_depth_offset) {
+    int dx, sz, fx, fy, dz;
+    size_t src_depth_step = 4 * width;
+    for (dz = 0; dz < dst_depth_quad; ++dz) {
+        float *dst_z = dst + dz * dst_step;
+        float *weight_dz =
+            (float *)weight + dz * (src_depth_quad * 16 + weight_depth_offset);
+        for (dx = 0; dx < width; ++dx) {
+            float *dst_x = dst_z + dx * 4;
+            dst_x[0] = 0.0f;
+            dst_x[1] = 0.0f;
+            dst_x[2] = 0.0f;
+            dst_x[3] = 0.0f;
+            const float *src_dx = src + 4 * dx;
+            for (sz = 0; sz < src_depth_quad; ++sz) {
+                const float *src_z = src_dx + sz * src_depth_step;
+                const float *weight_z = weight_dz + sz * 16;
+                for (int i = 0; i < 4; ++i) {
+                    for (int j = 0; j < 4; ++j) {
+                        dst_x[j] += src_z[i] * weight_z[4 * i + j];
+                    }
+                }
+            }
+        }
+    }
+}
+
+static void bcnn_gemm_kernel4x4_tiled(float *dstOrigin, const float *src,
+                                      const float *weight,
+                                      size_t src_depth_quad, size_t dst_step,
+                                      size_t dst_depth_quad,
+                                      size_t weight_depth_offset) {
+    bcnn_gemm_kernel4x4(dstOrigin, src, weight, src_depth_quad, dst_step,
+                        dst_depth_quad, CONV_TILED, weight_depth_offset);
+}
+
+void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
+                           float *dst, int dst_w, int dst_h, int dst_c,
+                           int batch_size, int pad, float *weights,
+                           float *biases, float *workspace, int workspace_sz,
+                           int num_threads) {
+    int ic_4 = bh_div_up(src_c, 4);
+    int dc_4 = bh_div_up(dst_c, 4);
+    int wUnit = bh_div_up(dst_w, 2);
+    int hUnit = bh_div_up(dst_h, 2);
+    fprintf(stderr, "num_threads %d\n", num_threads);
+    int workspace_thread_stride = workspace_sz / num_threads;
+
+    // auto postFunction = mPostFunction;
+    // print("dst_w=%d, dst_h=%d\n", dst_w, dst_h);
+
+    for (int batchIndex = 0; batchIndex < batch_size; ++batchIndex) {
+        float *srcOrigin = src + src_w * src_h * ic_4 * 4 * batchIndex;
+        float *dstOrigin = dst + dst_w * dst_h * dc_4 * 4 * batchIndex;
+        int totalCount = hUnit * wUnit;
+
+        int tileCount = bh_div_up(totalCount, CONV_TILED);
+        num_threads = bh_min(num_threads, tileCount);
+
+        float *weight = weights;
+        float *bias = biases;
+#if 0
+        auto sourceTransformLambda = [&](int xIndex, int xC, float *_srcOrigin,
+                                         float *dstBlock) {
+            // Source Transform
+            for (int xi = 0; xi < xC; ++xi) {
+                int index = xIndex + xi;
+                float *dstUnit = _srcOrigin + 4 * xi;
+
+                int wIndex = index % wUnit;
+                int hIndex = index / wUnit;
+
+                int srcX = wIndex * 2 - pad;
+                int srcY = hIndex * 2 - pad;
+                int sy = bh_max(0, srcY) - srcY;
+                int ey = bh_min(srcY + 4, src_h) - srcY;
+                int sx = bh_max(0, srcX) - srcX;
+                int ex = bh_min(srcX + 4, src_w) - srcX;
+
+                float *srcStart = srcOrigin + (srcX + srcY * src_w) * 4;
+
+                for (int z = 0; z < ic_4; ++z) {
+                    memset(dstBlock, 0, CONV3x3_SRC_BLOCK * sizeof(float));
+
+                    auto _dstStart = dstUnit + z * 4 * xC;
+
+                    float *src_z = srcStart + z * 4 * src_w * src_h;
+                    if (ex > sx) {
+                        // Extract One Block
+                        for (int yy = sy; yy < ey; ++yy) {
+                            auto dst_yy = dstBlock + yy * 16;
+                            auto src_yy = src_z + 4 * src_w * yy;
+                            memcpy(dst_yy + 4 * sx, src_yy + sx * 4,
+                                   4 * (ex - sx) * sizeof(float));
+                        }
+                    }
+                    // Transform
+                    sourceTransform(dstBlock, _dstStart, 4 * xC * ic_4);
+                }
+            }
+        };
+
+        std::function<void(int, const float *, float *)> gemmFunctionLambda =
+            [&](int xC, const float *_srcOrigin, float *_dstOrigin) {
+                // Multi
+                if (xC == CONV_TILED) {
+                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
+                        MNNGemmFloatUnit_4(_dstOrigin + i * dc_4 * 4 * xC,
+                                           _srcOrigin + i * ic_4 * 4 * xC,
+                                           weight + i * 16 * ic_4 * dc_4, ic_4,
+                                           xC * 4, dc_4, 0);
+                    }
+                } else {
+                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
+                        bcnn_gemm_kernel4x4(_dstOrigin + (i * dc_4) * xC * 4,
+                                             _srcOrigin + i * ic_4 * 4 * xC,
+                                             weight + (i * dc_4) * ic_4 * 16,
+                                             ic_4, xC * 4, dc_4, xC, 0);
+                    }
+                }
+            };
+        if (mInsideThread) {
+            auto num_threads = ((CPUBackend *)backend())->num_threads();
+            gemmFunctionLambda = [&](int xC, const float *_srcOrigin,
+                                     float *_dstOrigin) {
+                // Multi
+                if (xC == CONV_TILED) {
+                    MNN_CONCURRENCY_BEGIN(tId, num_threads) {
+                        for (int i = (int)tId; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+                             i += num_threads) {
+                            MNNGemmFloatUnit_4(_dstOrigin + i * dc_4 * 4 * xC,
+                                               _srcOrigin + i * ic_4 * 4 * xC,
+                                               weight + i * 16 * ic_4 * dc_4,
+                                               ic_4, xC * 4, dc_4, 0);
+                        }
+                    }
+                    MNN_CONCURRENCY_END();
+                } else {
+                    MNN_CONCURRENCY_BEGIN(tId, num_threads) {
+                        for (int i = (int)tId; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+                             i += num_threads) {
+                            bcnn_gemm_kernel4x4(
+                                _dstOrigin + (i * dc_4) * xC * 4,
+                                _srcOrigin + i * ic_4 * 4 * xC,
+                                weight + (i * dc_4) * ic_4 * 16, ic_4, xC * 4,
+                                dc_4, xC, 0);
+                        }
+                    }
+                    MNN_CONCURRENCY_END();
+                }
+            };
+        }
+
+        auto outsideFunction = [&](int tId) {
+            float *_srcOrigin = workspace + tId * workspace_thread_stride;
+            for (int tIndex = (int)tId; tIndex < tileCount;
+                 tIndex += num_threads) {
+                int xIndex = (int)tIndex * CONV_TILED;
+                int xReamin = totalCount - xIndex;
+                int xC = xReamin > CONV_TILED ? CONV_TILED : xReamin;
+                auto dstBlock = _srcOrigin + xC * CONV3x3_SRC_BLOCK * (ic_4 + dc_4);
+                auto _dstOrigin = _srcOrigin + xC * CONV3x3_SRC_BLOCK * ic_4;
+
+                // sourceTransformLambda(xIndex, xC, _srcOrigin, dstBlock);
+                // Source Transform
+                // auto sourceTransformLambda = [&](int xIndex, int xC,
+                // float
+                // *_srcOrigin,
+                //                         float *dstBlock)
+
+                for (int xi = 0; xi < xC; ++xi) {
+                    int index = xIndex + xi;
+                    float *dstUnit = _srcOrigin + 4 * xi;
+
+                    int wIndex = index % wUnit;
+                    int hIndex = index / wUnit;
+
+                    int srcX = wIndex * 2 - pad;
+                    int srcY = hIndex * 2 - pad;
+                    int sy = bh_max(0, srcY) - srcY;
+                    int ey = bh_min(srcY + 4, src_h) - srcY;
+                    int sx = bh_max(0, srcX) - srcX;
+                    int ex = bh_min(srcX + 4, src_w) - srcX;
+
+                    float *srcStart = srcOrigin + (srcX + srcY * src_w) * 4;
+
+                    for (int z = 0; z < ic_4; ++z) {
+                        memset(dstBlock, 0, CONV3x3_SRC_BLOCK * sizeof(float));
+
+                        auto _dstStart = dstUnit + z * 4 * xC;
+
+                        float *src_z = srcStart + z * 4 * src_w * src_h;
+                        if (ex > sx) {
+                            // Extract One Block
+                            for (int yy = sy; yy < ey; ++yy) {
+                                auto dst_yy = dstBlock + yy * 16;
+                                auto src_yy = src_z + 4 * src_w * yy;
+                                memcpy(dst_yy + 4 * sx, src_yy + sx * 4,
+                                       4 * (ex - sx) * sizeof(float));
+                            }
+                        }
+                        // Transform
+                        sourceTransform(dstBlock, _dstStart, 4 * xC * ic_4);
+                    }
+                }
+                // gemmFunctionLambda(xC, _srcOrigin, _dstOrigin);
+                // gemmFunctionLambda = [&](int xC, const float *_srcOrigin,
+                //                     float *_dstOrigin)
+                if (xC == CONV_TILED) {
+                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
+                        MNNGemmFloatUnit_4(_dstOrigin + i * dc_4 * 4 * xC,
+                                           _srcOrigin + i * ic_4 * 4 * xC,
+                                           weight + i * 16 * ic_4 * dc_4, ic_4,
+                                           xC * 4, dc_4, 0);
+                    }
+                } else {
+                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
+                        bcnn_gemm_kernel4x4(_dstOrigin + (i * dc_4) * xC * 4,
+                                             _srcOrigin + i * ic_4 * 4 * xC,
+                                             weight + (i * dc_4) * ic_4 * 16,
+                                             ic_4, xC * 4, dc_4, xC, 0);
+                    }
+                }
+                if (inside_thread) {
+                    // Multi
+                    if (xC == CONV_TILED) {
+#pragma omp parallel for
+                        for (int tiid = 0; tiid < num_threads; tiid++) {
+                            for (int i = tiid; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+                                 i += num_threads) {
+                                MNNGemmFloatUnit_4(
+                                    _dstOrigin + i * dc_4 * 4 * xC,
+                                    _srcOrigin + i * ic_4 * 4 * xC,
+                                    weight + i * 16 * ic_4 * dc_4, ic_4, xC * 4,
+                                    dc_4, 0);
+                            }
+                        }
+
+                    } else {
+#pragma omp parallel for
+                        for (int tiid = 0; tiid < num_threads; tiid++) {
+                            for (int i = tiid; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+                                 i += num_threads) {
+                                bcnn_gemm_kernel4x4(
+                                    _dstOrigin + (i * dc_4) * xC * 4,
+                                    _srcOrigin + i * ic_4 * 4 * xC,
+                                    weight + (i * dc_4) * ic_4 * 16, ic_4,
+                                    xC * 4, dc_4, xC, 0);
+                            }
+                        }
+                    }
+                }
+
+                // Dest Transform
+                for (int xi = 0; xi < xC; ++xi) {
+                    auto index = xIndex + xi;
+                    auto srcUnit = _dstOrigin + 4 * xi;
+
+                    int wIndex = index % wUnit;
+                    int hIndex = index / wUnit;
+
+                    int dstX = wIndex * 2;
+                    int dstY = hIndex * 2;
+
+                    auto dstStart = dstOrigin + 4 * (dstX + dstY * dst_w);
+
+                    for (int z = 0; z < dc_4; ++z) {
+                        auto srcZ = srcUnit + z * xC * 4;
+                        auto dstZ = dstStart + z * dst_w * dst_h * 4;
+                        destTransform(srcZ, dstBlock, dc_4 * 4 * xC);
+                        // No bias addition
+                        // float *bias_z = bias + 4 * z;
+                        // postFunction(dstBlock, bias_z, 4, 1);
+                        bv_float4_store(dstZ, bv_float4_load(dstBlock));
+                        if (wIndex * 2 + 1 < dst_w) {
+                            bv_float4_store(dstZ + 4,
+                                            bv_float4_load(dstBlock + 4));
+                        }
+                        if (hIndex * 2 + 1 < dst_h) {
+                            bv_float4_store(dstZ + dst_w * 4,
+                                            bv_float4_load(dstBlock + 8));
+                            if (wIndex * 2 + 1 < dst_w) {
+                                bv_float4_store(dstZ + dst_w * 4 + 4,
+                                                bv_float4_load(dstBlock + 12));
+                            }
+                        }
+                    }
+                }
+            }
+        };
+#endif
+
+#pragma omp parallel for
+        for (int tId = 0; tId < num_threads; tId++) {
+            // outsideFunction((int)tId);
+            float *_srcOrigin = workspace + tId * workspace_thread_stride;
+            for (int tIndex = (int)tId; tIndex < tileCount;
+                 tIndex += num_threads) {
+                int xIndex = (int)tIndex * CONV_TILED;
+                int xReamin = totalCount - xIndex;
+                int xC = xReamin > CONV_TILED ? CONV_TILED : xReamin;
+                float *dstBlock =
+                    _srcOrigin + xC * CONV3x3_SRC_BLOCK * (ic_4 + dc_4);
+                float *_dstOrigin = _srcOrigin + xC * CONV3x3_SRC_BLOCK * ic_4;
+
+                // sourceTransformLambda(xIndex, xC, _srcOrigin, dstBlock);
+                // Source Transform
+                // auto sourceTransformLambda = [&](int xIndex, int xC,
+                // float
+                // *_srcOrigin,
+                //                         float *dstBlock)
+
+                for (int xi = 0; xi < xC; ++xi) {
+                    int index = xIndex + xi;
+                    float *dstUnit = _srcOrigin + 4 * xi;
+
+                    int wIndex = index % wUnit;
+                    int hIndex = index / wUnit;
+
+                    int srcX = wIndex * 2 - pad;
+                    int srcY = hIndex * 2 - pad;
+                    int sy = bh_max(0, srcY) - srcY;
+                    int ey = bh_min(srcY + 4, src_h) - srcY;
+                    int sx = bh_max(0, srcX) - srcX;
+                    int ex = bh_min(srcX + 4, src_w) - srcX;
+
+                    float *srcStart = srcOrigin + (srcX + srcY * src_w) * 4;
+
+                    for (int z = 0; z < ic_4; ++z) {
+                        memset(dstBlock, 0, CONV3x3_SRC_BLOCK * sizeof(float));
+
+                        float *_dstStart = dstUnit + z * 4 * xC;
+
+                        float *src_z = srcStart + z * 4 * src_w * src_h;
+                        if (ex > sx) {
+                            // Extract One Block
+                            for (int yy = sy; yy < ey; ++yy) {
+                                float *dst_yy = dstBlock + yy * 16;
+                                float *src_yy = src_z + 4 * src_w * yy;
+                                memcpy(dst_yy + 4 * sx, src_yy + sx * 4,
+                                       4 * (ex - sx) * sizeof(float));
+                            }
+                        }
+                        // Transform
+                        bcnn_conv3x3_convert_src(dstBlock, _dstStart,
+                                                 4 * xC * ic_4);
+                    }
+                }
+                // gemmFunctionLambda(xC, _srcOrigin, _dstOrigin);
+                // gemmFunctionLambda = [&](int xC, const float *_srcOrigin,
+                //                     float *_dstOrigin)
+                if (xC == CONV_TILED) {
+                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+                         ++i) {
+                        bcnn_gemm_kernel4x4_tiled(
+                            _dstOrigin + i * dc_4 * 4 * xC,
+                            _srcOrigin + i * ic_4 * 4 * xC,
+                            weight + i * 16 * ic_4 * dc_4, ic_4, xC * 4, dc_4,
+                            0);
+                    }
+                } else {
+                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+                         ++i) {
+                        bcnn_gemm_kernel4x4(_dstOrigin + (i * dc_4) * xC * 4,
+                                            _srcOrigin + i * ic_4 * 4 * xC,
+                                            weight + (i * dc_4) * ic_4 * 16,
+                                            ic_4, xC * 4, dc_4, xC, 0);
+                    }
+                }
+                if (0) {
+                    // Multi
+                    if (xC == CONV_TILED) {
+#pragma omp parallel for
+                        for (int tiid = 0; tiid < num_threads; tiid++) {
+                            for (int i = (int)tiid;
+                                 i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+                                 i += num_threads) {
+                                bcnn_gemm_kernel4x4_tiled(
+                                    _dstOrigin + i * dc_4 * 4 * xC,
+                                    _srcOrigin + i * ic_4 * 4 * xC,
+                                    weight + i * 16 * ic_4 * dc_4, ic_4, xC * 4,
+                                    dc_4, 0);
+                            }
+                        }
+
+                    } else {
+#pragma omp parallel for
+                        for (int tiid = 0; tiid < num_threads; tiid++) {
+                            for (int i = (int)tiid;
+                                 i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+                                 i += num_threads) {
+                                bcnn_gemm_kernel4x4(
+                                    _dstOrigin + (i * dc_4) * xC * 4,
+                                    _srcOrigin + i * ic_4 * 4 * xC,
+                                    weight + (i * dc_4) * ic_4 * 16, ic_4,
+                                    xC * 4, dc_4, xC, 0);
+                            }
+                        }
+                    }
+                }
+
+                // Dest Transform
+                for (int xi = 0; xi < xC; ++xi) {
+                    int index = xIndex + xi;
+                    float *srcUnit = _dstOrigin + 4 * xi;
+
+                    int wIndex = index % wUnit;
+                    int hIndex = index / wUnit;
+                    int dstX = wIndex * 2;
+                    int dstY = hIndex * 2;
+
+                    float *dstStart = dstOrigin + 4 * (dstX + dstY * dst_w);
+
+                    for (int z = 0; z < dc_4; ++z) {
+                        float *srcZ = srcUnit + z * xC * 4;
+                        float *dstZ = dstStart + z * dst_w * dst_h * 4;
+                        bcnn_conv3x3_convert_dst(srcZ, dstBlock, dc_4 * 4 * xC);
+                        // No bias addition
+                        // float *bias_z = bias + 4 * z;
+                        // postFunction(dstBlock, bias_z,
+                        // 4BCNN_INVALID_PARAMETER, 1);
+                        bv_float4_store(bv_float4_load(dstBlock), dstZ);
+                        if (wIndex * 2 + 1 < dst_w) {
+                            bv_float4_store(bv_float4_load(dstBlock + 4),
+                                            dstZ + 4);
+                        }
+                        if (hIndex * 2 + 1 < dst_h) {
+                            bv_float4_store(bv_float4_load(dstBlock + 8),
+                                            dstZ + dst_w * 4);
+                            if (wIndex * 2 + 1 < dst_w) {
+                                bv_float4_store(bv_float4_load(dstBlock + 12),
+                                                dstZ + dst_w * 4 + 4);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return;
 }
 
 // General Matrix-Matrix multiplication

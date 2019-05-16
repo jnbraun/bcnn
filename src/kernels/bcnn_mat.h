@@ -296,7 +296,10 @@ void bcnn_cuda_im2col(float *im, int channels, int height, int width, int ksize,
                       int stride, int pad, float *data_col);
 void bcnn_cuda_col2im(float *data_col, int channels, int height, int width,
                       int ksize, int stride, int pad, float *data_im);
-
+void bcnn_convert_tensor_NHWC_to_NC4HW4(const float *source, float *dest, int b,
+                                        int h, int w, int c);
+void bcnn_nchw_to_nc4hw4(float *dst, const float *src, size_t area,
+                         size_t depth);
 #endif
 
 #ifdef __cplusplus

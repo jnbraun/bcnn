@@ -969,6 +969,128 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
     }
 }
 
+static void bcnn_convert_NHWC_to_NC4HW4(float *dst, const float *src,
+                                        size_t area, size_t depth) {
+#ifdef BCNN_USE_NEON
+    if (1 == depth) {
+        float32x4_t zeroValue = vmovq_n_f32(0.0f);
+        int areaC4 = (int)area / 4;
+        int remain = areaC4 * 4;
+        for (int i = 0; i < areaC4; ++i) {
+            float *srcCur = src + 4 * i;
+            float *dstCur = dst + 16 * i;
+            float32x4_t srcValue = vld1q_f32(srcCur);
+            float32x4x4_t dstValue;
+            dstValue.val[0] = srcValue;
+            dstValue.val[1] = zeroValue;
+            dstValue.val[2] = zeroValue;
+            dstValue.val[3] = zeroValue;
+            vst4q_f32(dstCur, dstValue);
+        }
+        for (int i = remain; i < area; ++i) {
+            dst[4 * i + 0] = src[i];
+            dst[4 * i + 1] = 0.0f;
+            dst[4 * i + 2] = 0.0f;
+            dst[4 * i + 3] = 0.0f;
+        }
+        return;
+    }
+    if (3 == depth) {
+        float32x4_t zeroValue = vmovq_n_f32(0.0f);
+        int areaC4 = (int)area / 4;
+        int remain = areaC4 * 4;
+        for (int i = 0; i < areaC4; ++i) {
+            float *srcCur = src + 12 * i;
+            float *dstCur = dst + 16 * i;
+            float32x4x3_t srcValue = vld3q_f32(srcCur);
+            float32x4x4_t dstValue;
+            dstValue.val[0] = srcValue.val[0];
+            dstValue.val[1] = srcValue.val[1];
+            dstValue.val[2] = srcValue.val[2];
+            dstValue.val[3] = zeroValue;
+            vst4q_f32(dstCur, dstValue);
+        }
+        for (int i = remain; i < area; ++i) {
+            dst[4 * i + 0] = src[3 * i + 0];
+            dst[4 * i + 1] = src[3 * i + 1];
+            dst[4 * i + 2] = src[3 * i + 2];
+            dst[4 * i + 3] = 0.0f;
+        }
+        return;
+    }
+#endif
+    int c = (int)depth;
+    int cDiv4 = c / 4;
+    int cAlign = cDiv4 * 4;
+    for (int hi = 0; hi < area; ++hi) {
+        const float *srcHeight = src + hi * c;
+        float *dstHeight = dst + hi * 4;
+        for (int ci = 0; ci < cDiv4; ++ci) {
+#ifdef BCNN_USE_NEON
+            vst1q_f32(dstHeight + 4 * ci * area, vld1q_f32(srcHeight + 4 * ci));
+#else
+            for (int i = 0; i < 4; ++i) {
+                dstHeight[ci * area * 4 + i] = srcHeight[4 * ci + i];
+            }
+#endif
+        }
+    }
+
+    if (cAlign == c) {
+        return;
+    }
+
+    int cReamin = c - cAlign;
+    float *srcAlign = src + cAlign;
+    float *dstAlign = dst + area * cAlign;
+
+#ifdef BCNN_USE_NEON
+    float32x4_t zeroVector = vdupq_n_f32(0.0f);
+#endif
+
+    for (int hi = 0; hi < area; ++hi) {
+        const float *srcHeight = srcAlign + hi * c;
+        float *dstHeight = dstAlign + hi * 4;
+#ifdef BCNN_USE_NEON
+        vst1q_f32(dstHeight, zeroVector);
+#else
+        for (int i = 0; i < 4; ++i) {
+            dstHeight[i] = 0;
+        }
+#endif
+        for (int ci = 0; ci < cReamin; ++ci) {
+            dstHeight[ci] = srcHeight[ci];
+        }
+    }
+}
+
+void bcnn_convert_tensor_NHWC_to_NC4HW4(const float *source, float *dest, int b,
+                                        int h, int w, int c) {
+    int sourceBatchsize = h * w * c;
+    int destBatchSize = bh_round_up(c, 4) * w * h;
+    int area = w * h;
+    for (int bi = 0; bi < b; ++bi) {
+        float *srcBatch = source + bi * sourceBatchsize;
+        float *dstBatch = dest + bi * destBatchSize;
+        bcnn_convert_NHWC_to_NC4HW4(dstBatch, srcBatch, area, c);
+    }
+}
+
+void bcnn_nchw_to_nc4hw4(float *dst, const float *src, size_t area,
+                         size_t depth) {
+    int z, x;
+    int cur = 0;
+    memset(dst, 0, area * bh_div_up(depth, 4) * 4 * sizeof(float));
+    for (z = 0; z < depth; ++z) {
+        int plane = z / 4;
+        float *dstPlane = plane * area * 4 + dst;
+        int offset = z % 4;
+        for (x = 0; x < area; ++x) {
+            dstPlane[4 * x + offset] = src[cur++];
+        }
+    }
+}
+
 void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step) {
     float *_x = (float *)src;
     bv_float4 m00;
@@ -1197,6 +1319,8 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
 
     // auto postFunction = mPostFunction;
     // print("dst_w=%d, dst_h=%d\n", dst_w, dst_h);
+    fprintf(stderr, "%d %d %d %d %d %d %d %d %d %d\n", dst_w, dst_h, src_w,
+            src_h, ic_4, dc_4, pad, pad, wUnit, hUnit);
 
     for (int batchIndex = 0; batchIndex < batch_size; ++batchIndex) {
         float *srcOrigin = src + src_w * src_h * ic_4 * 4 * batchIndex;
@@ -1439,10 +1563,17 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
         };
 #endif
 
+        for (int i = 0; i < 10; i += 4) {
+            fprintf(stderr, "%f %f %f %f\n", srcOrigin[i], srcOrigin[i + 1],
+                    srcOrigin[i + 2], srcOrigin[i + 3]);
+        }
+
 #pragma omp parallel for
         for (int tId = 0; tId < num_threads; tId++) {
             // outsideFunction((int)tId);
             float *_srcOrigin = workspace + tId * workspace_thread_stride;
+            fprintf(stderr, "num_threads %d stride %d\n", num_threads,
+                    workspace_thread_stride);
             for (int tIndex = (int)tId; tIndex < tileCount;
                  tIndex += num_threads) {
                 int xIndex = (int)tIndex * CONV_TILED;
@@ -1495,6 +1626,16 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                                                  4 * xC * ic_4);
                     }
                 }
+                /*if ((ic_4 + dc_4 + 1) == 18) {
+                    fprintf(stderr, "%d %d %d %d %f %f\n",
+                            ((((xIndex + xC) % wUnit) * 2 - pad) +
+                             (((xIndex + xC) / wUnit) * 2 - pad) * src_w) *
+                                    4 +
+                                (ic_4 - 1) * 4 * src_w * src_h,
+                            xC * CONV3x3_SRC_BLOCK * (ic_4),
+                            xC * CONV3x3_SRC_BLOCK * (ic_4 + dc_4), tIndex,
+                            _srcOrigin[0], _srcOrigin[5]);
+                }*/
                 // gemmFunctionLambda(xC, _srcOrigin, _dstOrigin);
                 // gemmFunctionLambda = [&](int xC, const float *_srcOrigin,
                 //                     float *_dstOrigin)
@@ -1547,7 +1688,10 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                         }
                     }
                 }
-
+                if ((ic_4 + dc_4 + 1) == 18) {
+                    fprintf(stderr, "%d %f %f\n", tIndex, _dstOrigin[0],
+                            _dstOrigin[5]);
+                }
                 // Dest Transform
                 for (int xi = 0; xi < xC; ++xi) {
                     int index = xIndex + xi;

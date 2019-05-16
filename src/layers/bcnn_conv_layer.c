@@ -177,13 +177,18 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     // Special case for conv 3x3/s1
     if (param->size == 3 && param->stride == 1 && param->batch_norm == 0 &&
         param->num_groups == 1) {
+        // TEST
+        /*for (int i = 0; i < bcnn_tensor_size(&weights); ++i) {
+            weights.data[i] =
+                2 * ((float)(i) / bcnn_tensor_size(&weights) - 0.5);
+        }*/
         bh_free(param->conv_workspace);
         int src_c_div4 = bh_div_up(net->tensors[node.src[0]].c, 4);
         int dst_c_div4 = bh_div_up(n, 4);
-        param->workspace_size =
-            net->num_threads * CONV_TILED *
-            (bh_div_up(net->tensors[node.src[0]].c, 4) + bh_div_up(n, 4) + 1) *
-            CONV3x3_SRC_BLOCK;
+        param->workspace_size = net->num_threads * CONV_TILED *
+                                (src_c_div4 + bh_div_up(n, 4) + 1) *
+                                CONV3x3_SRC_BLOCK;
+        fprintf(stderr, "wk size %ld\n", param->workspace_size);
         param->conv_workspace =
             (float *)calloc(param->workspace_size, sizeof(float));
         param->weights_workspace =
@@ -195,6 +200,19 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         // fprintf(stderr, "%d %d\n", src_c_div4, dst_c_div4);
         bcnn_conv3x3_convert_weights(weights.data, param->weights_workspace,
                                      net->tensors[node.src[0]].c, n);
+        char fname[256];
+        sprintf(fname, "reweights_%d_%d_256.txt", src_c_div4, dst_c_div4);
+        FILE *fd = fopen(fname, "wt");
+        for (int i = 0; i < src_c_div4 * dst_c_div4 * 256; ++i) {
+            fprintf(fd, "%f ", param->weights_workspace[i]);
+        }
+        fclose(fd);
+        // Reshape src tensor
+        size_t src_sz = net->tensors[node.src[0]].w *
+                        net->tensors[node.src[0]].h * src_c_div4 * 4 *
+                        net->tensors[node.src[0]].n;
+        bcnn_tensor_allocate_buffer(&net->tensors[node.src[0]], net->mode,
+                                    src_sz);
     }
 
 #ifdef BCNN_USE_CUDA

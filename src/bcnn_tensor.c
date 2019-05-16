@@ -103,9 +103,8 @@ int bcnn_tensor_size3d(const bcnn_tensor *t) { return t->w * t->h * t->c; }
 
 int bcnn_tensor_size2d(const bcnn_tensor *t) { return t->w * t->h; }
 
-bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
-    int size = t->n * t->c * t->h * t->w;
-
+bcnn_status bcnn_tensor_allocate_buffer(bcnn_tensor *t, int net_state,
+                                        size_t size) {
     bcnn_tensor_free(t);
     if (size <= 0) {
         return BCNN_INVALID_PARAMETER;
@@ -124,6 +123,11 @@ bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
     }
 #endif
     return BCNN_SUCCESS;
+}
+
+bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
+    int size = t->n * t->c * t->h * t->w;
+    return bcnn_tensor_allocate_buffer(t, net_state, size);
 }
 
 void bcnn_tensor_free(bcnn_tensor *t) {

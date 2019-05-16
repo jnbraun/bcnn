@@ -8,6 +8,7 @@
 #include <bip/bip.h>
 
 #include "bcnn_utils.h"
+#include "kernels/bcnn_mat.h"
 
 void show_usage(int argc, char **argv) {
     fprintf(stderr,
@@ -41,6 +42,9 @@ int main(int argc, char **argv) {
         bcnn_end_net(&net);
         return -1;
     }
+    /*bcnn_set_input_shape(net, 224, 224, 3, 1);
+    bcnn_add_convolutional_layer(net, 64, 3, 1, 0, 1, 0, BCNN_FILLER_XAVIER,
+                                 BCNN_ACT_NONE, 0, "input", "out");*/
     /* Compile net */
     if (bcnn_compile_net(net) != BCNN_SUCCESS) {
         bcnn_end_net(&net);
@@ -83,6 +87,16 @@ int main(int argc, char **argv) {
     bcnn_fill_tensor_with_image(net, img, input_tensor->w, input_tensor->h, c,
                                 scale, 0, mean, mean, mean,
                                 /*tensor_index=*/0, /*batch_index=*/0);
+
+    int sz =
+        input_tensor->w * input_tensor->h * input_tensor->c * input_tensor->n;
+    float *buf = (float *)calloc(sz, sizeof(float));
+    for (int i = 0; i < sz; ++i) {
+        buf[i] = /*1.0f + (float)i / sz*/ input_tensor->data[i];
+    }
+    bcnn_nchw_to_nc4hw4(input_tensor->data, buf,
+                        input_tensor->h * input_tensor->w, input_tensor->c);
+    bh_free(buf);
     /* Setup timer */
     bh_timer t = {0};
     double elapsed_min = DBL_MAX;

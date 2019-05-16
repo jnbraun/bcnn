@@ -51,6 +51,9 @@
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
 
+// PROFILE
+#include <bh/bh_timer.h>
+
 bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
     bcnn_net *p_net = (bcnn_net *)calloc(1, sizeof(bcnn_net));
     if (p_net == NULL) {
@@ -84,6 +87,7 @@ bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
     p_net->num_threads = 1;
 #ifdef BCNN_USE_OPENMP
     p_net->num_threads = bcnn_omp_get_num_threads();
+    p_net->num_threads = 1;
     fprintf(stderr, "init num_threads %d\n", p_net->num_threads);
 #endif
     *net = p_net;
@@ -225,6 +229,14 @@ static bcnn_status bcnn_init_workload(bcnn_net *net) {
     // Allocate tensor for input node
     BCNN_CHECK_STATUS(bcnn_tensor_allocate(&net->tensors[0], net->mode));
 
+    // Reshape src tensor if depth not multiple of 4
+    if (net->tensors[0].c % 4 != 0) {
+        int src_c4 = bh_div_up(net->tensors[0].c, 4) * 4;
+        size_t src_sz =
+            net->tensors[0].w * net->tensors[0].h * src_c4 * net->tensors[0].n;
+        bcnn_tensor_allocate_buffer(&net->tensors[0], net->mode, src_sz);
+    }
+
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_context *cuda_ctx = (bcnn_cuda_context *)net->cuda_ctx;
     cuda_ctx->workspace_gpu = bcnn_cuda_malloc_f32(cuda_ctx->workspace_size);
@@ -292,7 +304,11 @@ void bcnn_forward(bcnn_net *net) {
         if (net->mode == BCNN_MODE_TRAIN) {
             bcnn_reset_gradients(net, node);
         }
+        bh_timer t = {0};
+        bh_timer_start(&t);
         node->forward(net, node);
+        bh_timer_stop(&t);
+        fprintf(stderr, "node %d %f\n", i, bh_timer_get_msec(&t));
     }
 }
 

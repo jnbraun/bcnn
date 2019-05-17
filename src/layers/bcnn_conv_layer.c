@@ -36,6 +36,8 @@
 #include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
+#include <bh/bh_timer.h>
+
 bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
                                          int stride, int pad, int num_groups,
                                          int batch_norm, bcnn_filler_type init,
@@ -201,13 +203,6 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         // fprintf(stderr, "%d %d\n", src_c_div4, dst_c_div4);
         // bcnn_conv3x3_convert_weights(weights.data, param->weights_workspace,
         //                             net->tensors[node.src[0]].c, n);
-        char fname[256];
-        sprintf(fname, "reweights_%d_%d_256.txt", src_c_div4, dst_c_div4);
-        FILE *fd = fopen(fname, "wt");
-        for (int i = 0; i < src_c_div4 * dst_c_div4 * 256; ++i) {
-            fprintf(fd, "%f ", param->weights_workspace[i]);
-        }
-        fclose(fd);
         // Reshape src tensor
         size_t src_sz = net->tensors[node.src[0]].w *
                         net->tensors[node.src[0]].h * src_c_div4 * 4 *
@@ -355,16 +350,26 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     // Special case for conv 3x3/s1
     if (param->size == 3 && param->stride == 1 && param->batch_norm == 0 &&
         param->num_groups == 1) {
+        bh_timer t = {0};
+        bh_timer_start(&t);
         bcnn_nchw_to_nc4hw4(param->src_workspace, src_tensor->data,
                             src_tensor->h * src_tensor->w, src_tensor->c);
+        bh_timer_stop(&t);
+        fprintf(stderr, "pack %f\n", bh_timer_get_msec(&t));
+        bh_timer_start(&t);
         bcnn_conv3x3s1_kernel(
             param->src_workspace, src_tensor->w, src_tensor->h, src_tensor->c,
             param->dst_workspace, dst_tensor->w, dst_tensor->h, dst_tensor->c,
             batch_size, param->pad, param->weights_workspace,
             param->biases_workspace, param->conv_workspace,
             param->workspace_size, net->num_threads);
+        bh_timer_stop(&t);
+        fprintf(stderr, "conv3x3 %f\n", bh_timer_get_msec(&t));
+        bh_timer_start(&t);
         bcnn_nc4hw4_to_nchw(dst_tensor->data, param->dst_workspace,
                             dst_tensor->w * dst_tensor->h, dst_tensor->c);
+        bh_timer_stop(&t);
+        fprintf(stderr, "unpack %f\n", bh_timer_get_msec(&t));
     } else {
 #endif
         for (int i = 0; i < batch_size; ++i) {

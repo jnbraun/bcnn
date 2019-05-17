@@ -87,7 +87,7 @@ bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
     p_net->num_threads = 1;
 #ifdef BCNN_USE_OPENMP
     p_net->num_threads = bcnn_omp_get_num_threads();
-    p_net->num_threads = 1;
+    p_net->num_threads = 4;
     fprintf(stderr, "init num_threads %d\n", p_net->num_threads);
 #endif
     *net = p_net;

@@ -1668,17 +1668,17 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
         };
 #endif
 
-        for (int i = 0; i < 10; i += 4) {
-            fprintf(stderr, "%f %f %f %f\n", srcOrigin[i], srcOrigin[i + 1],
-                    srcOrigin[i + 2], srcOrigin[i + 3]);
-        }
+/*for (int i = 0; i < 10; i += 4) {
+    fprintf(stderr, "%f %f %f %f\n", srcOrigin[i], srcOrigin[i + 1],
+            srcOrigin[i + 2], srcOrigin[i + 3]);
+}*/
 
 #pragma omp parallel for
         for (int tId = 0; tId < num_threads; tId++) {
             // outsideFunction((int)tId);
             float *_srcOrigin = workspace + tId * workspace_thread_stride;
-            fprintf(stderr, "num_threads %d stride %d\n", num_threads,
-                    workspace_thread_stride);
+            /*fprintf(stderr, "num_threads %d stride %d\n", num_threads,
+                    workspace_thread_stride);*/
             for (int tIndex = (int)tId; tIndex < tileCount;
                  tIndex += num_threads) {
                 int xIndex = (int)tIndex * CONV_TILED;
@@ -1694,8 +1694,8 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                 // float
                 // *_srcOrigin,
                 //                         float *dstBlock)
-                bh_timer t = {0};
-                bh_timer_start(&t);
+                // bh_timer t = {0};
+                // bh_timer_start(&t);
                 for (int xi = 0; xi < xC; ++xi) {
                     int index = xIndex + xi;
                     float *dstUnit = _srcOrigin + 4 * xi;
@@ -1732,8 +1732,8 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                                                  4 * xC * ic_4);
                     }
                 }
-                bh_timer_stop(&t);
-                fprintf(stderr, "conv3x3 src %f\n", bh_timer_get_msec(&t));
+                // bh_timer_stop(&t);
+                // fprintf(stderr, "conv3x3 src %f\n", bh_timer_get_msec(&t));
                 /*if ((ic_4 + dc_4 + 1) == 18) {
                     fprintf(stderr, "%d %d %d %d %f %f\n",
                             ((((xIndex + xC) % wUnit) * 2 - pad) +
@@ -1747,8 +1747,8 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                 // gemmFunctionLambda(xC, _srcOrigin, _dstOrigin);
                 // gemmFunctionLambda = [&](int xC, const float *_srcOrigin,
                 //                     float *_dstOrigin)
-                if (1) {
-                    bh_timer_start(&t);
+                if (0) {
+                    // bh_timer_start(&t);
                     if (xC == CONV_TILED) {
                         for (int i = 0;
                              i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
@@ -1769,7 +1769,7 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                         }
                     }
                 } else {
-                    bh_timer_start(&t);
+                    // bh_timer_start(&t);
                     // Multi
                     if (xC == CONV_TILED) {
 #pragma omp parallel for
@@ -1800,13 +1800,13 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                         }
                     }
                 }
-                bh_timer_stop(&t);
-                fprintf(stderr, "conv3x3 gemm %f\n", bh_timer_get_msec(&t));
+                // bh_timer_stop(&t);
+                // fprintf(stderr, "conv3x3 gemm %f\n", bh_timer_get_msec(&t));
                 /*if ((ic_4 + dc_4 + 1) == 18) {
                     fprintf(stderr, "%d %f %f\n", tIndex, _dstOrigin[0],
                             _dstOrigin[5]);
                 }*/
-                bh_timer_start(&t);
+                // bh_timer_start(&t);
                 // Dest Transform
                 for (int xi = 0; xi < xC; ++xi) {
                     int index = xIndex + xi;
@@ -1842,8 +1842,8 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                         }
                     }
                 }
-                bh_timer_stop(&t);
-                fprintf(stderr, "conv3x3 dst %f\n", bh_timer_get_msec(&t));
+                // bh_timer_stop(&t);
+                // fprintf(stderr, "conv3x3 dst %f\n", bh_timer_get_msec(&t));
             }
         }
     }

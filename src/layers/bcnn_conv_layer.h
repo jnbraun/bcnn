@@ -46,6 +46,8 @@ typedef struct bcnn_conv_param {
     float *workspace;  // embedded batchnorm
     float *weights_workspace;
     float *biases_workspace;
+    float *src_workspace;
+    float *dst_workspace;
     float *x_norm;
     float *adam_m;
     float *adam_v;

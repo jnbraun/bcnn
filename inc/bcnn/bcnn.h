@@ -23,6 +23,8 @@
 #ifndef BCNN_H
 #define BCNN_H
 
+#define CONV3X3
+
 #ifdef __cplusplus
 extern "C" {
 #endif

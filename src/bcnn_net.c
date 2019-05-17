@@ -229,6 +229,7 @@ static bcnn_status bcnn_init_workload(bcnn_net *net) {
     // Allocate tensor for input node
     BCNN_CHECK_STATUS(bcnn_tensor_allocate(&net->tensors[0], net->mode));
 
+#ifdef CONV3X3
     // Reshape src tensor if depth not multiple of 4
     if (net->tensors[0].c % 4 != 0) {
         int src_c4 = bh_div_up(net->tensors[0].c, 4) * 4;
@@ -236,6 +237,7 @@ static bcnn_status bcnn_init_workload(bcnn_net *net) {
             net->tensors[0].w * net->tensors[0].h * src_c4 * net->tensors[0].n;
         bcnn_tensor_allocate_buffer(&net->tensors[0], net->mode, src_sz);
     }
+#endif
 
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_context *cuda_ctx = (bcnn_cuda_context *)net->cuda_ctx;
@@ -1183,6 +1185,17 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
             "Inconsistent weights size %s: expected %d but found %lu\n",
             w->name, w_sz, (unsigned long)nr);
     }
+#ifdef CONV3X3
+    if (node->type == BCNN_LAYER_CONV2D) {
+        bcnn_conv_param *param = (bcnn_conv_param *)node->param;
+        if (param->size == 3 && param->stride == 1 && param->batch_norm == 0 &&
+            param->num_groups == 1 && net->mode == BCNN_MODE_PREDICT) {
+            bcnn_conv3x3_convert_weights(w->data, param->weights_workspace,
+                                         net->tensors[node->src[0]].c,
+                                         net->tensors[node->dst[0]].c);
+        }
+    }
+#endif
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(w->data_gpu, w->data, w_sz);
     bcnn_cuda_memcpy_host2dev(b->data_gpu, b->data, b_sz);

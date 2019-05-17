@@ -90,13 +90,6 @@ int main(int argc, char **argv) {
 
     int sz =
         input_tensor->w * input_tensor->h * input_tensor->c * input_tensor->n;
-    float *buf = (float *)calloc(sz, sizeof(float));
-    for (int i = 0; i < sz; ++i) {
-        buf[i] = /*1.0f + (float)i / sz*/ input_tensor->data[i];
-    }
-    bcnn_nchw_to_nc4hw4(input_tensor->data, buf,
-                        input_tensor->h * input_tensor->w, input_tensor->c);
-    bh_free(buf);
     /* Setup timer */
     bh_timer t = {0};
     double elapsed_min = DBL_MAX;

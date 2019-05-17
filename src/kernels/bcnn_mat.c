@@ -30,6 +30,8 @@
 
 #include "bcnn/bcnn.h"
 
+#include <bh/bh_timer.h>
+
 #if (defined(__aarch64__))
 #include "openblas/openblas_sgemm.h"
 #endif
@@ -1091,6 +1093,21 @@ void bcnn_nchw_to_nc4hw4(float *dst, const float *src, size_t area,
     }
 }
 
+void bcnn_nc4hw4_to_nchw(float *dst, const float *src, size_t area,
+                         size_t depth) {
+    int x;
+    int z;
+    int cur = 0;
+    for (z = 0; z < depth; ++z) {
+        int plane = z / 4;
+        const float *srcPlane = plane * area * 4 + src;
+        int offset = z % 4;
+        for (x = 0; x < area; ++x) {
+            dst[cur++] = srcPlane[4 * x + offset];
+        }
+    }
+}
+
 void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step) {
     float *_x = (float *)src;
     bv_float4 m00;
@@ -1270,6 +1287,93 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
                                 const float *weight, size_t src_depth_quad,
                                 size_t dst_step, size_t dst_depth_quad,
                                 size_t width, size_t weight_depth_offset) {
+#if defined(BCNN_USE_AVX)
+
+    int src_depth_step = 4 * width;
+    int wC4 = width / 4;
+    int w4End = wC4 * 4;
+    for (int dz = 0; dz < dst_depth_quad; ++dz) {
+        float *dst_z = dst + dz * dst_step;
+        float *weight_dz =
+            weight + dz * (src_depth_quad * 16 + weight_depth_offset);
+
+        for (int dx = 0; dx < wC4; ++dx) {
+            float *dst_x = dst_z + dx * 4 * 4;
+            __m128 dst0 = _mm_set1_ps(0.0f);
+            __m128 dst1 = _mm_set1_ps(0.0f);
+            __m128 dst2 = _mm_set1_ps(0.0f);
+            __m128 dst3 = _mm_set1_ps(0.0f);
+            const float *src_dx = src + 4 * dx * 4;
+            for (int sz = 0; sz < src_depth_quad; ++sz) {
+                const float *src_z = src_dx + sz * src_depth_step;
+                const float *weight_z = weight_dz + sz * 16;
+                __m128 w0 = _mm_loadu_ps(weight_z + 4 * 0);
+                __m128 w1 = _mm_loadu_ps(weight_z + 4 * 1);
+                __m128 w2 = _mm_loadu_ps(weight_z + 4 * 2);
+                __m128 w3 = _mm_loadu_ps(weight_z + 4 * 3);
+#define COMPUTE(v)                                     \
+    {                                                  \
+        __m128 srcValue = _mm_loadu_ps(src_z + 4 * v); \
+        __m128 s0 = _mm_set1_ps(srcValue[0]);          \
+        __m128 s1 = _mm_set1_ps(srcValue[1]);          \
+        __m128 s2 = _mm_set1_ps(srcValue[2]);          \
+        __m128 s3 = _mm_set1_ps(srcValue[3]);          \
+        __m128 sw0 = _mm_mul_ps(s0, w0);               \
+        __m128 sw1 = _mm_mul_ps(s1, w1);               \
+        __m128 sw2 = _mm_mul_ps(s2, w2);               \
+        __m128 sw3 = _mm_mul_ps(s3, w3);               \
+        dst##v = _mm_add_ps(dst##v, sw0);              \
+        dst##v = _mm_add_ps(dst##v, sw1);              \
+        dst##v = _mm_add_ps(dst##v, sw2);              \
+        dst##v = _mm_add_ps(dst##v, sw3);              \
+    }
+
+                COMPUTE(0);
+                COMPUTE(1);
+                COMPUTE(2);
+                COMPUTE(3);
+            }
+
+            _mm_store_ps(dst_x + 4 * 0, dst0);
+            _mm_store_ps(dst_x + 4 * 1, dst1);
+            _mm_store_ps(dst_x + 4 * 2, dst2);
+            _mm_store_ps(dst_x + 4 * 3, dst3);
+        }
+
+        for (int dx = w4End; dx < width; ++dx) {
+            float *dst_x = dst_z + dx * 4;
+            __m128 dstValue = _mm_set1_ps(0.0f);
+
+            const float *src_dx = src + 4 * dx;
+            for (int sz = 0; sz < src_depth_quad; ++sz) {
+                const float *src_z = src_dx + sz * src_depth_step;
+                const float *weight_z = weight_dz + sz * 16;
+                __m128 w0 = _mm_loadu_ps(weight_z + 4 * 0);
+                __m128 w1 = _mm_loadu_ps(weight_z + 4 * 1);
+                __m128 w2 = _mm_loadu_ps(weight_z + 4 * 2);
+                __m128 w3 = _mm_loadu_ps(weight_z + 4 * 3);
+
+                __m128 srcValue = _mm_loadu_ps(src_z);
+                __m128 s0 = _mm_set1_ps(srcValue[0]);
+                __m128 s1 = _mm_set1_ps(srcValue[1]);
+                __m128 s2 = _mm_set1_ps(srcValue[2]);
+                __m128 s3 = _mm_set1_ps(srcValue[3]);
+
+                __m128 sw0 = _mm_mul_ps(s0, w0);
+                __m128 sw1 = _mm_mul_ps(s1, w1);
+                __m128 sw2 = _mm_mul_ps(s2, w2);
+                __m128 sw3 = _mm_mul_ps(s3, w3);
+                dstValue = _mm_add_ps(dstValue, sw0);
+                dstValue = _mm_add_ps(dstValue, sw1);
+                dstValue = _mm_add_ps(dstValue, sw2);
+                dstValue = _mm_add_ps(dstValue, sw3);
+            }
+            _mm_store_ps(dst_x, dstValue);
+        }
+    }
+#elif defined(BCNN_USE_NEON)
+// TODO
+#else
     int dx, sz, fx, fy, dz;
     size_t src_depth_step = 4 * width;
     for (dz = 0; dz < dst_depth_quad; ++dz) {
@@ -1294,6 +1398,7 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
             }
         }
     }
+#endif
 }
 
 static void bcnn_gemm_kernel4x4_tiled(float *dstOrigin, const float *src,
@@ -1589,7 +1694,8 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                 // float
                 // *_srcOrigin,
                 //                         float *dstBlock)
-
+                bh_timer t = {0};
+                bh_timer_start(&t);
                 for (int xi = 0; xi < xC; ++xi) {
                     int index = xIndex + xi;
                     float *dstUnit = _srcOrigin + 4 * xi;
@@ -1626,6 +1732,8 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                                                  4 * xC * ic_4);
                     }
                 }
+                bh_timer_stop(&t);
+                fprintf(stderr, "conv3x3 src %f\n", bh_timer_get_msec(&t));
                 /*if ((ic_4 + dc_4 + 1) == 18) {
                     fprintf(stderr, "%d %d %d %d %f %f\n",
                             ((((xIndex + xC) % wUnit) * 2 - pad) +
@@ -1639,25 +1747,29 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                 // gemmFunctionLambda(xC, _srcOrigin, _dstOrigin);
                 // gemmFunctionLambda = [&](int xC, const float *_srcOrigin,
                 //                     float *_dstOrigin)
-                if (xC == CONV_TILED) {
-                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
-                         ++i) {
-                        bcnn_gemm_kernel4x4_tiled(
-                            _dstOrigin + i * dc_4 * 4 * xC,
-                            _srcOrigin + i * ic_4 * 4 * xC,
-                            weight + i * 16 * ic_4 * dc_4, ic_4, xC * 4, dc_4,
-                            0);
+                if (1) {
+                    bh_timer_start(&t);
+                    if (xC == CONV_TILED) {
+                        for (int i = 0;
+                             i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
+                            bcnn_gemm_kernel4x4_tiled(
+                                _dstOrigin + i * dc_4 * 4 * xC,
+                                _srcOrigin + i * ic_4 * 4 * xC,
+                                weight + i * 16 * ic_4 * dc_4, ic_4, xC * 4,
+                                dc_4, 0);
+                        }
+                    } else {
+                        for (int i = 0;
+                             i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
+                            bcnn_gemm_kernel4x4(
+                                _dstOrigin + (i * dc_4) * xC * 4,
+                                _srcOrigin + i * ic_4 * 4 * xC,
+                                weight + (i * dc_4) * ic_4 * 16, ic_4, xC * 4,
+                                dc_4, xC, 0);
+                        }
                     }
                 } else {
-                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
-                         ++i) {
-                        bcnn_gemm_kernel4x4(_dstOrigin + (i * dc_4) * xC * 4,
-                                            _srcOrigin + i * ic_4 * 4 * xC,
-                                            weight + (i * dc_4) * ic_4 * 16,
-                                            ic_4, xC * 4, dc_4, xC, 0);
-                    }
-                }
-                if (0) {
+                    bh_timer_start(&t);
                     // Multi
                     if (xC == CONV_TILED) {
 #pragma omp parallel for
@@ -1688,10 +1800,13 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                         }
                     }
                 }
-                if ((ic_4 + dc_4 + 1) == 18) {
+                bh_timer_stop(&t);
+                fprintf(stderr, "conv3x3 gemm %f\n", bh_timer_get_msec(&t));
+                /*if ((ic_4 + dc_4 + 1) == 18) {
                     fprintf(stderr, "%d %f %f\n", tIndex, _dstOrigin[0],
                             _dstOrigin[5]);
-                }
+                }*/
+                bh_timer_start(&t);
                 // Dest Transform
                 for (int xi = 0; xi < xC; ++xi) {
                     int index = xIndex + xi;
@@ -1727,6 +1842,8 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                         }
                     }
                 }
+                bh_timer_stop(&t);
+                fprintf(stderr, "conv3x3 dst %f\n", bh_timer_get_msec(&t));
             }
         }
     }

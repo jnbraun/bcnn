@@ -174,6 +174,18 @@ static void _norm_forward(float *x, float *mean, float *variance, int b, int c,
     }
 }
 
+static void scale_and_add_bias(float *dst, float *scales, float *biases,
+                               int batch_size, int spatial, int channel) {
+    for (int b = 0; b < batch_size; ++b) {
+        for (int j = 0; j < channel; ++j) {
+            for (int i = 0; i < spatial; ++i) {
+                int offset = b * channel * spatial + j * spatial + i;
+                dst[offset] = dst[offset] * scales[j] + biases[j];
+            }
+        }
+    }
+}
+
 void bcnn_forward_batchnorm_cpu(bcnn_tensor *src_tensor,
                                 bcnn_tensor *dst_tensor, bcnn_tensor *bn_mean,
                                 bcnn_tensor *bn_var, bcnn_tensor *bn_scales,
@@ -185,31 +197,39 @@ void bcnn_forward_batchnorm_cpu(bcnn_tensor *src_tensor,
     if (src_tensor != dst_tensor) {
         bcnn_copy_f32(sz * batch_size, src_tensor->data, dst_tensor->data);
     }
-    bcnn_copy_f32(sz * batch_size, dst_tensor->data, workspace);
 
-    if (mode == BCNN_MODE_TRAIN) {
-        _mean_variance_forward(dst_tensor->data, batch_size, dst_tensor->c,
-                               dst_tensor->h * dst_tensor->w, saved_mean->data,
-                               saved_variance->data);
-
-        bcnn_scal(dst_tensor->c, 0.9f, bn_mean->data);
-        bcnn_axpy(dst_tensor->c, 0.1f, saved_mean->data, bn_mean->data);
-        bcnn_scal(dst_tensor->c, 0.9f, bn_var->data);
-        bcnn_axpy(dst_tensor->c, 0.1f, saved_variance->data, bn_var->data);
-
-        _norm_forward(dst_tensor->data, saved_mean->data, saved_variance->data,
-                      batch_size, dst_tensor->c, dst_tensor->h * dst_tensor->w);
-        bcnn_copy_f32(batch_size * sz, dst_tensor->data, x_norm);
+    if (mode == BCNN_MODE_PREDICT) {
+        scale_and_add_bias(dst_tensor->data, bn_scales->data, biases->data,
+                           batch_size, dst_tensor->h * dst_tensor->w,
+                           dst_tensor->c);
     } else {
-        // Normalize with global mean / variance
-        _norm_forward(dst_tensor->data, bn_mean->data, bn_var->data, batch_size,
-                      dst_tensor->c, dst_tensor->h * dst_tensor->w);
+        bcnn_copy_f32(sz * batch_size, dst_tensor->data, workspace);
+        if (mode == BCNN_MODE_TRAIN) {
+            _mean_variance_forward(dst_tensor->data, batch_size, dst_tensor->c,
+                                   dst_tensor->h * dst_tensor->w,
+                                   saved_mean->data, saved_variance->data);
+
+            bcnn_scal(dst_tensor->c, 0.9f, bn_mean->data);
+            bcnn_axpy(dst_tensor->c, 0.1f, saved_mean->data, bn_mean->data);
+            bcnn_scal(dst_tensor->c, 0.9f, bn_var->data);
+            bcnn_axpy(dst_tensor->c, 0.1f, saved_variance->data, bn_var->data);
+
+            _norm_forward(dst_tensor->data, saved_mean->data,
+                          saved_variance->data, batch_size, dst_tensor->c,
+                          dst_tensor->h * dst_tensor->w);
+            bcnn_copy_f32(batch_size * sz, dst_tensor->data, x_norm);
+        } else {
+            // Normalize with global mean / variance
+            _norm_forward(dst_tensor->data, bn_mean->data, bn_var->data,
+                          batch_size, dst_tensor->c,
+                          dst_tensor->h * dst_tensor->w);
+        }
+        // dst <- scale * dst + bias
+        bcnn_scales(dst_tensor->data, bn_scales->data, batch_size,
+                    dst_tensor->c, dst_tensor->h * dst_tensor->w);
+        bcnn_add_bias(dst_tensor->data, biases->data, batch_size, dst_tensor->c,
+                      dst_tensor->h * dst_tensor->w);
     }
-    // dst <- scale * dst + bias
-    bcnn_scales(dst_tensor->data, bn_scales->data, batch_size, dst_tensor->c,
-                dst_tensor->h * dst_tensor->w);
-    bcnn_add_bias(dst_tensor->data, biases->data, batch_size, dst_tensor->c,
-                  dst_tensor->h * dst_tensor->w);
     return;
 }
 

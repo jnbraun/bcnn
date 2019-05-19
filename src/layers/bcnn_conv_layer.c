@@ -178,8 +178,7 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     }
 #ifdef CONV3X3
     // Special case for conv 3x3/s1
-    if (param->size == 3 && param->stride == 1 && param->batch_norm == 0 &&
-        param->num_groups == 1) {
+    if (param->size == 3 && param->stride == 1 && param->num_groups == 1) {
         // TEST
         /*for (int i = 0; i < bcnn_tensor_size(&weights); ++i) {
             weights.data[i] =
@@ -191,15 +190,16 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         param->workspace_size = net->num_threads * CONV_TILED *
                                 (src_c_div4 + bh_div_up(n, 4) + 1) *
                                 CONV3x3_SRC_BLOCK;
-        fprintf(stderr, "wk size %ld\n", param->workspace_size);
         param->conv_workspace =
             (float *)calloc(param->workspace_size, sizeof(float));
         param->weights_workspace =
             (float *)calloc(src_c_div4 * dst_c_div4 * 256, sizeof(float));
         param->biases_workspace = (float *)calloc(
-            bh_round_up(bcnn_tensor_size(&biases), 4), sizeof(float));
-        memcpy(param->biases_workspace, biases.data,
-               bcnn_tensor_size(&biases) * sizeof(float));
+            bh_round_up(net->tensors[node.dst[0]].c, 4), sizeof(float));
+        if (param->batch_norm == 1) {
+            param->scales_workspace = (float *)calloc(
+                bh_round_up(net->tensors[node.dst[0]].c, 4), sizeof(float));
+        }
         // fprintf(stderr, "%d %d\n", src_c_div4, dst_c_div4);
         // bcnn_conv3x3_convert_weights(weights.data, param->weights_workspace,
         //                             net->tensors[node.src[0]].c, n);
@@ -348,28 +348,28 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int wsz = bcnn_tensor_size(weights);
 #ifdef CONV3X3
     // Special case for conv 3x3/s1
-    if (param->size == 3 && param->stride == 1 && param->batch_norm == 0 &&
-        param->num_groups == 1) {
+    if (param->size == 3 && param->stride == 1 && param->num_groups == 1) {
         bh_timer t = {0};
         bh_timer_start(&t);
         bcnn_nchw_to_nc4hw4(param->src_workspace, src_tensor->data,
                             src_tensor->h * src_tensor->w, src_tensor->c);
         bh_timer_stop(&t);
-        fprintf(stderr, "pack %f\n", bh_timer_get_msec(&t));
+        fprintf(stderr, "pack %f msecs\n", bh_timer_get_msec(&t));
         bh_timer_start(&t);
         bcnn_conv3x3s1_kernel(
             param->src_workspace, src_tensor->w, src_tensor->h, src_tensor->c,
             param->dst_workspace, dst_tensor->w, dst_tensor->h, dst_tensor->c,
             batch_size, param->pad, param->weights_workspace,
-            param->biases_workspace, param->conv_workspace,
-            param->workspace_size, net->num_threads);
+            param->scales_workspace, param->biases_workspace,
+            param->conv_workspace, param->workspace_size, net->num_threads);
         bh_timer_stop(&t);
-        fprintf(stderr, "conv3x3 %f\n", bh_timer_get_msec(&t));
+        fprintf(stderr, "conv3x3 %f msecs\n", bh_timer_get_msec(&t));
         bh_timer_start(&t);
         bcnn_nc4hw4_to_nchw(dst_tensor->data, param->dst_workspace,
                             dst_tensor->w * dst_tensor->h, dst_tensor->c);
         bh_timer_stop(&t);
-        fprintf(stderr, "unpack %f\n", bh_timer_get_msec(&t));
+        fprintf(stderr, "%s unpack %f msecs\n", dst_tensor->name,
+                bh_timer_get_msec(&t));
     } else {
 #endif
         for (int i = 0; i < batch_size; ++i) {
@@ -402,29 +402,30 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
 #endif
             }
         }
+        if (param->batch_norm) {  // inplace batch norm
+            bcnn_forward_batchnorm_cpu(dst_tensor, dst_tensor, bn_mean, bn_var,
+                                       bn_scales, biases, &param->saved_mean,
+                                       &param->saved_variance, param->x_norm,
+                                       param->workspace, net->mode);
+        } else {
+            bcnn_add_bias(dst_tensor->data, biases->data, batch_size,
+                          param->num, dst_tensor->w * dst_tensor->h);
+        }
+
+        sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
+        bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
 #ifdef CONV3X3
     }
 #endif
     // TEST
-    int spatial = dst_tensor->w * dst_tensor->h;
+    /*int spatial = dst_tensor->w * dst_tensor->h;
     for (int i = 0; i < 5; i++) {
         fprintf(stderr, "%f %f %f %f\n", dst_tensor->data[spatial * i],
                 dst_tensor->data[spatial * i + 1],
                 dst_tensor->data[spatial * i + 2],
                 dst_tensor->data[spatial * i + 3]);
-    }
-    if (param->batch_norm) {  // inplace batch norm
-        bcnn_forward_batchnorm_cpu(dst_tensor, dst_tensor, bn_mean, bn_var,
-                                   bn_scales, biases, &param->saved_mean,
-                                   &param->saved_variance, param->x_norm,
-                                   param->workspace, net->mode);
-    } else {
-        bcnn_add_bias(dst_tensor->data, biases->data, batch_size, param->num,
-                      dst_tensor->w * dst_tensor->h);
-    }
+    }*/
 
-    sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
-    bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
     return;
 }
 
@@ -796,6 +797,7 @@ void bcnn_release_param_conv_layer(bcnn_node *node) {
     bh_free(param->adam_v);
     bh_free(param->weights_workspace);
     bh_free(param->biases_workspace);
+    bh_free(param->scales_workspace);
     bh_free(param->src_workspace);
     bh_free(param->dst_workspace);
 #ifdef BCNN_USE_CUDA

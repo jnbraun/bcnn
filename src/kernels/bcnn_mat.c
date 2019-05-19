@@ -1066,6 +1066,75 @@ static void bcnn_convert_NHWC_to_NC4HW4(float *dst, const float *src,
     }
 }
 
+void bcnn_add_bias_with_relu(float *dst, const float *bias, size_t planeNumber,
+                             size_t biasNumber) {
+#if defined(BCNN_USE_AVX)
+    __m128 mv = _mm_set1_ps(0.0f);
+    for (int z = 0; z < biasNumber; ++z) {
+        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        float *dst_z = dst + planeNumber * 4 * z;
+        for (int p = 0; p < planeNumber; ++p) {
+            __m128 dstV = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasV);
+            dstV = _mm_max_ps(dstV, mv);
+            _mm_store_ps(dst_z + 4 * p, dstV);
+        }
+    }
+#elif defined(BCNN_USE_NEON)
+// TODO
+#else
+    for (int z = 0; z < biasNumber; ++z) {
+        float *dstZ = dst + planeNumber * 4 * z;
+        const float *biasZ = bias + 4 * z;
+        for (int p = 0; p < planeNumber; ++p) {
+            float *dstX = dstZ + 4 * p;
+            for (int i = 0; i < 4; ++i) {
+                dstX[i] += biasZ[i];
+                if (dstX[i] < 0) {
+                    dstX[i] = 0;
+                }
+            }
+        }
+    }
+#endif
+}
+
+void bcnn_scale_and_add_bias(float *dst, const float *src, const float *bias,
+                             const float *alpha, size_t planeNumber,
+                             size_t biasNumber) {
+    for (int z = 0; z < biasNumber; ++z) {
+        float *dstZ = dst + planeNumber * 4 * z;
+        const float *srcZ = src + planeNumber * 4 * z;
+        const float *biasZ = bias + 4 * z;
+        const float *alphaZ = alpha + 4 * z;
+        for (int p = 0; p < planeNumber; ++p) {
+            float *dstX = dstZ + 4 * p;
+            const float *srcX = srcZ + 4 * p;
+            for (int i = 0; i < 4; ++i) {
+                dstX[i] = srcX[i] * alphaZ[i] + biasZ[i];
+            }
+        }
+    }
+}
+
+void bcnn_scale_and_add_bias_with_lrelu(float *dst, const float *src,
+                                        const float *bias, const float *alpha,
+                                        size_t planeNumber, size_t biasNumber) {
+    for (int z = 0; z < biasNumber; ++z) {
+        float *dstZ = dst + planeNumber * 4 * z;
+        const float *srcZ = src + planeNumber * 4 * z;
+        const float *biasZ = bias + 4 * z;
+        const float *alphaZ = alpha + 4 * z;
+        for (int p = 0; p < planeNumber; ++p) {
+            float *dstX = dstZ + 4 * p;
+            const float *srcX = srcZ + 4 * p;
+            for (int i = 0; i < 4; ++i) {
+                dstX[i] = srcX[i] * alphaZ[i] + biasZ[i];
+                // dstX[i] = (dstX[i] > 0 ? dstX[i] : 0.1f * dstX[i]);
+            }
+        }
+    }
+}
+
 void bcnn_convert_tensor_NHWC_to_NC4HW4(const float *source, float *dest, int b,
                                         int h, int w, int c) {
     int sourceBatchsize = h * w * c;
@@ -1288,7 +1357,6 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
                                 size_t dst_step, size_t dst_depth_quad,
                                 size_t width, size_t weight_depth_offset) {
 #if defined(BCNN_USE_AVX)
-
     int src_depth_step = 4 * width;
     int wC4 = width / 4;
     int w4End = wC4 * 4;
@@ -1413,19 +1481,19 @@ static void bcnn_gemm_kernel4x4_tiled(float *dstOrigin, const float *src,
 void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                            float *dst, int dst_w, int dst_h, int dst_c,
                            int batch_size, int pad, float *weights,
-                           float *biases, float *workspace, int workspace_sz,
-                           int num_threads) {
+                           float *scales, float *biases, float *workspace,
+                           int workspace_sz, int num_threads) {
     int ic_4 = bh_div_up(src_c, 4);
     int dc_4 = bh_div_up(dst_c, 4);
     int wUnit = bh_div_up(dst_w, 2);
     int hUnit = bh_div_up(dst_h, 2);
-    fprintf(stderr, "num_threads %d\n", num_threads);
+    // fprintf(stderr, "num_threads %d\n", num_threads);
     int workspace_thread_stride = workspace_sz / num_threads;
 
     // auto postFunction = mPostFunction;
     // print("dst_w=%d, dst_h=%d\n", dst_w, dst_h);
-    fprintf(stderr, "%d %d %d %d %d %d %d %d %d %d\n", dst_w, dst_h, src_w,
-            src_h, ic_4, dc_4, pad, pad, wUnit, hUnit);
+    /*fprintf(stderr, "%d %d %d %d %d %d %d %d %d %d\n", dst_w, dst_h, src_w,
+            src_h, ic_4, dc_4, pad, pad, wUnit, hUnit);*/
 
     for (int batchIndex = 0; batchIndex < batch_size; ++batchIndex) {
         float *srcOrigin = src + src_w * src_h * ic_4 * 4 * batchIndex;
@@ -1437,241 +1505,6 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
 
         float *weight = weights;
         float *bias = biases;
-#if 0
-        auto sourceTransformLambda = [&](int xIndex, int xC, float *_srcOrigin,
-                                         float *dstBlock) {
-            // Source Transform
-            for (int xi = 0; xi < xC; ++xi) {
-                int index = xIndex + xi;
-                float *dstUnit = _srcOrigin + 4 * xi;
-
-                int wIndex = index % wUnit;
-                int hIndex = index / wUnit;
-
-                int srcX = wIndex * 2 - pad;
-                int srcY = hIndex * 2 - pad;
-                int sy = bh_max(0, srcY) - srcY;
-                int ey = bh_min(srcY + 4, src_h) - srcY;
-                int sx = bh_max(0, srcX) - srcX;
-                int ex = bh_min(srcX + 4, src_w) - srcX;
-
-                float *srcStart = srcOrigin + (srcX + srcY * src_w) * 4;
-
-                for (int z = 0; z < ic_4; ++z) {
-                    memset(dstBlock, 0, CONV3x3_SRC_BLOCK * sizeof(float));
-
-                    auto _dstStart = dstUnit + z * 4 * xC;
-
-                    float *src_z = srcStart + z * 4 * src_w * src_h;
-                    if (ex > sx) {
-                        // Extract One Block
-                        for (int yy = sy; yy < ey; ++yy) {
-                            auto dst_yy = dstBlock + yy * 16;
-                            auto src_yy = src_z + 4 * src_w * yy;
-                            memcpy(dst_yy + 4 * sx, src_yy + sx * 4,
-                                   4 * (ex - sx) * sizeof(float));
-                        }
-                    }
-                    // Transform
-                    sourceTransform(dstBlock, _dstStart, 4 * xC * ic_4);
-                }
-            }
-        };
-
-        std::function<void(int, const float *, float *)> gemmFunctionLambda =
-            [&](int xC, const float *_srcOrigin, float *_dstOrigin) {
-                // Multi
-                if (xC == CONV_TILED) {
-                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
-                        MNNGemmFloatUnit_4(_dstOrigin + i * dc_4 * 4 * xC,
-                                           _srcOrigin + i * ic_4 * 4 * xC,
-                                           weight + i * 16 * ic_4 * dc_4, ic_4,
-                                           xC * 4, dc_4, 0);
-                    }
-                } else {
-                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
-                        bcnn_gemm_kernel4x4(_dstOrigin + (i * dc_4) * xC * 4,
-                                             _srcOrigin + i * ic_4 * 4 * xC,
-                                             weight + (i * dc_4) * ic_4 * 16,
-                                             ic_4, xC * 4, dc_4, xC, 0);
-                    }
-                }
-            };
-        if (mInsideThread) {
-            auto num_threads = ((CPUBackend *)backend())->num_threads();
-            gemmFunctionLambda = [&](int xC, const float *_srcOrigin,
-                                     float *_dstOrigin) {
-                // Multi
-                if (xC == CONV_TILED) {
-                    MNN_CONCURRENCY_BEGIN(tId, num_threads) {
-                        for (int i = (int)tId; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
-                             i += num_threads) {
-                            MNNGemmFloatUnit_4(_dstOrigin + i * dc_4 * 4 * xC,
-                                               _srcOrigin + i * ic_4 * 4 * xC,
-                                               weight + i * 16 * ic_4 * dc_4,
-                                               ic_4, xC * 4, dc_4, 0);
-                        }
-                    }
-                    MNN_CONCURRENCY_END();
-                } else {
-                    MNN_CONCURRENCY_BEGIN(tId, num_threads) {
-                        for (int i = (int)tId; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
-                             i += num_threads) {
-                            bcnn_gemm_kernel4x4(
-                                _dstOrigin + (i * dc_4) * xC * 4,
-                                _srcOrigin + i * ic_4 * 4 * xC,
-                                weight + (i * dc_4) * ic_4 * 16, ic_4, xC * 4,
-                                dc_4, xC, 0);
-                        }
-                    }
-                    MNN_CONCURRENCY_END();
-                }
-            };
-        }
-
-        auto outsideFunction = [&](int tId) {
-            float *_srcOrigin = workspace + tId * workspace_thread_stride;
-            for (int tIndex = (int)tId; tIndex < tileCount;
-                 tIndex += num_threads) {
-                int xIndex = (int)tIndex * CONV_TILED;
-                int xReamin = totalCount - xIndex;
-                int xC = xReamin > CONV_TILED ? CONV_TILED : xReamin;
-                auto dstBlock = _srcOrigin + xC * CONV3x3_SRC_BLOCK * (ic_4 + dc_4);
-                auto _dstOrigin = _srcOrigin + xC * CONV3x3_SRC_BLOCK * ic_4;
-
-                // sourceTransformLambda(xIndex, xC, _srcOrigin, dstBlock);
-                // Source Transform
-                // auto sourceTransformLambda = [&](int xIndex, int xC,
-                // float
-                // *_srcOrigin,
-                //                         float *dstBlock)
-
-                for (int xi = 0; xi < xC; ++xi) {
-                    int index = xIndex + xi;
-                    float *dstUnit = _srcOrigin + 4 * xi;
-
-                    int wIndex = index % wUnit;
-                    int hIndex = index / wUnit;
-
-                    int srcX = wIndex * 2 - pad;
-                    int srcY = hIndex * 2 - pad;
-                    int sy = bh_max(0, srcY) - srcY;
-                    int ey = bh_min(srcY + 4, src_h) - srcY;
-                    int sx = bh_max(0, srcX) - srcX;
-                    int ex = bh_min(srcX + 4, src_w) - srcX;
-
-                    float *srcStart = srcOrigin + (srcX + srcY * src_w) * 4;
-
-                    for (int z = 0; z < ic_4; ++z) {
-                        memset(dstBlock, 0, CONV3x3_SRC_BLOCK * sizeof(float));
-
-                        auto _dstStart = dstUnit + z * 4 * xC;
-
-                        float *src_z = srcStart + z * 4 * src_w * src_h;
-                        if (ex > sx) {
-                            // Extract One Block
-                            for (int yy = sy; yy < ey; ++yy) {
-                                auto dst_yy = dstBlock + yy * 16;
-                                auto src_yy = src_z + 4 * src_w * yy;
-                                memcpy(dst_yy + 4 * sx, src_yy + sx * 4,
-                                       4 * (ex - sx) * sizeof(float));
-                            }
-                        }
-                        // Transform
-                        sourceTransform(dstBlock, _dstStart, 4 * xC * ic_4);
-                    }
-                }
-                // gemmFunctionLambda(xC, _srcOrigin, _dstOrigin);
-                // gemmFunctionLambda = [&](int xC, const float *_srcOrigin,
-                //                     float *_dstOrigin)
-                if (xC == CONV_TILED) {
-                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
-                        MNNGemmFloatUnit_4(_dstOrigin + i * dc_4 * 4 * xC,
-                                           _srcOrigin + i * ic_4 * 4 * xC,
-                                           weight + i * 16 * ic_4 * dc_4, ic_4,
-                                           xC * 4, dc_4, 0);
-                    }
-                } else {
-                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
-                        bcnn_gemm_kernel4x4(_dstOrigin + (i * dc_4) * xC * 4,
-                                             _srcOrigin + i * ic_4 * 4 * xC,
-                                             weight + (i * dc_4) * ic_4 * 16,
-                                             ic_4, xC * 4, dc_4, xC, 0);
-                    }
-                }
-                if (inside_thread) {
-                    // Multi
-                    if (xC == CONV_TILED) {
-#pragma omp parallel for
-                        for (int tiid = 0; tiid < num_threads; tiid++) {
-                            for (int i = tiid; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
-                                 i += num_threads) {
-                                MNNGemmFloatUnit_4(
-                                    _dstOrigin + i * dc_4 * 4 * xC,
-                                    _srcOrigin + i * ic_4 * 4 * xC,
-                                    weight + i * 16 * ic_4 * dc_4, ic_4, xC * 4,
-                                    dc_4, 0);
-                            }
-                        }
-
-                    } else {
-#pragma omp parallel for
-                        for (int tiid = 0; tiid < num_threads; tiid++) {
-                            for (int i = tiid; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
-                                 i += num_threads) {
-                                bcnn_gemm_kernel4x4(
-                                    _dstOrigin + (i * dc_4) * xC * 4,
-                                    _srcOrigin + i * ic_4 * 4 * xC,
-                                    weight + (i * dc_4) * ic_4 * 16, ic_4,
-                                    xC * 4, dc_4, xC, 0);
-                            }
-                        }
-                    }
-                }
-
-                // Dest Transform
-                for (int xi = 0; xi < xC; ++xi) {
-                    auto index = xIndex + xi;
-                    auto srcUnit = _dstOrigin + 4 * xi;
-
-                    int wIndex = index % wUnit;
-                    int hIndex = index / wUnit;
-
-                    int dstX = wIndex * 2;
-                    int dstY = hIndex * 2;
-
-                    auto dstStart = dstOrigin + 4 * (dstX + dstY * dst_w);
-
-                    for (int z = 0; z < dc_4; ++z) {
-                        auto srcZ = srcUnit + z * xC * 4;
-                        auto dstZ = dstStart + z * dst_w * dst_h * 4;
-                        destTransform(srcZ, dstBlock, dc_4 * 4 * xC);
-                        // No bias addition
-                        // float *bias_z = bias + 4 * z;
-                        // postFunction(dstBlock, bias_z, 4, 1);
-                        bv_float4_store(dstZ, bv_float4_load(dstBlock));
-                        if (wIndex * 2 + 1 < dst_w) {
-                            bv_float4_store(dstZ + 4,
-                                            bv_float4_load(dstBlock + 4));
-                        }
-                        if (hIndex * 2 + 1 < dst_h) {
-                            bv_float4_store(dstZ + dst_w * 4,
-                                            bv_float4_load(dstBlock + 8));
-                            if (wIndex * 2 + 1 < dst_w) {
-                                bv_float4_store(dstZ + dst_w * 4 + 4,
-                                                bv_float4_load(dstBlock + 12));
-                            }
-                        }
-                    }
-                }
-            }
-        };
-#endif
-
-/*for (int i = 0; i < 10; i += 4) {
-    fprintf(stderr, "%f %f %f %f\n", srcOrigin[i], srcOrigin[i + 1],
-            srcOrigin[i + 2], srcOrigin[i + 3]);
-}*/
 
 #pragma omp parallel for
         for (int tId = 0; tId < num_threads; tId++) {
@@ -1823,10 +1656,14 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                         float *srcZ = srcUnit + z * xC * 4;
                         float *dstZ = dstStart + z * dst_w * dst_h * 4;
                         bcnn_conv3x3_convert_dst(srcZ, dstBlock, dc_4 * 4 * xC);
-                        // No bias addition
-                        // float *bias_z = bias + 4 * z;
-                        // postFunction(dstBlock, bias_z,
-                        // 4BCNN_INVALID_PARAMETER, 1);
+                        // bias addition and relu
+                        float *bias_z = bias + 4 * z;
+                        float *scales_z = scales + 4 * z;
+                        bcnn_add_bias_with_relu(dstBlock, bias_z, 4, 1);
+                        /*bcnn_scale_and_add_bias(dstBlock, dstBlock, bias_z,
+                                                scales_z, 4, 1);*/
+                        /*bcnn_scale_and_add_bias_with_lrelu(
+                            dstBlock, dstBlock, bias_z, scales_z, 4, 1);*/
                         bv_float4_store(bv_float4_load(dstBlock), dstZ);
                         if (wIndex * 2 + 1 < dst_w) {
                             bv_float4_store(bv_float4_load(dstBlock + 4),

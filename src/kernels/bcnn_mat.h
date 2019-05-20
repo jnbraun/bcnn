@@ -184,8 +184,6 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                            int batch_size, int pad, float *weights,
                            float *scales, float *biases, float *workspace,
                            int workspace_sz, int num_threads);
-void bcnn_convert_tensor_NHWC_to_NC4HW4(const float *source, float *dest, int b,
-                                        int h, int w, int c);
 void bcnn_nchw_to_nc4hw4(float *dst, const float *src, size_t area,
                          size_t depth);
 void bcnn_nc4hw4_to_nchw(float *dst, const float *src, size_t area,

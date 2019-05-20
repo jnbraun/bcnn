@@ -411,19 +411,18 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
             bcnn_add_bias(dst_tensor->data, biases->data, batch_size,
                           param->num, dst_tensor->w * dst_tensor->h);
         }
-
         sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
         bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
 #ifdef CONV3X3
     }
 #endif
     // TEST
-    /*int spatial = dst_tensor->w * dst_tensor->h;
+    /*int spatial2 = dst_tensor->w * dst_tensor->h;
     for (int i = 0; i < 5; i++) {
-        fprintf(stderr, "%f %f %f %f\n", dst_tensor->data[spatial * i],
-                dst_tensor->data[spatial * i + 1],
-                dst_tensor->data[spatial * i + 2],
-                dst_tensor->data[spatial * i + 3]);
+        fprintf(stderr, "%f %f %f %f\n", dst_tensor->data[spatial2 * i],
+                dst_tensor->data[spatial2 * i + 1],
+                dst_tensor->data[spatial2 * i + 2],
+                dst_tensor->data[spatial2 * i + 3]);
     }*/
 
     return;

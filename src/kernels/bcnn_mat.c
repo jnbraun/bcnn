@@ -971,101 +971,6 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
     }
 }
 
-static void bcnn_convert_NHWC_to_NC4HW4(float *dst, const float *src,
-                                        size_t area, size_t depth) {
-#ifdef BCNN_USE_NEON
-    if (1 == depth) {
-        float32x4_t zeroValue = vmovq_n_f32(0.0f);
-        int areaC4 = (int)area / 4;
-        int remain = areaC4 * 4;
-        for (int i = 0; i < areaC4; ++i) {
-            float *srcCur = src + 4 * i;
-            float *dstCur = dst + 16 * i;
-            float32x4_t srcValue = vld1q_f32(srcCur);
-            float32x4x4_t dstValue;
-            dstValue.val[0] = srcValue;
-            dstValue.val[1] = zeroValue;
-            dstValue.val[2] = zeroValue;
-            dstValue.val[3] = zeroValue;
-            vst4q_f32(dstCur, dstValue);
-        }
-        for (int i = remain; i < area; ++i) {
-            dst[4 * i + 0] = src[i];
-            dst[4 * i + 1] = 0.0f;
-            dst[4 * i + 2] = 0.0f;
-            dst[4 * i + 3] = 0.0f;
-        }
-        return;
-    }
-    if (3 == depth) {
-        float32x4_t zeroValue = vmovq_n_f32(0.0f);
-        int areaC4 = (int)area / 4;
-        int remain = areaC4 * 4;
-        for (int i = 0; i < areaC4; ++i) {
-            float *srcCur = src + 12 * i;
-            float *dstCur = dst + 16 * i;
-            float32x4x3_t srcValue = vld3q_f32(srcCur);
-            float32x4x4_t dstValue;
-            dstValue.val[0] = srcValue.val[0];
-            dstValue.val[1] = srcValue.val[1];
-            dstValue.val[2] = srcValue.val[2];
-            dstValue.val[3] = zeroValue;
-            vst4q_f32(dstCur, dstValue);
-        }
-        for (int i = remain; i < area; ++i) {
-            dst[4 * i + 0] = src[3 * i + 0];
-            dst[4 * i + 1] = src[3 * i + 1];
-            dst[4 * i + 2] = src[3 * i + 2];
-            dst[4 * i + 3] = 0.0f;
-        }
-        return;
-    }
-#endif
-    int c = (int)depth;
-    int cDiv4 = c / 4;
-    int cAlign = cDiv4 * 4;
-    for (int hi = 0; hi < area; ++hi) {
-        const float *srcHeight = src + hi * c;
-        float *dstHeight = dst + hi * 4;
-        for (int ci = 0; ci < cDiv4; ++ci) {
-#ifdef BCNN_USE_NEON
-            vst1q_f32(dstHeight + 4 * ci * area, vld1q_f32(srcHeight + 4 * ci));
-#else
-            for (int i = 0; i < 4; ++i) {
-                dstHeight[ci * area * 4 + i] = srcHeight[4 * ci + i];
-            }
-#endif
-        }
-    }
-
-    if (cAlign == c) {
-        return;
-    }
-
-    int cReamin = c - cAlign;
-    float *srcAlign = src + cAlign;
-    float *dstAlign = dst + area * cAlign;
-
-#ifdef BCNN_USE_NEON
-    float32x4_t zeroVector = vdupq_n_f32(0.0f);
-#endif
-
-    for (int hi = 0; hi < area; ++hi) {
-        const float *srcHeight = srcAlign + hi * c;
-        float *dstHeight = dstAlign + hi * 4;
-#ifdef BCNN_USE_NEON
-        vst1q_f32(dstHeight, zeroVector);
-#else
-        for (int i = 0; i < 4; ++i) {
-            dstHeight[i] = 0;
-        }
-#endif
-        for (int ci = 0; ci < cReamin; ++ci) {
-            dstHeight[ci] = srcHeight[ci];
-        }
-    }
-}
-
 void bcnn_add_bias_with_relu(float *dst, const float *bias, size_t planeNumber,
                              size_t biasNumber) {
 #if defined(BCNN_USE_AVX)
@@ -1129,21 +1034,9 @@ void bcnn_scale_and_add_bias_with_lrelu(float *dst, const float *src,
             const float *srcX = srcZ + 4 * p;
             for (int i = 0; i < 4; ++i) {
                 dstX[i] = srcX[i] * alphaZ[i] + biasZ[i];
-                // dstX[i] = (dstX[i] > 0 ? dstX[i] : 0.1f * dstX[i]);
+                dstX[i] = (dstX[i] > 0 ? dstX[i] : 0.1f * dstX[i]);
             }
         }
-    }
-}
-
-void bcnn_convert_tensor_NHWC_to_NC4HW4(const float *source, float *dest, int b,
-                                        int h, int w, int c) {
-    int sourceBatchsize = h * w * c;
-    int destBatchSize = bh_round_up(c, 4) * w * h;
-    int area = w * h;
-    for (int bi = 0; bi < b; ++bi) {
-        float *srcBatch = source + bi * sourceBatchsize;
-        float *dstBatch = dest + bi * destBatchSize;
-        bcnn_convert_NHWC_to_NC4HW4(dstBatch, srcBatch, area, c);
     }
 }
 
@@ -1567,16 +1460,18 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                 }
                 // bh_timer_stop(&t);
                 // fprintf(stderr, "conv3x3 src %f\n", bh_timer_get_msec(&t));
-                /*if ((ic_4 + dc_4 + 1) == 18) {
-                    fprintf(stderr, "%d %d %d %d %f %f\n",
-                            ((((xIndex + xC) % wUnit) * 2 - pad) +
-                             (((xIndex + xC) / wUnit) * 2 - pad) * src_w) *
-                                    4 +
-                                (ic_4 - 1) * 4 * src_w * src_h,
-                            xC * CONV3x3_SRC_BLOCK * (ic_4),
-                            xC * CONV3x3_SRC_BLOCK * (ic_4 + dc_4), tIndex,
-                            _srcOrigin[0], _srcOrigin[5]);
-                }*/
+
+                /*fprintf(stderr, "%d %d %d %d %f %f\n",
+                        ((((xIndex + xC) % wUnit) * 2 - pad) +
+                         (((xIndex + xC) / wUnit) * 2 - pad) * src_w) *
+                                4 +
+                            (ic_4 - 1) * 4 * src_w * src_h,
+                        xC * CONV3x3_SRC_BLOCK * (ic_4),
+                        xC * CONV3x3_SRC_BLOCK * (ic_4 + dc_4), tIndex,
+                        _srcOrigin[0], _srcOrigin[5]);*/
+                // fprintf(stderr, "w %d %f %f\n", tIndex, weight[0],
+                // weight[5]);
+
                 // gemmFunctionLambda(xC, _srcOrigin, _dstOrigin);
                 // gemmFunctionLambda = [&](int xC, const float *_srcOrigin,
                 //                     float *_dstOrigin)
@@ -1635,10 +1530,10 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                 }
                 // bh_timer_stop(&t);
                 // fprintf(stderr, "conv3x3 gemm %f\n", bh_timer_get_msec(&t));
-                /*if ((ic_4 + dc_4 + 1) == 18) {
-                    fprintf(stderr, "%d %f %f\n", tIndex, _dstOrigin[0],
-                            _dstOrigin[5]);
-                }*/
+
+                /*fprintf(stderr, "%d %f %f\n", tIndex, _dstOrigin[0],
+                        _dstOrigin[5]);*/
+
                 // bh_timer_start(&t);
                 // Dest Transform
                 for (int xi = 0; xi < xC; ++xi) {
@@ -1659,11 +1554,11 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                         // bias addition and relu
                         float *bias_z = bias + 4 * z;
                         float *scales_z = scales + 4 * z;
-                        bcnn_add_bias_with_relu(dstBlock, bias_z, 4, 1);
+                        // bcnn_add_bias_with_relu(dstBlock, bias_z, 4, 1);
                         /*bcnn_scale_and_add_bias(dstBlock, dstBlock, bias_z,
                                                 scales_z, 4, 1);*/
-                        /*bcnn_scale_and_add_bias_with_lrelu(
-                            dstBlock, dstBlock, bias_z, scales_z, 4, 1);*/
+                        bcnn_scale_and_add_bias_with_lrelu(
+                            dstBlock, dstBlock, bias_z, scales_z, 4, 1);
                         bv_float4_store(bv_float4_load(dstBlock), dstZ);
                         if (wIndex * 2 + 1 < dst_w) {
                             bv_float4_store(bv_float4_load(dstBlock + 4),

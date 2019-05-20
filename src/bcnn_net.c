@@ -1157,13 +1157,12 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 "Inconsistent batchnorm means size: expected %d but found "
                 "%lu\n",
                 m_sz, (unsigned long)nr);
-            BCNN_CHECK_AND_LOG(
-                net->log_ctx,
-                (nr = fread(v->data, sizeof(float), v_sz, fp)) == v_sz,
-                BCNN_INVALID_MODEL,
-                "Inconsistent batchnorm variances size: "
-                "expected %d but found %lu\n",
-                v_sz, (unsigned long)nr);
+            BCNN_CHECK_AND_LOG(net->log_ctx, (nr = fread(v->data, sizeof(float),
+                                                         v_sz, fp)) == v_sz,
+                               BCNN_INVALID_MODEL,
+                               "Inconsistent batchnorm variances size: "
+                               "expected %d but found %lu\n",
+                               v_sz, (unsigned long)nr);
             if (format == 0) {
                 BCNN_CHECK_AND_LOG(
                     net->log_ctx,
@@ -1177,9 +1176,9 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 // Fuse mean / variance into scales and biases for optimal
                 // inference speed
                 for (int i = 0; i < s_sz; ++i) {
-                    b->data[i] =
-                        b->data[i] - (s->data[i] * m->data[i]) /
-                                         (sqrtf(v->data[i] + 0.000001f));
+                    b->data[i] = b->data[i] -
+                                 (s->data[i] * m->data[i]) /
+                                     (sqrtf(v->data[i] + 0.000001f));
                     s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
                 }
             }
@@ -1201,8 +1200,8 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
 #ifdef CONV3X3
     if (node->type == BCNN_LAYER_CONV2D) {
         bcnn_conv_param *param = (bcnn_conv_param *)node->param;
-        if (param->size == 3 && param->stride == 1 && param->batch_norm == 0 &&
-            param->num_groups == 1 && net->mode == BCNN_MODE_PREDICT) {
+        if (param->size == 3 && param->stride == 1 && param->num_groups == 1 &&
+            net->mode == BCNN_MODE_PREDICT) {
             bcnn_conv3x3_convert_weights(w->data, param->weights_workspace,
                                          net->tensors[node->src[0]].c,
                                          net->tensors[node->dst[0]].c);

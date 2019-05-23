@@ -23,6 +23,8 @@
 #ifndef BCNN_MAT_H
 #define BCNN_MAT_H
 
+#include <stdio.h>
+
 /* OpenMP */
 #ifdef BCNN_USE_OPENMP
 #include <omp.h>
@@ -88,7 +90,7 @@ extern "C" {
 #endif  // __aarch64__
 
 #if (defined(__aarch64__))
-#define CONV_TILED 16
+#define CONV_TILED 16  // 16
 #else
 #define CONV_TILED 8
 #endif  // __aarch64__
@@ -199,7 +201,7 @@ static inline bv_float4 bv_float4_load(const float *x) {
 #if defined(BCNN_USE_AVX)
     v.val = _mm_load_ps(x);
 #elif defined(BCNN_USE_NEON)
-    v.val = vdupq_n_f32(x);
+    v.val = vld1q_f32(x);
 #else
     v.val[0] = x[0];
     v.val[1] = x[1];

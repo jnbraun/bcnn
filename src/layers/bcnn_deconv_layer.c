@@ -178,7 +178,10 @@ void bcnn_forward_deconv_layer_cpu(bcnn_net *net, bcnn_node *node) {
                   dst_tensor->w * dst_tensor->h);
 
     sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
-    bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
+    // TODO: prelu not supported
+    bcnn_forward_activation_cpu(dst_tensor->data, sz, NULL,
+                                dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                                param->activation);
 
     return;
 }
@@ -196,11 +199,11 @@ void bcnn_backward_deconv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int k = src_tensor->w * src_tensor->h;
     float *pdst = NULL;
     float alpha = 1.0f / batch_size;
-
+    // TODO: prelu not supported
     bcnn_backward_activation_cpu(
         dst_tensor->data, dst_tensor->grad_data,
-        dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size,
-        param->activation);
+        dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size, NULL, NULL,
+        dst_tensor->w * dst_tensor->h, dst_tensor->c, param->activation);
 
     bcnn_grad_bias(biases->grad_data, dst_tensor->grad_data, batch_size,
                    param->num, dst_tensor->w * dst_tensor->h);

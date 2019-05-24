@@ -34,10 +34,13 @@ typedef struct bcnn_activation_param {
     bcnn_activation activation;
 } bcnn_activation_param;
 
-void bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a);
+void bcnn_forward_activation_cpu(float *x, int sz, float *slope,
+                                 int spatial_size, int channels,
+                                 bcnn_activation a);
 void bcnn_forward_activation_layer(bcnn_net *net, bcnn_node *node);
-void bcnn_backward_activation_cpu(float *x, float *dx, int sz,
-                                  bcnn_activation a);
+void bcnn_backward_activation_cpu(float *x, float *dx, int sz, float *slope,
+                                  float *grad_slope, int spatial_size,
+                                  int channels, bcnn_activation a);
 void bcnn_backward_activation_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_update_activation_layer(bcnn_net *net, bcnn_node *node);
 

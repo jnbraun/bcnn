@@ -184,17 +184,17 @@ void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step);
 void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                            float *dst, int dst_w, int dst_h, int dst_c,
                            int batch_size, int pad, float *weights,
-                           float *scales, float *biases, float *workspace,
-                           int workspace_sz, int num_threads);
+                           float *scales, float *biases, float *slopes,
+                           float *workspace, int workspace_sz, int post_func,
+                           int num_threads);
 void bcnn_nchw_to_nc4hw4(float *dst, const float *src, size_t area,
                          size_t depth);
 void bcnn_nc4hw4_to_nchw(float *dst, const float *src, size_t area,
                          size_t depth);
-void bcnn_add_bias_with_relu(float *dst, const float *bias, size_t planeNumber,
-                             size_t biasNumber);
-void bcnn_scale_and_add_bias_with_lrelu(float *dst, const float *src,
-                                        const float *bias, const float *alpha,
-                                        size_t planeNumber, size_t biasNumber);
+
+typedef void (*bcnn_post_conv_nc4hw4_func)(
+    float *dst, const float *src, const float *bias, const float *alpha,
+    const float *slope, size_t num_planes, size_t num_biases);
 
 static inline bv_float4 bv_float4_load(const float *x) {
     bv_float4 v;

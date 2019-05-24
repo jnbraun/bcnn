@@ -20,6 +20,8 @@
  * SOFTWARE.
  */
 
+#include <bcnn/bcnn.h>
+
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 
@@ -176,9 +178,21 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         param->x_norm = (float *)calloc(sz, sizeof(float));
         param->workspace = (float *)calloc(sz, sizeof(float));
     }
+    if (param->activation == BCNN_ACT_PRELU) {
+        char prelu_slopes_name[256];
+        sprintf(prelu_slopes_name, "%s_prelu_slopes", src_id);
+        bcnn_tensor slopes = {0};
+        bcnn_tensor_create(&slopes, 1, 1, 1, net->tensors[node.dst[0]].c, 0,
+                           prelu_slopes_name,
+                           net->mode);  // no gradients
+        BCNN_CHECK_STATUS(bcnn_net_add_tensor(net, slopes));
+        BCNN_CHECK_STATUS(
+            bcnn_node_add_input(net, &node, net->num_tensors - 1));
+    }
 #ifdef CONV3X3
     // Special case for conv 3x3/s1
-    if (param->size == 3 && param->stride == 1 && param->num_groups == 1) {
+    if (param->size == 3 && param->stride == 1 && param->num_groups == 1 &&
+        net->mode == BCNN_MODE_PREDICT) {
         // TEST
         /*for (int i = 0; i < bcnn_tensor_size(&weights); ++i) {
             weights.data[i] =
@@ -200,6 +214,10 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
             param->scales_workspace = (float *)calloc(
                 bh_round_up(net->tensors[node.dst[0]].c, 4), sizeof(float));
         }
+        if (param->activation == BCNN_ACT_PRELU) {
+            param->slopes_workspace = (float *)calloc(
+                bh_round_up(net->tensors[node.dst[0]].c, 4), sizeof(float));
+        }
         // fprintf(stderr, "%d %d\n", src_c_div4, dst_c_div4);
         // bcnn_conv3x3_convert_weights(weights.data, param->weights_workspace,
         //                             net->tensors[node.src[0]].c, n);
@@ -212,6 +230,19 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
                         net->tensors[node.dst[0]].h * dst_c_div4 * 4 *
                         net->tensors[node.dst[0]].n;
         param->dst_workspace = (float *)calloc(dst_sz, sizeof(float));
+        // Post-function (fused batchnorm and activation)
+        // TODO: hacky, and will break when post-function table is updated
+        param->post_func = 0;
+        if (param->activation == BCNN_ACT_RELU) {
+            param->post_func = 1;
+        } else if (param->activation == BCNN_ACT_LRELU) {
+            param->post_func = 2;
+        } else if (param->activation == BCNN_ACT_PRELU) {
+            param->post_func = 3;
+        }
+        if (param->batch_norm == 1) {
+            param->post_func += 4;
+        }
     }
 #endif
 #ifdef BCNN_USE_CUDA
@@ -328,11 +359,18 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *bn_mean = NULL;
     bcnn_tensor *bn_var = NULL;
     bcnn_tensor *bn_scales = NULL;
+    bcnn_tensor *slopes = NULL;  // for prelu activation
     bcnn_conv_param *param = (bcnn_conv_param *)node->param;
     if (param->batch_norm == 1) {
         bn_mean = &net->tensors[node->src[3]];
         bn_var = &net->tensors[node->src[4]];
         bn_scales = &net->tensors[node->src[5]];
+    }
+    float *slopes_data = NULL;
+    if (param->activation == BCNN_ACT_PRELU) {
+        int tid = 3 + 3 * (param->batch_norm);
+        slopes = &net->tensors[node->src[tid]];
+        slopes_data = slopes->data;
     }
     int batch_size = src_tensor->n;
 
@@ -348,7 +386,8 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int wsz = bcnn_tensor_size(weights);
 #ifdef CONV3X3
     // Special case for conv 3x3/s1
-    if (param->size == 3 && param->stride == 1 && param->num_groups == 1) {
+    if (param->size == 3 && param->stride == 1 && param->num_groups == 1 &&
+        net->mode == BCNN_MODE_PREDICT) {
         bh_timer t = {0};
         bh_timer_start(&t);
         bcnn_nchw_to_nc4hw4(param->src_workspace, src_tensor->data,
@@ -361,7 +400,8 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
             param->dst_workspace, dst_tensor->w, dst_tensor->h, dst_tensor->c,
             batch_size, param->pad, param->weights_workspace,
             param->scales_workspace, param->biases_workspace,
-            param->conv_workspace, param->workspace_size, net->num_threads);
+            param->slopes_workspace, param->conv_workspace,
+            param->workspace_size, param->post_func, net->num_threads);
         bh_timer_stop(&t);
         fprintf(stderr, "conv3x3 %f msecs\n", bh_timer_get_msec(&t));
         bh_timer_start(&t);
@@ -370,6 +410,15 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
         bh_timer_stop(&t);
         fprintf(stderr, "%s unpack %f msecs\n", dst_tensor->name,
                 bh_timer_get_msec(&t));
+        // In case of the activation function is not supported in nc4hw4,
+        // process it here
+        if ((param->post_func % 4) == 0 &&
+            (param->activation != BCNN_ACT_NONE)) {
+            bcnn_forward_activation_cpu(
+                dst_tensor->data, bcnn_tensor_size(dst_tensor), slopes_data,
+                dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                param->activation);
+        }
     } else {
 #endif
         for (int i = 0; i < batch_size; ++i) {
@@ -412,7 +461,9 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
                           param->num, dst_tensor->w * dst_tensor->h);
         }
         sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
-        bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
+        bcnn_forward_activation_cpu(dst_tensor->data, sz, slopes_data,
+                                    dst_tensor->w * dst_tensor->h,
+                                    dst_tensor->c, param->activation);
 #ifdef CONV3X3
     }
 #endif
@@ -436,11 +487,20 @@ void bcnn_backward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *bn_mean = NULL;
     bcnn_tensor *bn_var = NULL;
     bcnn_tensor *bn_scales = NULL;
+    bcnn_tensor *slopes = NULL;
     bcnn_conv_param *param = (bcnn_conv_param *)node->param;
     if (param->batch_norm == 1) {
         bn_mean = &net->tensors[node->src[3]];
         bn_var = &net->tensors[node->src[4]];
         bn_scales = &net->tensors[node->src[5]];
+    }
+    float *slopes_data = NULL;
+    float *slopes_grad = NULL;
+    if (param->activation == BCNN_ACT_PRELU) {
+        int tid = 3 + 3 * (param->batch_norm);
+        slopes = &net->tensors[node->src[tid]];
+        slopes_data = slopes->data;
+        slopes_grad = slopes->grad_data;
     }
     int batch_size = src_tensor->n;
     int i, sz = src_tensor->w * src_tensor->h * src_tensor->c;
@@ -451,7 +511,8 @@ void bcnn_backward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
 
     bcnn_backward_activation_cpu(
         dst_tensor->data, dst_tensor->grad_data,
-        dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size,
+        dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size, slopes_data,
+        slopes_grad, dst_tensor->w * dst_tensor->h, dst_tensor->c,
         param->activation);
 
     if (param->batch_norm) {  // inplace batch norm
@@ -797,6 +858,7 @@ void bcnn_release_param_conv_layer(bcnn_node *node) {
     bh_free(param->weights_workspace);
     bh_free(param->biases_workspace);
     bh_free(param->scales_workspace);
+    bh_free(param->slopes_workspace);
     bh_free(param->src_workspace);
     bh_free(param->dst_workspace);
 #ifdef BCNN_USE_CUDA

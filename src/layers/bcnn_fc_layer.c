@@ -160,8 +160,10 @@ void bcnn_forward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
     for (int i = 0; i < batch_size; ++i) {
         bcnn_axpy(dst_size, 1, biases->data, dst_tensor->data + i * dst_size);
     }
-
-    bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
+    // TODO: prelu not supported
+    bcnn_forward_activation_cpu(dst_tensor->data, sz, NULL,
+                                dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                                param->activation);
 
     return;
 }
@@ -178,7 +180,8 @@ void bcnn_backward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int sz = bcnn_tensor_size(dst_tensor);
 
     bcnn_backward_activation_cpu(dst_tensor->data, dst_tensor->grad_data, sz,
-                                 param->activation);
+                                 NULL, NULL, dst_tensor->w * dst_tensor->h,
+                                 dst_tensor->c, param->activation);
 
     for (int i = 0; i < batch_size; ++i) {
         bcnn_axpy(dst_size, 1, dst_tensor->grad_data + i * dst_size,

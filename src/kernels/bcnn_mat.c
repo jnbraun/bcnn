@@ -971,14 +971,54 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
     }
 }
 
-void bcnn_add_bias_with_relu(float *dst, const float *bias, size_t planeNumber,
-                             size_t biasNumber) {
+/* Kernels for NC4HW4 layouts */
+void bcnn_add_bias_nc4hw4(float *dst, const float *src, const float *bias,
+                          const float *alpha, const float *slope,
+                          size_t num_planes, size_t num_biases) {
 #if defined(BCNN_USE_AVX)
     __m128 mv = _mm_set1_ps(0.0f);
-    for (int z = 0; z < biasNumber; ++z) {
+    for (int z = 0; z < num_biases; ++z) {
         __m128 biasV = _mm_load_ps(bias + 4 * z);
-        float *dst_z = dst + planeNumber * 4 * z;
-        for (int p = 0; p < planeNumber; ++p) {
+        float *dst_z = dst + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            __m128 dstV = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasV);
+            _mm_store_ps(dst_z + 4 * p, dstV);
+        }
+    }
+#elif defined(BCNN_USE_NEON)
+    float32x4_t mv = vdupq_n_f32(0.0f);
+    for (int z = 0; z < num_biases; ++z) {
+        float32x4_t biasV = vld1q_f32(bias + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            float32x4_t dstV = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasV);
+            vst1q_f32(dst_z + 4 * p, dstV);
+        }
+    }
+#else
+    for (int z = 0; z < num_biases; ++z) {
+        float *dstZ = dst + num_planes * 4 * z;
+        const float *biasZ = bias + 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            float *dstX = dstZ + 4 * p;
+            for (int i = 0; i < 4; ++i) {
+                dstX[i] += biasZ[i];
+            }
+        }
+    }
+#endif
+}
+
+void bcnn_add_bias_with_relu_nc4hw4(float *dst, const float *src,
+                                    const float *bias, const float *alpha,
+                                    const float *slope, size_t num_planes,
+                                    size_t num_biases) {
+#if defined(BCNN_USE_AVX)
+    __m128 mv = _mm_set1_ps(0.0f);
+    for (int z = 0; z < num_biases; ++z) {
+        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
             __m128 dstV = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasV);
             dstV = _mm_max_ps(dstV, mv);
             _mm_store_ps(dst_z + 4 * p, dstV);
@@ -986,20 +1026,20 @@ void bcnn_add_bias_with_relu(float *dst, const float *bias, size_t planeNumber,
     }
 #elif defined(BCNN_USE_NEON)
     float32x4_t mv = vdupq_n_f32(0.0f);
-    for (int z = 0; z < biasNumber; ++z) {
+    for (int z = 0; z < num_biases; ++z) {
         float32x4_t biasV = vld1q_f32(bias + 4 * z);
-        float *dst_z = dst + planeNumber * 4 * z;
-        for (int p = 0; p < planeNumber; ++p) {
+        float *dst_z = dst + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
             float32x4_t dstV = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasV);
             dstV = vmaxq_f32(dstV, mv);
             vst1q_f32(dst_z + 4 * p, dstV);
         }
     }
 #else
-    for (int z = 0; z < biasNumber; ++z) {
-        float *dstZ = dst + planeNumber * 4 * z;
+    for (int z = 0; z < num_biases; ++z) {
+        float *dstZ = dst + num_planes * 4 * z;
         const float *biasZ = bias + 4 * z;
-        for (int p = 0; p < planeNumber; ++p) {
+        for (int p = 0; p < num_planes; ++p) {
             float *dstX = dstZ + 4 * p;
             for (int i = 0; i < 4; ++i) {
                 dstX[i] += biasZ[i];
@@ -1012,15 +1052,139 @@ void bcnn_add_bias_with_relu(float *dst, const float *bias, size_t planeNumber,
 #endif
 }
 
-void bcnn_scale_and_add_bias(float *dst, const float *src, const float *bias,
-                             const float *alpha, size_t planeNumber,
-                             size_t biasNumber) {
-    for (int z = 0; z < biasNumber; ++z) {
-        float *dstZ = dst + planeNumber * 4 * z;
-        const float *srcZ = src + planeNumber * 4 * z;
+void bcnn_add_bias_with_lrelu_nc4hw4(float *dst, const float *src,
+                                     const float *bias, const float *alpha,
+                                     const float *slope, size_t num_planes,
+                                     size_t num_biases) {
+#if defined(BCNN_USE_AVX)
+    __m128 zerov = _mm_set1_ps(0.0f);
+    __m128 slopenegv = _mm_set1_ps(0.1f);
+    for (int z = 0; z < num_biases; ++z) {
+        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            __m128 dstV = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasV);
+            __m128 dstVpos = _mm_max_ps(dstV, zerov);
+            __m128 dstVneg = _mm_mul_ps(slopenegv, _mm_min_ps(dstV, zerov));
+            dstV = _mm_add_ps(dstVpos, dstVneg);
+            _mm_store_ps(dst_z + 4 * p, dstV);
+        }
+    }
+#elif defined(BCNN_USE_NEON)
+    float32x4_t zerov = vdupq_n_f32(0.0f);
+    float32x4_t slopenegv = vdupq_n_f32(0.1f);
+    for (int z = 0; z < num_biases; ++z) {
+        float32x4_t biasV = vld1q_f32(bias + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            float32x4_t dstV = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasV);
+            float32x4_t dstVpos = vmaxq_f32(dstV, zerov);
+            float32x4_t dstVneg = vmulq_f32(slopenegv, vminq_f32(dstV, zerov));
+            dstV = vaddq_f32(dstVpos, dstVneg);
+            vst1q_f32(dst_z + 4 * p, dstV);
+        }
+    }
+#else
+    for (int z = 0; z < num_biases; ++z) {
+        float *dstZ = dst + num_planes * 4 * z;
+        const float *biasZ = bias + 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            float *dstX = dstZ + 4 * p;
+            for (int i = 0; i < 4; ++i) {
+                dstX[i] += biasZ[i];
+                dstX[i] = (dstX[i] > 0 ? dstX[i] : 0.1f * dstX[i]);
+            }
+        }
+    }
+#endif
+}
+
+void bcnn_add_bias_with_prelu_nc4hw4(float *dst, const float *src,
+                                     const float *bias, const float *alpha,
+                                     const float *slope, size_t num_planes,
+                                     size_t num_biases) {
+#if defined(BCNN_USE_AVX)
+    __m128 zerov = _mm_set1_ps(0.0f);
+    for (int z = 0; z < num_biases; ++z) {
+        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        __m128 slopev = _mm_load_ps(slope + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            __m128 dstV = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasV);
+            __m128 dstVpos = _mm_max_ps(dstV, zerov);
+            __m128 dstVneg = _mm_mul_ps(slopev, _mm_min_ps(dstV, zerov));
+            dstV = _mm_add_ps(dstVpos, dstVneg);
+            _mm_store_ps(dst_z + 4 * p, dstV);
+        }
+    }
+#elif defined(BCNN_USE_NEON)
+    float32x4_t zerov = vdupq_n_f32(0.0f);
+    float32x4_t slopenegv = vdupq_n_f32(0.1f);
+    for (int z = 0; z < num_biases; ++z) {
+        float32x4_t biasV = vld1q_f32(bias + 4 * z);
+        float32x4_t slopev = vld1q_f32(slope + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            float32x4_t dstV = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasV);
+            float32x4_t dstVpos = vmaxq_f32(dstV, zerov);
+            float32x4_t dstVneg = vmulq_f32(slopev, vminq_f32(dstV, zerov));
+            dstV = vaddq_f32(dstVpos, dstVneg);
+            vst1q_f32(dst_z + 4 * p, dstV);
+        }
+    }
+#else
+    for (int z = 0; z < num_biases; ++z) {
+        float *dstZ = dst + num_planes * 4 * z;
+        const float *biasZ = bias + 4 * z;
+        const float *slopeZ = slope + 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            float *dstX = dstZ + 4 * p;
+            for (int i = 0; i < 4; ++i) {
+                dstX[i] += biasZ[i];
+                dstX[i] = (dstX[i] > 0 ? dstX[i] : slopeZ[i] * dstX[i]);
+            }
+        }
+    }
+#endif
+}
+
+void bcnn_scale_and_add_bias_nc4hw4(float *dst, const float *src,
+                                    const float *bias, const float *alpha,
+                                    const float *slope, size_t num_planes,
+                                    size_t num_biases) {
+#if defined(BCNN_USE_AVX)
+    __m128 zerov = _mm_set1_ps(0.0f);
+    for (int z = 0; z < num_biases; ++z) {
+        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        __m128 alphaV = _mm_load_ps(alpha + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            __m128 dstV = _mm_add_ps(
+                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphaV), biasV);
+            _mm_store_ps(dst_z + 4 * p, dstV);
+        }
+    }
+#elif defined(BCNN_USE_NEON)
+    float32x4_t zerov = vdupq_n_f32(0.0f);
+    for (int z = 0; z < num_biases; ++z) {
+        float32x4_t biasV = vld1q_f32(bias + 4 * z);
+        float32x4_t alphaV = vld1q_f32(alpha + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            float32x4_t dstV =
+                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphaV), biasV);
+            vst1q_f32(dst_z + 4 * p, dstV);
+        }
+    }
+#else
+    for (int z = 0; z < num_biases; ++z) {
+        float *dstZ = dst + num_planes * 4 * z;
+        const float *srcZ = src + num_planes * 4 * z;
         const float *biasZ = bias + 4 * z;
         const float *alphaZ = alpha + 4 * z;
-        for (int p = 0; p < planeNumber; ++p) {
+        for (int p = 0; p < num_planes; ++p) {
             float *dstX = dstZ + 4 * p;
             const float *srcX = srcZ + 4 * p;
             for (int i = 0; i < 4; ++i) {
@@ -1028,17 +1192,102 @@ void bcnn_scale_and_add_bias(float *dst, const float *src, const float *bias,
             }
         }
     }
+#endif
 }
 
-void bcnn_scale_and_add_bias_with_lrelu(float *dst, const float *src,
-                                        const float *bias, const float *alpha,
-                                        size_t planeNumber, size_t biasNumber) {
-    for (int z = 0; z < biasNumber; ++z) {
-        float *dstZ = dst + planeNumber * 4 * z;
-        const float *srcZ = src + planeNumber * 4 * z;
+void bcnn_scale_and_add_bias_with_relu_nc4hw4(
+    float *dst, const float *src, const float *bias, const float *alpha,
+    const float *slope, size_t num_planes, size_t num_biases) {
+#if defined(BCNN_USE_AVX)
+    __m128 zerov = _mm_set1_ps(0.0f);
+    for (int z = 0; z < num_biases; ++z) {
+        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        __m128 alphaV = _mm_load_ps(alpha + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            __m128 dstV = _mm_add_ps(
+                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphaV), biasV);
+            dstV = _mm_max_ps(dstV, zerov);
+            _mm_store_ps(dst_z + 4 * p, dstV);
+        }
+    }
+#elif defined(BCNN_USE_NEON)
+    float32x4_t zerov = vdupq_n_f32(0.0f);
+    for (int z = 0; z < num_biases; ++z) {
+        float32x4_t biasV = vld1q_f32(bias + 4 * z);
+        float32x4_t alphaV = vld1q_f32(alpha + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            float32x4_t dstV =
+                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphaV), biasV);
+            dstV = vmaxq_f32(dstV, zerov);
+            vst1q_f32(dst_z + 4 * p, dstV);
+        }
+    }
+#else
+    for (int z = 0; z < num_biases; ++z) {
+        float *dstZ = dst + num_planes * 4 * z;
+        const float *srcZ = src + num_planes * 4 * z;
         const float *biasZ = bias + 4 * z;
         const float *alphaZ = alpha + 4 * z;
-        for (int p = 0; p < planeNumber; ++p) {
+        for (int p = 0; p < num_planes; ++p) {
+            float *dstX = dstZ + 4 * p;
+            const float *srcX = srcZ + 4 * p;
+            for (int i = 0; i < 4; ++i) {
+                dstX[i] = srcX[i] * alphaZ[i] + biasZ[i];
+                dstX[i] = (dstX[i] > 0 ? dstX[i] : 0.f);
+            }
+        }
+    }
+#endif
+}
+
+void bcnn_scale_and_add_bias_with_lrelu_nc4hw4(
+    float *dst, const float *src, const float *bias, const float *alpha,
+    const float *slope, size_t num_planes, size_t num_biases) {
+#if defined(BCNN_USE_AVX)
+    __m128 zerov = _mm_set1_ps(0.0f);
+    __m128 slopenegv = _mm_set1_ps(0.1f);
+    for (int z = 0; z < num_biases; ++z) {
+        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        __m128 alphaV = _mm_load_ps(alpha + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            __m128 dstV = _mm_add_ps(
+                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphaV), biasV);
+            __m128 dstVpos = _mm_max_ps(dstV, zerov);
+            __m128 dstVneg = _mm_mul_ps(slopenegv, _mm_min_ps(dstV, zerov));
+            dstV = _mm_add_ps(dstVpos, dstVneg);
+            _mm_store_ps(dst_z + 4 * p, dstV);
+        }
+    }
+#elif defined(BCNN_USE_NEON)
+    float32x4_t zerov = vdupq_n_f32(0.0f);
+    float32x4_t slopenegv = vdupq_n_f32(0.1f);
+    for (int z = 0; z < num_biases; ++z) {
+        float32x4_t biasV = vld1q_f32(bias + 4 * z);
+        float32x4_t alphaV = vld1q_f32(alpha + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            float32x4_t dstV =
+                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphaV), biasV);
+            float32x4_t dstVpos = vmaxq_f32(dstV, zerov);
+            float32x4_t dstVneg = vmulq_f32(slopenegv, vminq_f32(dstV, zerov));
+            dstV = vaddq_f32(dstVpos, dstVneg);
+            vst1q_f32(dst_z + 4 * p, dstV);
+        }
+    }
+#else
+    for (int z = 0; z < num_biases; ++z) {
+        float *dstZ = dst + num_planes * 4 * z;
+        const float *srcZ = src + num_planes * 4 * z;
+        const float *biasZ = bias + 4 * z;
+        const float *alphaZ = alpha + 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
             float *dstX = dstZ + 4 * p;
             const float *srcX = srcZ + 4 * p;
             for (int i = 0; i < 4; ++i) {
@@ -1047,7 +1296,75 @@ void bcnn_scale_and_add_bias_with_lrelu(float *dst, const float *src,
             }
         }
     }
+#endif
 }
+
+void bcnn_scale_and_add_bias_with_prelu_nc4hw4(
+    float *dst, const float *src, const float *bias, const float *alpha,
+    const float *slope, size_t num_planes, size_t num_biases) {
+#if defined(BCNN_USE_AVX)
+    __m128 zerov = _mm_set1_ps(0.0f);
+    for (int z = 0; z < num_biases; ++z) {
+        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        __m128 alphaV = _mm_load_ps(alpha + 4 * z);
+        __m128 slopeV = _mm_load_ps(slope + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            __m128 dstV = _mm_add_ps(
+                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphaV), biasV);
+            __m128 dstVpos = _mm_max_ps(dstV, zerov);
+            __m128 dstVneg = _mm_mul_ps(slopeV, _mm_min_ps(dstV, zerov));
+            dstV = _mm_add_ps(dstVpos, dstVneg);
+            _mm_store_ps(dst_z + 4 * p, dstV);
+        }
+    }
+#elif defined(BCNN_USE_NEON)
+    float32x4_t zerov = vdupq_n_f32(0.0f);
+    for (int z = 0; z < num_biases; ++z) {
+        float32x4_t biasV = vld1q_f32(bias + 4 * z);
+        float32x4_t alphaV = vld1q_f32(alpha + 4 * z);
+        float32x4_t slopeV = vld1q_f32(slope + 4 * z);
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            float32x4_t dstV =
+                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphaV), biasV);
+            float32x4_t dstVpos = vmaxq_f32(dstV, zerov);
+            float32x4_t dstVneg = vmulq_f32(slopeV, vminq_f32(dstV, zerov));
+            dstV = vaddq_f32(dstVpos, dstVneg);
+            vst1q_f32(dst_z + 4 * p, dstV);
+        }
+    }
+#else
+    for (int z = 0; z < num_biases; ++z) {
+        float *dstZ = dst + num_planes * 4 * z;
+        const float *srcZ = src + num_planes * 4 * z;
+        const float *biasZ = bias + 4 * z;
+        const float *alphaZ = alpha + 4 * z;
+        const float *slopeZ = slope + 4 * z;
+        for (int p = 0; p < num_planes; ++p) {
+            float *dstX = dstZ + 4 * p;
+            const float *srcX = srcZ + 4 * p;
+            for (int i = 0; i < 4; ++i) {
+                dstX[i] = srcX[i] * alphaZ[i] + biasZ[i];
+                dstX[i] = (dstX[i] > 0 ? dstX[i] : slopeZ[i] * dstX[i]);
+            }
+        }
+    }
+#endif
+}
+
+/* Look-up Table for the post convolution functions */
+bcnn_post_conv_nc4hw4_func bcnn_post_conv_nc4hw4_lut[8] = {
+    bcnn_add_bias_nc4hw4,
+    bcnn_add_bias_with_relu_nc4hw4,
+    bcnn_add_bias_with_lrelu_nc4hw4,
+    bcnn_add_bias_with_prelu_nc4hw4,
+    bcnn_scale_and_add_bias_nc4hw4,
+    bcnn_scale_and_add_bias_with_relu_nc4hw4,
+    bcnn_scale_and_add_bias_with_lrelu_nc4hw4,
+    bcnn_scale_and_add_bias_with_prelu_nc4hw4};
 
 void bcnn_nchw_to_nc4hw4(float *dst, const float *src, size_t area,
                          size_t depth) {
@@ -1081,48 +1398,38 @@ void bcnn_nc4hw4_to_nchw(float *dst, const float *src, size_t area,
 
 void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step) {
     float *_x = (float *)src;
-    bv_float4 m00;
-    bv_float4 m01;
-    bv_float4 m02;
-    bv_float4 m03;
-    bv_float4 m10;
-    bv_float4 m11;
-    bv_float4 m12;
-    bv_float4 m13;
-    bv_float4 m20;
-    bv_float4 m21;
-    bv_float4 m22;
-    bv_float4 m23;
-    bv_float4 m30;
-    bv_float4 m31;
-    bv_float4 m32;
-    bv_float4 m33;
     float *_y = dst;
-    m00 = bv_float4_sub(bv_float4_load(_x + 4 * 0), bv_float4_load(_x + 4 * 8));
-    m01 = bv_float4_sub(bv_float4_load(_x + 4 * 1), bv_float4_load(_x + 4 * 9));
-    m02 =
+    bv_float4 m00 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 0), bv_float4_load(_x + 4 * 8));
+    bv_float4 m01 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 1), bv_float4_load(_x + 4 * 9));
+    bv_float4 m02 =
         bv_float4_sub(bv_float4_load(_x + 4 * 2), bv_float4_load(_x + 4 * 10));
-    m03 =
+    bv_float4 m03 =
         bv_float4_sub(bv_float4_load(_x + 4 * 3), bv_float4_load(_x + 4 * 11));
-    m10 = bv_float4_add(bv_float4_load(_x + 4 * 4), bv_float4_load(_x + 4 * 8));
-    m11 = bv_float4_add(bv_float4_load(_x + 4 * 5), bv_float4_load(_x + 4 * 9));
-    m12 =
+    bv_float4 m10 =
+        bv_float4_add(bv_float4_load(_x + 4 * 4), bv_float4_load(_x + 4 * 8));
+    bv_float4 m11 =
+        bv_float4_add(bv_float4_load(_x + 4 * 5), bv_float4_load(_x + 4 * 9));
+    bv_float4 m12 =
         bv_float4_add(bv_float4_load(_x + 4 * 6), bv_float4_load(_x + 4 * 10));
-    m13 =
+    bv_float4 m13 =
         bv_float4_add(bv_float4_load(_x + 4 * 7), bv_float4_load(_x + 4 * 11));
-    m20 = bv_float4_sub(bv_float4_load(_x + 4 * 8), bv_float4_load(_x + 4 * 4));
-    m21 = bv_float4_sub(bv_float4_load(_x + 4 * 9), bv_float4_load(_x + 4 * 5));
-    m22 =
+    bv_float4 m20 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 8), bv_float4_load(_x + 4 * 4));
+    bv_float4 m21 =
+        bv_float4_sub(bv_float4_load(_x + 4 * 9), bv_float4_load(_x + 4 * 5));
+    bv_float4 m22 =
         bv_float4_sub(bv_float4_load(_x + 4 * 10), bv_float4_load(_x + 4 * 6));
-    m23 =
+    bv_float4 m23 =
         bv_float4_sub(bv_float4_load(_x + 4 * 11), bv_float4_load(_x + 4 * 7));
-    m30 =
+    bv_float4 m30 =
         bv_float4_sub(bv_float4_load(_x + 4 * 12), bv_float4_load(_x + 4 * 4));
-    m31 =
+    bv_float4 m31 =
         bv_float4_sub(bv_float4_load(_x + 4 * 13), bv_float4_load(_x + 4 * 5));
-    m32 =
+    bv_float4 m32 =
         bv_float4_sub(bv_float4_load(_x + 4 * 14), bv_float4_load(_x + 4 * 6));
-    m33 =
+    bv_float4 m33 =
         bv_float4_sub(bv_float4_load(_x + 4 * 15), bv_float4_load(_x + 4 * 7));
 
     bv_float4_store(bv_float4_sub(m00, m02), _y + step * 0);
@@ -1145,39 +1452,31 @@ void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step) {
 
 void bcnn_conv3x3_convert_dst(const float *srcZ, float *dstBlock, size_t step) {
     float *yy = dstBlock;
-    bv_float4 m00;
-    bv_float4 m01;
-    bv_float4 m02;
-    bv_float4 m03;
-    bv_float4 m10;
-    bv_float4 m11;
-    bv_float4 m12;
-    bv_float4 m13;
     float *x = (float *)srcZ;
-    m00 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 0),
-                                      bv_float4_load(x + step * 4)),
-                        bv_float4_load(x + step * 8));
-    m01 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 1),
-                                      bv_float4_load(x + step * 5)),
-                        bv_float4_load(x + step * 9));
-    m02 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 2),
-                                      bv_float4_load(x + step * 6)),
-                        bv_float4_load(x + step * 10));
-    m03 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 3),
-                                      bv_float4_load(x + step * 7)),
-                        bv_float4_load(x + step * 11));
-    m10 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 4),
-                                      bv_float4_load(x + step * 8)),
-                        bv_float4_load(x + step * 12));
-    m11 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 5),
-                                      bv_float4_load(x + step * 9)),
-                        bv_float4_load(x + step * 13));
-    m12 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 6),
-                                      bv_float4_load(x + step * 10)),
-                        bv_float4_load(x + step * 14));
-    m13 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 7),
-                                      bv_float4_load(x + step * 11)),
-                        bv_float4_load(x + step * 15));
+    bv_float4 m00 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 0),
+                                                bv_float4_load(x + step * 4)),
+                                  bv_float4_load(x + step * 8));
+    bv_float4 m01 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 1),
+                                                bv_float4_load(x + step * 5)),
+                                  bv_float4_load(x + step * 9));
+    bv_float4 m02 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 2),
+                                                bv_float4_load(x + step * 6)),
+                                  bv_float4_load(x + step * 10));
+    bv_float4 m03 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 3),
+                                                bv_float4_load(x + step * 7)),
+                                  bv_float4_load(x + step * 11));
+    bv_float4 m10 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 4),
+                                                bv_float4_load(x + step * 8)),
+                                  bv_float4_load(x + step * 12));
+    bv_float4 m11 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 5),
+                                                bv_float4_load(x + step * 9)),
+                                  bv_float4_load(x + step * 13));
+    bv_float4 m12 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 6),
+                                                bv_float4_load(x + step * 10)),
+                                  bv_float4_load(x + step * 14));
+    bv_float4 m13 = bv_float4_add(bv_float4_sub(bv_float4_load(x + step * 7),
+                                                bv_float4_load(x + step * 11)),
+                                  bv_float4_load(x + step * 15));
     bv_float4_store(bv_float4_add(bv_float4_add(m00, m01), m02), yy + 4 * 0);
     bv_float4_store(bv_float4_add(bv_float4_sub(m01, m02), m03), yy + 4 * 1);
     bv_float4_store(bv_float4_add(bv_float4_add(m10, m11), m12), yy + 4 * 2);
@@ -1202,30 +1501,18 @@ void bcnn_conv3x3_convert_weights(const float *src_weights, float *dst_weights,
             float *src = (float *)src_weights + 9 * (sz + dz * src_channels);
             float *dst = weight;
             float *k = (float *)src;
-            float m00;
-            float m01;
-            float m02;
-            float m10;
-            float m11;
-            float m12;
-            float m20;
-            float m21;
-            float m22;
-            float m30;
-            float m31;
-            float m32;
-            m00 = k[0];
-            m01 = k[1];
-            m02 = k[2];
-            m10 = 0.500000 * k[0] + 0.500000 * k[3] + 0.500000 * k[6];
-            m11 = 0.500000 * k[1] + 0.500000 * k[4] + 0.500000 * k[7];
-            m12 = 0.500000 * k[2] + 0.500000 * k[5] + 0.500000 * k[8];
-            m20 = 0.500000 * k[0] + -0.500000 * k[3] + 0.500000 * k[6];
-            m21 = 0.500000 * k[1] + -0.500000 * k[4] + 0.500000 * k[7];
-            m22 = 0.500000 * k[2] + -0.500000 * k[5] + 0.500000 * k[8];
-            m30 = 0 + k[6];
-            m31 = 0 + k[7];
-            m32 = 0 + k[8];
+            float m00 = k[0];
+            float m01 = k[1];
+            float m02 = k[2];
+            float m10 = 0.500000 * k[0] + 0.500000 * k[3] + 0.500000 * k[6];
+            float m11 = 0.500000 * k[1] + 0.500000 * k[4] + 0.500000 * k[7];
+            float m12 = 0.500000 * k[2] + 0.500000 * k[5] + 0.500000 * k[8];
+            float m20 = 0.500000 * k[0] + -0.500000 * k[3] + 0.500000 * k[6];
+            float m21 = 0.500000 * k[1] + -0.500000 * k[4] + 0.500000 * k[7];
+            float m22 = 0.500000 * k[2] + -0.500000 * k[5] + 0.500000 * k[8];
+            float m30 = 0 + k[6];
+            float m31 = 0 + k[7];
+            float m32 = 0 + k[8];
 
             k = dst;
             k[0] = m00;
@@ -1265,7 +1552,7 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
     int w4End = wC4 * 4;
     for (int dz = 0; dz < dst_depth_quad; ++dz) {
         float *dst_z = dst + dz * dst_step;
-        float *weight_dz =
+        const float *weight_dz =
             weight + dz * (src_depth_quad * 16 + weight_depth_offset);
 
         for (int dx = 0; dx < wC4; ++dx) {
@@ -1353,9 +1640,9 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
     int w4tail = w8tail + w4 * 4;
     for (int dz = 0; dz < dst_depth_quad; ++dz) {
         float *dst_z = dst + dz * dst_step;
-        float *weight_dz = weight + dz * weight_z_step;
+        const float *weight_dz = weight + dz * weight_z_step;
         for (int dx = 0; dx < w8; ++dx) {
-            float *src_dx = src + dx * 32;
+            const float *src_dx = src + dx * 32;
             float *dst_x = dst_z + dx * 32;
             float32x4_t dst0 = vdupq_n_f32(0.0f);
             float32x4_t dst1 = vdupq_n_f32(0.0f);
@@ -1414,8 +1701,8 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
             dst7 = vfmaq_laneq_f32(dst7, w2, v1, 2);
             dst7 = vfmaq_laneq_f32(dst7, w3, v1, 3);
             for (int sz = 1; sz < src_depth_quad; ++sz) {
-                float *src_z = src_dx + sz * src_z_step;
-                float *weight_z = weight_dz + sz * 16;
+                const float *src_z = src_dx + sz * src_z_step;
+                const float *weight_z = weight_dz + sz * 16;
                 float32x4_t w0 = vld1q_f32(weight_z + 4 * 0);
                 float32x4_t w1 = vld1q_f32(weight_z + 4 * 1);
                 float32x4_t w2 = vld1q_f32(weight_z + 4 * 2);
@@ -1475,7 +1762,7 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
             vst1q_f32(dst_x + 4 * 7, dst7);
         }
         for (int dx = w8tail; dx < w4; ++dx) {
-            float *src_dx = src + dx * 16;
+            const float *src_dx = src + dx * 16;
             float *dst_x = dst_z + dx * 16;
             float32x4_t dst0 = vdupq_n_f32(0.0f);
             float32x4_t dst1 = vdupq_n_f32(0.0f);
@@ -1509,8 +1796,8 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
             dst3 = vfmaq_laneq_f32(dst3, w2, v1, 2);
             dst3 = vfmaq_laneq_f32(dst3, w3, v1, 3);
             for (int sz = 1; sz < src_depth_quad; ++sz) {
-                float *src_z = src_dx + sz * src_z_step;
-                float *weight_z = weight_dz + sz * 16;
+                const float *src_z = src_dx + sz * src_z_step;
+                const float *weight_z = weight_dz + sz * 16;
                 float32x4_t w0 = vld1q_f32(weight_z + 4 * 0);
                 float32x4_t w1 = vld1q_f32(weight_z + 4 * 1);
                 float32x4_t w2 = vld1q_f32(weight_z + 4 * 2);
@@ -1545,7 +1832,7 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
         }
         for (int dx = w4tail; dx < width; ++dx) {
             float *dst_x = dst_z + dx * 4;
-            float *src_dx = src + dx * 16;
+            const float *src_dx = src + dx * 16;
             float32x4_t dst0 = vdupq_n_f32(0.0f);
             float32x4_t dst1 = vdupq_n_f32(0.0f);
             float32x4_t w0 = vld1q_f32(weight_dz + 4 * 0);
@@ -1559,8 +1846,8 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
             for (int sz = 1; sz < src_depth_quad; ++sz) {
                 dst0 = vfmaq_laneq_f32(dst0, w2, v0, 2);
                 dst1 = vfmaq_laneq_f32(dst1, w3, v0, 3);
-                float *src_z = src_dx + sz * src_z_step;
-                float *weight_z = weight_dz + sz * 16;
+                const float *src_z = src_dx + sz * src_z_step;
+                const float *weight_z = weight_dz + sz * 16;
                 w0 = vld1q_f32(weight_z + 4 * 0);
                 w1 = vld1q_f32(weight_z + 4 * 1);
                 w2 = vld1q_f32(weight_z + 4 * 2);
@@ -1700,8 +1987,9 @@ static void bcnn_gemm_kernel4x4_tiled(float *dstOrigin, const float *src,
 void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                            float *dst, int dst_w, int dst_h, int dst_c,
                            int batch_size, int pad, float *weights,
-                           float *scales, float *biases, float *workspace,
-                           int workspace_sz, int num_threads) {
+                           float *scales, float *biases, float *slopes,
+                           float *workspace, int workspace_sz, int post_func,
+                           int num_threads) {
     int ic_4 = bh_div_up(src_c, 4);
     int dc_4 = bh_div_up(dst_c, 4);
     int wUnit = bh_div_up(dst_w, 2);
@@ -1740,12 +2028,6 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                     _srcOrigin + xC * CONV3x3_SRC_BLOCK * (ic_4 + dc_4);
                 float *_dstOrigin = _srcOrigin + xC * CONV3x3_SRC_BLOCK * ic_4;
 
-                // sourceTransformLambda(xIndex, xC, _srcOrigin, dstBlock);
-                // Source Transform
-                // auto sourceTransformLambda = [&](int xIndex, int xC,
-                // float
-                // *_srcOrigin,
-                //                         float *dstBlock)
                 // bh_timer t = {0};
                 // bh_timer_start(&t);
                 for (int xi = 0; xi < xC; ++xi) {
@@ -1786,21 +2068,6 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                 }
                 // bh_timer_stop(&t);
                 // fprintf(stderr, "conv3x3 src %f\n", bh_timer_get_msec(&t));
-
-                /*fprintf(stderr, "%d %d %d %d %f %f\n",
-                        ((((xIndex + xC) % wUnit) * 2 - pad) +
-                         (((xIndex + xC) / wUnit) * 2 - pad) * src_w) *
-                                4 +
-                            (ic_4 - 1) * 4 * src_w * src_h,
-                        xC * CONV3x3_SRC_BLOCK * (ic_4),
-                        xC * CONV3x3_SRC_BLOCK * (ic_4 + dc_4), tIndex,
-                        _srcOrigin[0], _srcOrigin[5]);*/
-                // fprintf(stderr, "w %d %f %f\n", tIndex, weight[0],
-                // weight[5]);
-
-                // gemmFunctionLambda(xC, _srcOrigin, _dstOrigin);
-                // gemmFunctionLambda = [&](int xC, const float *_srcOrigin,
-                //                     float *_dstOrigin)
                 if (1) {
                     // bh_timer_start(&t);
                     if (xC == CONV_TILED) {
@@ -1859,8 +2126,6 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
 
                 /*fprintf(stderr, "%d %f %f\n", tIndex, _dstOrigin[0],
                         _dstOrigin[5]);*/
-
-                // bh_timer_start(&t);
                 // Dest Transform
                 for (int xi = 0; xi < xC; ++xi) {
                     int index = xIndex + xi;
@@ -1880,11 +2145,13 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                         // bias addition and relu
                         float *bias_z = bias + 4 * z;
                         float *scales_z = scales + 4 * z;
+                        float *slopes_z = slopes + 4 * z;
                         // bcnn_add_bias_with_relu(dstBlock, bias_z, 4, 1);
                         /*bcnn_scale_and_add_bias(dstBlock, dstBlock, bias_z,
                                                 scales_z, 4, 1);*/
-                        bcnn_scale_and_add_bias_with_lrelu(
-                            dstBlock, dstBlock, bias_z, scales_z, 4, 1);
+                        bcnn_scale_and_add_bias_with_lrelu_nc4hw4(
+                            dstBlock, dstBlock, bias_z, scales_z, slopes_z, 4,
+                            1);
                         bv_float4_store(bv_float4_load(dstBlock), dstZ);
                         if (wIndex * 2 + 1 < dst_w) {
                             bv_float4_store(bv_float4_load(dstBlock + 4),

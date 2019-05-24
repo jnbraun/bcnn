@@ -113,7 +113,9 @@ bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
     return BCNN_SUCCESS;
 }
 
-void bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a) {
+void bcnn_forward_activation_cpu(float *x, int sz, float *slope,
+                                 int spatial_size, int channels,
+                                 bcnn_activation a) {
     switch (a) {
         case BCNN_ACT_TANH:
             for (int i = 0; i < sz; ++i) {
@@ -155,20 +157,18 @@ void bcnn_forward_activation_cpu(float *x, int sz, bcnn_activation a) {
                 x[i] = 1.0f / (1.0f + (float)exp(-x[i]));
             }
             break;
+        case BCNN_ACT_PRELU:
+            for (int i = 0; i < sz; ++i) {
+                int c = (i / spatial_size) % channels;
+                x[i] = (x[i] > 0 ? x[i] : slope[c] * x[i]);
+            }
+            break;
         case BCNN_ACT_NONE:
             break;
         default:
             break;
     }
     return;
-}
-
-static void bcnn_forward_prelu(float *x, float *slope, int size,
-                               int spatial_size, int channels) {
-    for (int i = 0; i < size; ++i) {
-        int c = (i / spatial_size) % channels;
-        x[i] = (x[i] > 0 ? x[i] : slope[c] * x[i]);
-    }
 }
 
 void bcnn_forward_activation_layer_cpu(bcnn_net *net, bcnn_node *node) {
@@ -181,17 +181,16 @@ void bcnn_forward_activation_layer_cpu(bcnn_net *net, bcnn_node *node) {
     }
     int sz = bcnn_tensor_size(dst_tensor);
     dst_tensor->data = src_tensor->data;
-    if (param->activation == BCNN_ACT_PRELU) {
-        bcnn_forward_prelu(dst_tensor->data, weights->data, sz,
-                           dst_tensor->w * dst_tensor->h, dst_tensor->c);
-    } else {
-        bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
-    }
+    bcnn_forward_activation_cpu(dst_tensor->data, sz, weights->data,
+                                dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                                param->activation);
+
     return;
 }
 
-void bcnn_backward_activation_cpu(float *x, float *dx, int sz,
-                                  bcnn_activation a) {
+void bcnn_backward_activation_cpu(float *x, float *dx, int sz, float *slope,
+                                  float *grad_slope, int spatial_size,
+                                  int channels, bcnn_activation a) {
     switch (a) {
         case BCNN_ACT_TANH:
             for (int i = 0; i < sz; ++i) {
@@ -235,23 +234,21 @@ void bcnn_backward_activation_cpu(float *x, float *dx, int sz,
             break;
         case BCNN_ACT_NONE:
             break;
+        case BCNN_ACT_PRELU: {
+            for (int i = 0; i < sz; ++i) {
+                int c = (i / spatial_size) % channels;
+                grad_slope[c] += dx[i] * x[i] * (x[i] < 0);
+            }
+            for (int i = 0; i < sz; ++i) {
+                int c = (i / spatial_size) % channels;
+                dx[i] *= (x[i] > 0 ? 1.0f : slope[c]);
+            }
+            break;
+        }
         default:
             break;
     }
     return;
-}
-
-static void bcnn_backward_prelu(float *x, float *dx, float *slope,
-                                float *grad_slope, int size, int spatial_size,
-                                int channels) {
-    for (int i = 0; i < size; ++i) {
-        int c = (i / spatial_size) % channels;
-        grad_slope[c] += dx[i] * x[i] * (x[i] < 0);
-    }
-    for (int i = 0; i < size; ++i) {
-        int c = (i / spatial_size) % channels;
-        dx[i] *= (x[i] > 0 ? 1.0f : slope[c]);
-    }
 }
 
 void bcnn_backward_activation_layer_cpu(bcnn_net *net, bcnn_node *node) {
@@ -263,15 +260,10 @@ void bcnn_backward_activation_layer_cpu(bcnn_net *net, bcnn_node *node) {
         weights = &net->tensors[node->src[1]];
     }
     int sz = bcnn_tensor_size(dst_tensor);
-
-    if (param->activation == BCNN_ACT_PRELU) {
-        bcnn_backward_prelu(dst_tensor->data, dst_tensor->grad_data,
-                            weights->data, weights->grad_data, sz,
-                            dst_tensor->w * dst_tensor->h, dst_tensor->c);
-    } else {
-        bcnn_backward_activation_cpu(dst_tensor->data, dst_tensor->grad_data,
-                                     sz, param->activation);
-    }
+    bcnn_backward_activation_cpu(dst_tensor->data, dst_tensor->grad_data, sz,
+                                 weights->data, weights->grad_data,
+                                 dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                                 param->activation);
     src_tensor->grad_data = dst_tensor->grad_data;
 
     return;

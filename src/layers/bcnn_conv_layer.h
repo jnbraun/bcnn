@@ -38,6 +38,7 @@ typedef struct bcnn_conv_param {
     int pad;
     int num_groups;
     int batch_norm;
+    int post_func;
     size_t workspace_size;
     bcnn_activation activation;
     bcnn_tensor saved_mean;
@@ -47,6 +48,7 @@ typedef struct bcnn_conv_param {
     float *weights_workspace;
     float *biases_workspace;
     float *scales_workspace;
+    float *slopes_workspace;
     float *src_workspace;
     float *dst_workspace;
     float *x_norm;

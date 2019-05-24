@@ -1197,7 +1197,24 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
             "Inconsistent weights size %s: expected %d but found %lu\n",
             w->name, w_sz, (unsigned long)nr);
     }
+    if (node->type == BCNN_LAYER_CONV2D) {
+        bcnn_conv_param *param = (bcnn_conv_param *)node->param;
+        if (param->activation == BCNN_ACT_PRELU) {
+            // prelu slopes: 3 if no batchnorm, 6 if batchnorm
+            int tid = 3 + 3 * (param->batch_norm);
+            bcnn_tensor *slopes = &net->tensors[node->src[tid]];
+            int slopes_sz = bcnn_tensor_size(slopes);
+            int nr = 0;
+            BCNN_CHECK_AND_LOG(
+                net->log_ctx, (nr = fread(w->data, sizeof(float), slopes_sz,
+                                          fp)) == slopes_sz,
+                BCNN_INVALID_MODEL,
+                "Inconsistent prelu slopes size: expected %d but found %lu\n",
+                slopes_sz, (unsigned long)nr);
+        }
+    }
 #ifdef CONV3X3
+    // Re-ordering weights for layout NC4HW4
     if (node->type == BCNN_LAYER_CONV2D) {
         bcnn_conv_param *param = (bcnn_conv_param *)node->param;
         if (param->size == 3 && param->stride == 1 && param->num_groups == 1 &&
@@ -1211,6 +1228,12 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 bcnn_tensor *s = &net->tensors[node->src[5]];
                 memcpy(param->scales_workspace, s->data,
                        bcnn_tensor_size(s) * sizeof(float));
+            }
+            if (param->activation == BCNN_ACT_PRELU) {
+                int tid = 3 + 3 * (param->batch_norm);
+                bcnn_tensor *slopes = &net->tensors[node->src[tid]];
+                memcpy(param->slopes_workspace, slopes->data,
+                       bcnn_tensor_size(slopes) * sizeof(float));
             }
         }
     }

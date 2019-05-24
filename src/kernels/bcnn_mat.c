@@ -1998,6 +1998,8 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
     int workspace_thread_stride = workspace_sz / num_threads;
 
     // auto postFunction = mPostFunction;
+    bcnn_post_conv_nc4hw4_func post_function =
+        bcnn_post_conv_nc4hw4_lut[post_func];
     // print("dst_w=%d, dst_h=%d\n", dst_w, dst_h);
     /*fprintf(stderr, "%d %d %d %d %d %d %d %d %d %d\n", dst_w, dst_h, src_w,
             src_h, ic_4, dc_4, pad, pad, wUnit, hUnit);*/
@@ -2149,9 +2151,8 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                         // bcnn_add_bias_with_relu(dstBlock, bias_z, 4, 1);
                         /*bcnn_scale_and_add_bias(dstBlock, dstBlock, bias_z,
                                                 scales_z, 4, 1);*/
-                        bcnn_scale_and_add_bias_with_lrelu_nc4hw4(
-                            dstBlock, dstBlock, bias_z, scales_z, slopes_z, 4,
-                            1);
+                        post_function(dstBlock, dstBlock, bias_z, scales_z,
+                                      slopes_z, 4, 1);
                         bv_float4_store(bv_float4_load(dstBlock), dstZ);
                         if (wIndex * 2 + 1 < dst_w) {
                             bv_float4_store(bv_float4_load(dstBlock + 4),

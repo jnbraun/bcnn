@@ -218,8 +218,8 @@ static inline void bv_float4_store(bv_float4 v, float *x) {
 #else
     x[0] = v.val[0];
     x[1] = v.val[1];
-    x[0] = v.val[2];
-    x[1] = v.val[3];
+    x[2] = v.val[2];
+    x[3] = v.val[3];
 #endif
 }
 static inline bv_float4 bv_float4_add(bv_float4 va, bv_float4 vb) {

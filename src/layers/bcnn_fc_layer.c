@@ -147,7 +147,7 @@ void bcnn_forward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
 
     memset(dst_tensor->data, 0, dst_size * batch_size * sizeof(float));
     for (int b = 0; b < batch_size; ++b) {
-#pragma omp parallel for
+#pragma omp parallel for num_threads(net->num_threads)
         for (int p = 0; p < dst_tensor->c; p++) {
             float sum = 0.0f;
             for (int q = 0; q < src_tensor->c; q++) {

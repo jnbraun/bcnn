@@ -43,8 +43,9 @@ __global__ void _bcnn_forward_avgpool_layer_kernel(int sz, int c, int h, int w,
     dst[idx] /= w * h;
 }
 
-void bcnn_forward_avgpool_layer_gpu(bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor) {
+void bcnn_forward_avgpool_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     int sz = bcnn_tensor_size(dst_tensor);
 
     _bcnn_forward_avgpool_layer_kernel<<<bcnn_cuda_blocks(sz),
@@ -73,8 +74,9 @@ __global__ void _bcnn_backward_avgpool_layer_kernel(int sz, int c, int h, int w,
     }
 }
 
-void bcnn_backward_avgpool_layer_gpu(bcnn_tensor *src_tensor,
-                                     bcnn_tensor *dst_tensor) {
+void bcnn_backward_avgpool_layer_gpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     int sz = bcnn_tensor_size(dst_tensor);
 
     _bcnn_backward_avgpool_layer_kernel<<<bcnn_cuda_blocks(sz),

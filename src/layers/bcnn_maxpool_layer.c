@@ -145,7 +145,7 @@ void bcnn_forward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int batch_size = dst_tensor->n;
     for (int b = 0; b < batch_size; ++b) {  // batch_size
         int offset0 = dst_tensor->c * b;
-#pragma omp parallel for
+#pragma omp parallel for num_threads(net->num_threads)
         for (int k = 0; k < dst_tensor->c; ++k) {  // depth
             int offset1 = dst_tensor->h * (k + offset0);
             for (int i = 0; i < dst_tensor->h; ++i) {  // height

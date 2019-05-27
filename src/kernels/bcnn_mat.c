@@ -976,31 +976,31 @@ void bcnn_add_bias_nc4hw4(float *dst, const float *src, const float *bias,
 #if defined(BCNN_USE_AVX)
     __m128 mv = _mm_set1_ps(0.0f);
     for (int z = 0; z < num_biases; ++z) {
-        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        __m128 biasv = _mm_load_ps(bias + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            __m128 dstV = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasV);
-            _mm_store_ps(dst_z + 4 * p, dstV);
+            __m128 dstv = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasv);
+            _mm_store_ps(dst_z + 4 * p, dstv);
         }
     }
 #elif defined(BCNN_USE_NEON)
     float32x4_t mv = vdupq_n_f32(0.0f);
     for (int z = 0; z < num_biases; ++z) {
-        float32x4_t biasV = vld1q_f32(bias + 4 * z);
+        float32x4_t biasv = vld1q_f32(bias + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float32x4_t dstV = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasV);
-            vst1q_f32(dst_z + 4 * p, dstV);
+            float32x4_t dstv = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasv);
+            vst1q_f32(dst_z + 4 * p, dstv);
         }
     }
 #else
     for (int z = 0; z < num_biases; ++z) {
-        float *dstZ = dst + num_planes * 4 * z;
-        const float *biasZ = bias + 4 * z;
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *bias_z = bias + 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float *dstX = dstZ + 4 * p;
+            float *dst_x = dst_z + 4 * p;
             for (int i = 0; i < 4; ++i) {
-                dstX[i] += biasZ[i];
+                dst_x[i] += bias_z[i];
             }
         }
     }
@@ -1014,35 +1014,35 @@ void bcnn_add_bias_with_relu_nc4hw4(float *dst, const float *src,
 #if defined(BCNN_USE_AVX)
     __m128 mv = _mm_set1_ps(0.0f);
     for (int z = 0; z < num_biases; ++z) {
-        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        __m128 biasv = _mm_load_ps(bias + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            __m128 dstV = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasV);
-            dstV = _mm_max_ps(dstV, mv);
-            _mm_store_ps(dst_z + 4 * p, dstV);
+            __m128 dstv = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasv);
+            dstv = _mm_max_ps(dstv, mv);
+            _mm_store_ps(dst_z + 4 * p, dstv);
         }
     }
 #elif defined(BCNN_USE_NEON)
     float32x4_t mv = vdupq_n_f32(0.0f);
     for (int z = 0; z < num_biases; ++z) {
-        float32x4_t biasV = vld1q_f32(bias + 4 * z);
+        float32x4_t biasv = vld1q_f32(bias + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float32x4_t dstV = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasV);
-            dstV = vmaxq_f32(dstV, mv);
-            vst1q_f32(dst_z + 4 * p, dstV);
+            float32x4_t dstv = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasv);
+            dstv = vmaxq_f32(dstv, mv);
+            vst1q_f32(dst_z + 4 * p, dstv);
         }
     }
 #else
     for (int z = 0; z < num_biases; ++z) {
-        float *dstZ = dst + num_planes * 4 * z;
-        const float *biasZ = bias + 4 * z;
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *bias_z = bias + 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float *dstX = dstZ + 4 * p;
+            float *dst_x = dst_z + 4 * p;
             for (int i = 0; i < 4; ++i) {
-                dstX[i] += biasZ[i];
-                if (dstX[i] < 0) {
-                    dstX[i] = 0;
+                dst_x[i] += bias_z[i];
+                if (dst_x[i] < 0) {
+                    dst_x[i] = 0;
                 }
             }
         }
@@ -1058,39 +1058,39 @@ void bcnn_add_bias_with_lrelu_nc4hw4(float *dst, const float *src,
     __m128 zerov = _mm_set1_ps(0.0f);
     __m128 slopenegv = _mm_set1_ps(0.1f);
     for (int z = 0; z < num_biases; ++z) {
-        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        __m128 biasv = _mm_load_ps(bias + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            __m128 dstV = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasV);
-            __m128 dstVpos = _mm_max_ps(dstV, zerov);
-            __m128 dstVneg = _mm_mul_ps(slopenegv, _mm_min_ps(dstV, zerov));
-            dstV = _mm_add_ps(dstVpos, dstVneg);
-            _mm_store_ps(dst_z + 4 * p, dstV);
+            __m128 dstv = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasv);
+            __m128 dstv_pos = _mm_max_ps(dstv, zerov);
+            __m128 dstv_neg = _mm_mul_ps(slopenegv, _mm_min_ps(dstv, zerov));
+            dstv = _mm_add_ps(dstv_pos, dstv_neg);
+            _mm_store_ps(dst_z + 4 * p, dstv);
         }
     }
 #elif defined(BCNN_USE_NEON)
     float32x4_t zerov = vdupq_n_f32(0.0f);
     float32x4_t slopenegv = vdupq_n_f32(0.1f);
     for (int z = 0; z < num_biases; ++z) {
-        float32x4_t biasV = vld1q_f32(bias + 4 * z);
+        float32x4_t biasv = vld1q_f32(bias + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float32x4_t dstV = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasV);
-            float32x4_t dstVpos = vmaxq_f32(dstV, zerov);
-            float32x4_t dstVneg = vmulq_f32(slopenegv, vminq_f32(dstV, zerov));
-            dstV = vaddq_f32(dstVpos, dstVneg);
-            vst1q_f32(dst_z + 4 * p, dstV);
+            float32x4_t dstv = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasv);
+            float32x4_t dstv_pos = vmaxq_f32(dstv, zerov);
+            float32x4_t dstv_neg = vmulq_f32(slopenegv, vminq_f32(dstv, zerov));
+            dstv = vaddq_f32(dstv_pos, dstv_neg);
+            vst1q_f32(dst_z + 4 * p, dstv);
         }
     }
 #else
     for (int z = 0; z < num_biases; ++z) {
-        float *dstZ = dst + num_planes * 4 * z;
-        const float *biasZ = bias + 4 * z;
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *bias_z = bias + 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float *dstX = dstZ + 4 * p;
+            float *dst_x = dst_z + 4 * p;
             for (int i = 0; i < 4; ++i) {
-                dstX[i] += biasZ[i];
-                dstX[i] = (dstX[i] > 0 ? dstX[i] : 0.1f * dstX[i]);
+                dst_x[i] += bias_z[i];
+                dst_x[i] = (dst_x[i] > 0 ? dst_x[i] : 0.1f * dst_x[i]);
             }
         }
     }
@@ -1104,42 +1104,42 @@ void bcnn_add_bias_with_prelu_nc4hw4(float *dst, const float *src,
 #if defined(BCNN_USE_AVX)
     __m128 zerov = _mm_set1_ps(0.0f);
     for (int z = 0; z < num_biases; ++z) {
-        __m128 biasV = _mm_load_ps(bias + 4 * z);
+        __m128 biasv = _mm_load_ps(bias + 4 * z);
         __m128 slopev = _mm_load_ps(slope + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            __m128 dstV = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasV);
-            __m128 dstVpos = _mm_max_ps(dstV, zerov);
-            __m128 dstVneg = _mm_mul_ps(slopev, _mm_min_ps(dstV, zerov));
-            dstV = _mm_add_ps(dstVpos, dstVneg);
-            _mm_store_ps(dst_z + 4 * p, dstV);
+            __m128 dstv = _mm_add_ps(_mm_load_ps(dst_z + 4 * p), biasv);
+            __m128 dstv_pos = _mm_max_ps(dstv, zerov);
+            __m128 dstv_neg = _mm_mul_ps(slopev, _mm_min_ps(dstv, zerov));
+            dstv = _mm_add_ps(dstv_pos, dstv_neg);
+            _mm_store_ps(dst_z + 4 * p, dstv);
         }
     }
 #elif defined(BCNN_USE_NEON)
     float32x4_t zerov = vdupq_n_f32(0.0f);
     float32x4_t slopenegv = vdupq_n_f32(0.1f);
     for (int z = 0; z < num_biases; ++z) {
-        float32x4_t biasV = vld1q_f32(bias + 4 * z);
+        float32x4_t biasv = vld1q_f32(bias + 4 * z);
         float32x4_t slopev = vld1q_f32(slope + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float32x4_t dstV = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasV);
-            float32x4_t dstVpos = vmaxq_f32(dstV, zerov);
-            float32x4_t dstVneg = vmulq_f32(slopev, vminq_f32(dstV, zerov));
-            dstV = vaddq_f32(dstVpos, dstVneg);
-            vst1q_f32(dst_z + 4 * p, dstV);
+            float32x4_t dstv = vaddq_f32(vld1q_f32(dst_z + 4 * p), biasv);
+            float32x4_t dstv_pos = vmaxq_f32(dstv, zerov);
+            float32x4_t dstv_neg = vmulq_f32(slopev, vminq_f32(dstv, zerov));
+            dstv = vaddq_f32(dstv_pos, dstv_neg);
+            vst1q_f32(dst_z + 4 * p, dstv);
         }
     }
 #else
     for (int z = 0; z < num_biases; ++z) {
-        float *dstZ = dst + num_planes * 4 * z;
-        const float *biasZ = bias + 4 * z;
-        const float *slopeZ = slope + 4 * z;
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *bias_z = bias + 4 * z;
+        const float *slope_z = slope + 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float *dstX = dstZ + 4 * p;
+            float *dst_x = dst_z + 4 * p;
             for (int i = 0; i < 4; ++i) {
-                dstX[i] += biasZ[i];
-                dstX[i] = (dstX[i] > 0 ? dstX[i] : slopeZ[i] * dstX[i]);
+                dst_x[i] += bias_z[i];
+                dst_x[i] = (dst_x[i] > 0 ? dst_x[i] : slope_z[i] * dst_x[i]);
             }
         }
     }
@@ -1153,40 +1153,40 @@ void bcnn_scale_and_add_bias_nc4hw4(float *dst, const float *src,
 #if defined(BCNN_USE_AVX)
     __m128 zerov = _mm_set1_ps(0.0f);
     for (int z = 0; z < num_biases; ++z) {
-        __m128 biasV = _mm_load_ps(bias + 4 * z);
-        __m128 alphaV = _mm_load_ps(alpha + 4 * z);
+        __m128 biasv = _mm_load_ps(bias + 4 * z);
+        __m128 alphav = _mm_load_ps(alpha + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         const float *src_z = src + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            __m128 dstV = _mm_add_ps(
-                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphaV), biasV);
-            _mm_store_ps(dst_z + 4 * p, dstV);
+            __m128 dstv = _mm_add_ps(
+                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphav), biasv);
+            _mm_store_ps(dst_z + 4 * p, dstv);
         }
     }
 #elif defined(BCNN_USE_NEON)
     float32x4_t zerov = vdupq_n_f32(0.0f);
     for (int z = 0; z < num_biases; ++z) {
-        float32x4_t biasV = vld1q_f32(bias + 4 * z);
-        float32x4_t alphaV = vld1q_f32(alpha + 4 * z);
+        float32x4_t biasv = vld1q_f32(bias + 4 * z);
+        float32x4_t alphav = vld1q_f32(alpha + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         const float *src_z = src + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float32x4_t dstV =
-                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphaV), biasV);
-            vst1q_f32(dst_z + 4 * p, dstV);
+            float32x4_t dstv =
+                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphav), biasv);
+            vst1q_f32(dst_z + 4 * p, dstv);
         }
     }
 #else
     for (int z = 0; z < num_biases; ++z) {
-        float *dstZ = dst + num_planes * 4 * z;
-        const float *srcZ = src + num_planes * 4 * z;
-        const float *biasZ = bias + 4 * z;
-        const float *alphaZ = alpha + 4 * z;
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        const float *bias_z = bias + 4 * z;
+        const float *alpha_z = alpha + 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float *dstX = dstZ + 4 * p;
-            const float *srcX = srcZ + 4 * p;
+            float *dst_x = dst_z + 4 * p;
+            const float *src_x = src_z + 4 * p;
             for (int i = 0; i < 4; ++i) {
-                dstX[i] = srcX[i] * alphaZ[i] + biasZ[i];
+                dst_x[i] = src_x[i] * alpha_z[i] + bias_z[i];
             }
         }
     }
@@ -1199,43 +1199,43 @@ void bcnn_scale_and_add_bias_with_relu_nc4hw4(
 #if defined(BCNN_USE_AVX)
     __m128 zerov = _mm_set1_ps(0.0f);
     for (int z = 0; z < num_biases; ++z) {
-        __m128 biasV = _mm_load_ps(bias + 4 * z);
-        __m128 alphaV = _mm_load_ps(alpha + 4 * z);
+        __m128 biasv = _mm_load_ps(bias + 4 * z);
+        __m128 alphav = _mm_load_ps(alpha + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         const float *src_z = src + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            __m128 dstV = _mm_add_ps(
-                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphaV), biasV);
-            dstV = _mm_max_ps(dstV, zerov);
-            _mm_store_ps(dst_z + 4 * p, dstV);
+            __m128 dstv = _mm_add_ps(
+                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphav), biasv);
+            dstv = _mm_max_ps(dstv, zerov);
+            _mm_store_ps(dst_z + 4 * p, dstv);
         }
     }
 #elif defined(BCNN_USE_NEON)
     float32x4_t zerov = vdupq_n_f32(0.0f);
     for (int z = 0; z < num_biases; ++z) {
-        float32x4_t biasV = vld1q_f32(bias + 4 * z);
-        float32x4_t alphaV = vld1q_f32(alpha + 4 * z);
+        float32x4_t biasv = vld1q_f32(bias + 4 * z);
+        float32x4_t alphav = vld1q_f32(alpha + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         const float *src_z = src + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float32x4_t dstV =
-                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphaV), biasV);
-            dstV = vmaxq_f32(dstV, zerov);
-            vst1q_f32(dst_z + 4 * p, dstV);
+            float32x4_t dstv =
+                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphav), biasv);
+            dstv = vmaxq_f32(dstv, zerov);
+            vst1q_f32(dst_z + 4 * p, dstv);
         }
     }
 #else
     for (int z = 0; z < num_biases; ++z) {
-        float *dstZ = dst + num_planes * 4 * z;
-        const float *srcZ = src + num_planes * 4 * z;
-        const float *biasZ = bias + 4 * z;
-        const float *alphaZ = alpha + 4 * z;
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        const float *bias_z = bias + 4 * z;
+        const float *alpha_z = alpha + 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float *dstX = dstZ + 4 * p;
-            const float *srcX = srcZ + 4 * p;
+            float *dst_x = dst_z + 4 * p;
+            const float *src_x = src_z + 4 * p;
             for (int i = 0; i < 4; ++i) {
-                dstX[i] = srcX[i] * alphaZ[i] + biasZ[i];
-                dstX[i] = (dstX[i] > 0 ? dstX[i] : 0.f);
+                dst_x[i] = src_x[i] * alpha_z[i] + bias_z[i];
+                dst_x[i] = (dst_x[i] > 0 ? dst_x[i] : 0.f);
             }
         }
     }
@@ -1249,48 +1249,48 @@ void bcnn_scale_and_add_bias_with_lrelu_nc4hw4(
     __m128 zerov = _mm_set1_ps(0.0f);
     __m128 slopenegv = _mm_set1_ps(0.1f);
     for (int z = 0; z < num_biases; ++z) {
-        __m128 biasV = _mm_load_ps(bias + 4 * z);
-        __m128 alphaV = _mm_load_ps(alpha + 4 * z);
+        __m128 biasv = _mm_load_ps(bias + 4 * z);
+        __m128 alphav = _mm_load_ps(alpha + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         const float *src_z = src + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            __m128 dstV = _mm_add_ps(
-                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphaV), biasV);
-            __m128 dstVpos = _mm_max_ps(dstV, zerov);
-            __m128 dstVneg = _mm_mul_ps(slopenegv, _mm_min_ps(dstV, zerov));
-            dstV = _mm_add_ps(dstVpos, dstVneg);
-            _mm_store_ps(dst_z + 4 * p, dstV);
+            __m128 dstv = _mm_add_ps(
+                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphav), biasv);
+            __m128 dstv_pos = _mm_max_ps(dstv, zerov);
+            __m128 dstv_neg = _mm_mul_ps(slopenegv, _mm_min_ps(dstv, zerov));
+            dstv = _mm_add_ps(dstv_pos, dstv_neg);
+            _mm_store_ps(dst_z + 4 * p, dstv);
         }
     }
 #elif defined(BCNN_USE_NEON)
     float32x4_t zerov = vdupq_n_f32(0.0f);
     float32x4_t slopenegv = vdupq_n_f32(0.1f);
     for (int z = 0; z < num_biases; ++z) {
-        float32x4_t biasV = vld1q_f32(bias + 4 * z);
-        float32x4_t alphaV = vld1q_f32(alpha + 4 * z);
+        float32x4_t biasv = vld1q_f32(bias + 4 * z);
+        float32x4_t alphav = vld1q_f32(alpha + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         const float *src_z = src + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float32x4_t dstV =
-                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphaV), biasV);
-            float32x4_t dstVpos = vmaxq_f32(dstV, zerov);
-            float32x4_t dstVneg = vmulq_f32(slopenegv, vminq_f32(dstV, zerov));
-            dstV = vaddq_f32(dstVpos, dstVneg);
-            vst1q_f32(dst_z + 4 * p, dstV);
+            float32x4_t dstv =
+                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphav), biasv);
+            float32x4_t dstv_pos = vmaxq_f32(dstv, zerov);
+            float32x4_t dstv_neg = vmulq_f32(slopenegv, vminq_f32(dstv, zerov));
+            dstv = vaddq_f32(dstv_pos, dstv_neg);
+            vst1q_f32(dst_z + 4 * p, dstv);
         }
     }
 #else
     for (int z = 0; z < num_biases; ++z) {
-        float *dstZ = dst + num_planes * 4 * z;
-        const float *srcZ = src + num_planes * 4 * z;
-        const float *biasZ = bias + 4 * z;
-        const float *alphaZ = alpha + 4 * z;
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        const float *bias_z = bias + 4 * z;
+        const float *alpha_z = alpha + 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float *dstX = dstZ + 4 * p;
-            const float *srcX = srcZ + 4 * p;
+            float *dst_x = dst_z + 4 * p;
+            const float *src_x = src_z + 4 * p;
             for (int i = 0; i < 4; ++i) {
-                dstX[i] = srcX[i] * alphaZ[i] + biasZ[i];
-                dstX[i] = (dstX[i] > 0 ? dstX[i] : 0.1f * dstX[i]);
+                dst_x[i] = src_x[i] * alpha_z[i] + bias_z[i];
+                dst_x[i] = (dst_x[i] > 0 ? dst_x[i] : 0.1f * dst_x[i]);
             }
         }
     }
@@ -1303,50 +1303,50 @@ void bcnn_scale_and_add_bias_with_prelu_nc4hw4(
 #if defined(BCNN_USE_AVX)
     __m128 zerov = _mm_set1_ps(0.0f);
     for (int z = 0; z < num_biases; ++z) {
-        __m128 biasV = _mm_load_ps(bias + 4 * z);
-        __m128 alphaV = _mm_load_ps(alpha + 4 * z);
-        __m128 slopeV = _mm_load_ps(slope + 4 * z);
+        __m128 biasv = _mm_load_ps(bias + 4 * z);
+        __m128 alphav = _mm_load_ps(alpha + 4 * z);
+        __m128 slopev = _mm_load_ps(slope + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         const float *src_z = src + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            __m128 dstV = _mm_add_ps(
-                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphaV), biasV);
-            __m128 dstVpos = _mm_max_ps(dstV, zerov);
-            __m128 dstVneg = _mm_mul_ps(slopeV, _mm_min_ps(dstV, zerov));
-            dstV = _mm_add_ps(dstVpos, dstVneg);
-            _mm_store_ps(dst_z + 4 * p, dstV);
+            __m128 dstv = _mm_add_ps(
+                _mm_mul_ps(_mm_load_ps(src_z + 4 * p), alphav), biasv);
+            __m128 dstv_pos = _mm_max_ps(dstv, zerov);
+            __m128 dstv_neg = _mm_mul_ps(slopev, _mm_min_ps(dstv, zerov));
+            dstv = _mm_add_ps(dstv_pos, dstv_neg);
+            _mm_store_ps(dst_z + 4 * p, dstv);
         }
     }
 #elif defined(BCNN_USE_NEON)
     float32x4_t zerov = vdupq_n_f32(0.0f);
     for (int z = 0; z < num_biases; ++z) {
-        float32x4_t biasV = vld1q_f32(bias + 4 * z);
-        float32x4_t alphaV = vld1q_f32(alpha + 4 * z);
-        float32x4_t slopeV = vld1q_f32(slope + 4 * z);
+        float32x4_t biasv = vld1q_f32(bias + 4 * z);
+        float32x4_t alphav = vld1q_f32(alpha + 4 * z);
+        float32x4_t slopev = vld1q_f32(slope + 4 * z);
         float *dst_z = dst + num_planes * 4 * z;
         const float *src_z = src + num_planes * 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float32x4_t dstV =
-                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphaV), biasV);
-            float32x4_t dstVpos = vmaxq_f32(dstV, zerov);
-            float32x4_t dstVneg = vmulq_f32(slopeV, vminq_f32(dstV, zerov));
-            dstV = vaddq_f32(dstVpos, dstVneg);
-            vst1q_f32(dst_z + 4 * p, dstV);
+            float32x4_t dstv =
+                vaddq_f32(vmulq_f32(vld1q_f32(src_z + 4 * p), alphav), biasv);
+            float32x4_t dstv_pos = vmaxq_f32(dstv, zerov);
+            float32x4_t dstv_neg = vmulq_f32(slopev, vminq_f32(dstv, zerov));
+            dstv = vaddq_f32(dstv_pos, dstv_neg);
+            vst1q_f32(dst_z + 4 * p, dstv);
         }
     }
 #else
     for (int z = 0; z < num_biases; ++z) {
-        float *dstZ = dst + num_planes * 4 * z;
-        const float *srcZ = src + num_planes * 4 * z;
-        const float *biasZ = bias + 4 * z;
-        const float *alphaZ = alpha + 4 * z;
-        const float *slopeZ = slope + 4 * z;
+        float *dst_z = dst + num_planes * 4 * z;
+        const float *src_z = src + num_planes * 4 * z;
+        const float *bias_z = bias + 4 * z;
+        const float *alpha_z = alpha + 4 * z;
+        const float *slope_z = slope + 4 * z;
         for (int p = 0; p < num_planes; ++p) {
-            float *dstX = dstZ + 4 * p;
-            const float *srcX = srcZ + 4 * p;
+            float *dst_x = dst_z + 4 * p;
+            const float *src_x = src_z + 4 * p;
             for (int i = 0; i < 4; ++i) {
-                dstX[i] = srcX[i] * alphaZ[i] + biasZ[i];
-                dstX[i] = (dstX[i] > 0 ? dstX[i] : slopeZ[i] * dstX[i]);
+                dst_x[i] = src_x[i] * alpha_z[i] + bias_z[i];
+                dst_x[i] = (dst_x[i] > 0 ? dst_x[i] : slope_z[i] * dst_x[i]);
             }
         }
     }
@@ -1448,9 +1448,10 @@ void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step) {
     bv_float4_store(bv_float4_sub(m33, m31), _y + step * 15);
 }
 
-void bcnn_conv3x3_convert_dst(const float *srcZ, float *dstBlock, size_t step) {
-    float *yy = dstBlock;
-    float *x = (float *)srcZ;
+void bcnn_conv3x3_convert_dst(const float *src_z, float *dst_block,
+                              size_t step) {
+    float *yy = dst_block;
+    float *x = (float *)src_z;
     bv_float4 m00 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 0),
                                                 bv_float4_load(x + step * 4)),
                                   bv_float4_load(x + step * 8));
@@ -1972,12 +1973,12 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
 #endif
 }
 
-static void bcnn_gemm_kernel4x4_tiled(float *dstOrigin, const float *src,
+static void bcnn_gemm_kernel4x4_tiled(float *dst_batch, const float *src,
                                       const float *weight,
                                       size_t src_depth_quad, size_t dst_step,
                                       size_t dst_depth_quad,
                                       size_t weight_depth_offset) {
-    bcnn_gemm_kernel4x4(dstOrigin, src, weight, src_depth_quad, dst_step,
+    bcnn_gemm_kernel4x4(dst_batch, src, weight, src_depth_quad, dst_step,
                         dst_depth_quad, CONV_TILED, weight_depth_offset);
 }
 //#endif
@@ -1988,178 +1989,134 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                            float *scales, float *biases, float *slopes,
                            float *workspace, int workspace_sz, int post_func,
                            int num_threads) {
-    int ic_4 = bh_div_up(src_c, 4);
-    int dc_4 = bh_div_up(dst_c, 4);
-    int wUnit = bh_div_up(dst_w, 2);
-    int hUnit = bh_div_up(dst_h, 2);
-    // fprintf(stderr, "num_threads %d\n", num_threads);
+    int src_c4 = bh_div_up(src_c, 4);
+    int dst_c4 = bh_div_up(dst_c, 4);
+    int dst_w2 = bh_div_up(dst_w, 2);
+    int dst_h2 = bh_div_up(dst_h, 2);
     int workspace_thread_stride = workspace_sz / num_threads;
-
     bcnn_post_conv_nc4hw4_func post_function =
         bcnn_post_conv_nc4hw4_lut[post_func];
-    // print("dst_w=%d, dst_h=%d\n", dst_w, dst_h);
-    /*fprintf(stderr, "%d %d %d %d %d %d %d %d %d %d\n", dst_w, dst_h, src_w,
-            src_h, ic_4, dc_4, pad, pad, wUnit, hUnit);*/
 
-    for (int batchIndex = 0; batchIndex < batch_size; ++batchIndex) {
-        float *srcOrigin = src + src_w * src_h * ic_4 * 4 * batchIndex;
-        float *dstOrigin = dst + dst_w * dst_h * dc_4 * 4 * batchIndex;
-        int totalCount = hUnit * wUnit;
+    for (int b = 0; b < batch_size; ++b) {
+        float *src_batch = src + src_w * src_h * src_c4 * 4 * b;
+        float *dst_batch = dst + dst_w * dst_h * dst_c4 * 4 * b;
+        int dst_area4 = dst_h2 * dst_w2;
 
-        int tileCount = bh_div_up(totalCount, CONV_TILED);
-        num_threads = bh_min(num_threads, tileCount);
+        int num_tiles = bh_div_up(dst_area4, CONV_TILED);
+        num_threads = bh_min(num_threads, num_tiles);
 
         float *weight = weights;
         float *bias = biases;
 
 #pragma omp parallel for num_threads(num_threads)
-        for (int tId = 0; tId < num_threads; tId++) {
-            float *_srcOrigin = workspace + tId * workspace_thread_stride;
+        for (int thread_id = 0; thread_id < num_threads; thread_id++) {
+            float *src_thread = workspace + thread_id * workspace_thread_stride;
             /*fprintf(stderr, "num_threads %d stride %d\n", num_threads,
                     workspace_thread_stride);*/
-            for (int tIndex = (int)tId; tIndex < tileCount;
-                 tIndex += num_threads) {
-                int xIndex = (int)tIndex * CONV_TILED;
-                int xReamin = totalCount - xIndex;
-                int xC = xReamin > CONV_TILED ? CONV_TILED : xReamin;
-                float *dstBlock =
-                    _srcOrigin + xC * CONV3x3_SRC_BLOCK * (ic_4 + dc_4);
-                float *_dstOrigin = _srcOrigin + xC * CONV3x3_SRC_BLOCK * ic_4;
+            for (int tid = (int)thread_id; tid < num_tiles;
+                 tid += num_threads) {
+                int x_tile = (int)tid * CONV_TILED;
+                int xr = dst_area4 - x_tile;
+                int xc = xr > CONV_TILED ? CONV_TILED : xr;
+                float *dst_block =
+                    src_thread + xc * CONV3x3_SRC_BLOCK * (src_c4 + dst_c4);
+                float *dst_thread =
+                    src_thread + xc * CONV3x3_SRC_BLOCK * src_c4;
 
                 // bh_timer t = {0};
                 // bh_timer_start(&t);
-                for (int xi = 0; xi < xC; ++xi) {
-                    int index = xIndex + xi;
-                    float *dstUnit = _srcOrigin + 4 * xi;
+                for (int xi = 0; xi < xc; ++xi) {
+                    int index = x_tile + xi;
+                    float *dst_xi = src_thread + 4 * xi;
 
-                    int wIndex = index % wUnit;
-                    int hIndex = index / wUnit;
+                    int w_idx = index % dst_w2;
+                    int h_idx = index / dst_w2;
 
-                    int srcX = wIndex * 2 - pad;
-                    int srcY = hIndex * 2 - pad;
-                    int sy = bh_max(0, srcY) - srcY;
-                    int ey = bh_min(srcY + 4, src_h) - srcY;
-                    int sx = bh_max(0, srcX) - srcX;
-                    int ex = bh_min(srcX + 4, src_w) - srcX;
+                    int src_x = w_idx * 2 - pad;
+                    int src_y = h_idx * 2 - pad;
+                    int sy = bh_max(0, src_y) - src_y;
+                    int ey = bh_min(src_y + 4, src_h) - src_y;
+                    int sx = bh_max(0, src_x) - src_x;
+                    int ex = bh_min(src_x + 4, src_w) - src_x;
 
-                    float *srcStart = srcOrigin + (srcX + srcY * src_w) * 4;
+                    float *src_start = src_batch + (src_x + src_y * src_w) * 4;
 
-                    for (int z = 0; z < ic_4; ++z) {
-                        memset(dstBlock, 0, CONV3x3_SRC_BLOCK * sizeof(float));
+                    for (int z = 0; z < src_c4; ++z) {
+                        memset(dst_block, 0, CONV3x3_SRC_BLOCK * sizeof(float));
 
-                        float *_dstStart = dstUnit + z * 4 * xC;
+                        float *dst_start = dst_xi + z * 4 * xc;
 
-                        float *src_z = srcStart + z * 4 * src_w * src_h;
+                        float *src_z = src_start + z * 4 * src_w * src_h;
                         if (ex > sx) {
                             // Extract One Block
                             for (int yy = sy; yy < ey; ++yy) {
-                                float *dst_yy = dstBlock + yy * 16;
+                                float *dst_yy = dst_block + yy * 16;
                                 float *src_yy = src_z + 4 * src_w * yy;
                                 memcpy(dst_yy + 4 * sx, src_yy + sx * 4,
                                        4 * (ex - sx) * sizeof(float));
                             }
                         }
                         // Transform
-                        bcnn_conv3x3_convert_src(dstBlock, _dstStart,
-                                                 4 * xC * ic_4);
+                        bcnn_conv3x3_convert_src(dst_block, dst_start,
+                                                 4 * xc * src_c4);
                     }
                 }
                 // bh_timer_stop(&t);
                 // fprintf(stderr, "conv3x3 src %f\n", bh_timer_get_msec(&t));
-                if (1) {
-                    // bh_timer_start(&t);
-                    if (xC == CONV_TILED) {
-                        for (int i = 0;
-                             i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
-                            bcnn_gemm_kernel4x4_tiled(
-                                _dstOrigin + i * dc_4 * 4 * xC,
-                                _srcOrigin + i * ic_4 * 4 * xC,
-                                weight + i * 16 * ic_4 * dc_4, ic_4, xC * 4,
-                                dc_4, 0);
-                        }
-                    } else {
-                        for (int i = 0;
-                             i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT; ++i) {
-                            bcnn_gemm_kernel4x4(
-                                _dstOrigin + (i * dc_4) * xC * 4,
-                                _srcOrigin + i * ic_4 * 4 * xC,
-                                weight + (i * dc_4) * ic_4 * 16, ic_4, xC * 4,
-                                dc_4, xC, 0);
-                        }
+                // bh_timer_start(&t);
+                if (xc == CONV_TILED) {
+                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+                         ++i) {
+                        bcnn_gemm_kernel4x4_tiled(
+                            dst_thread + i * dst_c4 * 4 * xc,
+                            src_thread + i * src_c4 * 4 * xc,
+                            weight + i * 16 * src_c4 * dst_c4, src_c4, xc * 4,
+                            dst_c4, 0);
                     }
                 } else {
-                    // bh_timer_start(&t);
-                    // Multi
-                    if (xC == CONV_TILED) {
-#pragma omp parallel for num_threads(num_threads)
-                        for (int tiid = 0; tiid < num_threads; tiid++) {
-                            for (int i = (int)tiid;
-                                 i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
-                                 i += num_threads) {
-                                bcnn_gemm_kernel4x4_tiled(
-                                    _dstOrigin + i * dc_4 * 4 * xC,
-                                    _srcOrigin + i * ic_4 * 4 * xC,
-                                    weight + i * 16 * ic_4 * dc_4, ic_4, xC * 4,
-                                    dc_4, 0);
-                            }
-                        }
-
-                    } else {
-#pragma omp parallel for num_threads(num_threads)
-                        for (int tiid = 0; tiid < num_threads; tiid++) {
-                            for (int i = (int)tiid;
-                                 i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
-                                 i += num_threads) {
-                                bcnn_gemm_kernel4x4(
-                                    _dstOrigin + (i * dc_4) * xC * 4,
-                                    _srcOrigin + i * ic_4 * 4 * xC,
-                                    weight + (i * dc_4) * ic_4 * 16, ic_4,
-                                    xC * 4, dc_4, xC, 0);
-                            }
-                        }
+                    for (int i = 0; i < CONV3x3_BLOCK_UNIT * CONV3x3_BLOCK_UNIT;
+                         ++i) {
+                        bcnn_gemm_kernel4x4(dst_thread + (i * dst_c4) * xc * 4,
+                                            src_thread + i * src_c4 * 4 * xc,
+                                            weight + (i * dst_c4) * src_c4 * 16,
+                                            src_c4, xc * 4, dst_c4, xc, 0);
                     }
                 }
                 // bh_timer_stop(&t);
                 // fprintf(stderr, "conv3x3 gemm %f\n", bh_timer_get_msec(&t));
-
-                /*fprintf(stderr, "%d %f %f\n", tIndex, _dstOrigin[0],
-                        _dstOrigin[5]);*/
                 // dst
-                for (int xi = 0; xi < xC; ++xi) {
-                    int index = xIndex + xi;
-                    float *srcUnit = _dstOrigin + 4 * xi;
+                for (int xi = 0; xi < xc; ++xi) {
+                    int index = x_tile + xi;
+                    float *src_xi = dst_thread + 4 * xi;
+                    int w_idx = index % dst_w2;
+                    int h_idx = index / dst_w2;
+                    int dst_x = w_idx * 2;
+                    int dst_y = h_idx * 2;
+                    float *dst_batch_xi =
+                        dst_batch + 4 * (dst_x + dst_y * dst_w);
 
-                    int wIndex = index % wUnit;
-                    int hIndex = index / wUnit;
-                    int dstX = wIndex * 2;
-                    int dstY = hIndex * 2;
-
-                    float *dstStart = dstOrigin + 4 * (dstX + dstY * dst_w);
-
-                    for (int z = 0; z < dc_4; ++z) {
-                        float *srcZ = srcUnit + z * xC * 4;
-                        float *dstZ = dstStart + z * dst_w * dst_h * 4;
-                        bcnn_conv3x3_convert_dst(srcZ, dstBlock, dc_4 * 4 * xC);
+                    for (int z = 0; z < dst_c4; ++z) {
+                        float *src_z = src_xi + z * xc * 4;
+                        float *dst_z = dst_batch_xi + z * dst_w * dst_h * 4;
+                        bcnn_conv3x3_convert_dst(src_z, dst_block,
+                                                 dst_c4 * 4 * xc);
                         // bias addition and relu
                         float *bias_z = bias + 4 * z;
                         float *scales_z = scales + 4 * z;
                         float *slopes_z = slopes + 4 * z;
-                        // bcnn_add_bias_with_relu(dstBlock, bias_z, 4, 1);
-                        /*bcnn_scale_and_add_bias(dstBlock, dstBlock, bias_z,
-                                                scales_z, 4, 1);*/
-                        post_function(dstBlock, dstBlock, bias_z, scales_z,
+                        post_function(dst_block, dst_block, bias_z, scales_z,
                                       slopes_z, 4, 1);
-                        bv_float4_store(bv_float4_load(dstBlock), dstZ);
-                        if (wIndex * 2 + 1 < dst_w) {
-                            bv_float4_store(bv_float4_load(dstBlock + 4),
-                                            dstZ + 4);
+                        bv_float4_store(bv_float4_load(dst_block), dst_z);
+                        if (w_idx * 2 + 1 < dst_w) {
+                            bv_float4_store(bv_float4_load(dst_block + 4),
+                                            dst_z + 4);
                         }
-                        if (hIndex * 2 + 1 < dst_h) {
-                            bv_float4_store(bv_float4_load(dstBlock + 8),
-                                            dstZ + dst_w * 4);
-                            if (wIndex * 2 + 1 < dst_w) {
-                                bv_float4_store(bv_float4_load(dstBlock + 12),
-                                                dstZ + dst_w * 4 + 4);
+                        if (h_idx * 2 + 1 < dst_h) {
+                            bv_float4_store(bv_float4_load(dst_block + 8),
+                                            dst_z + dst_w * 4);
+                            if (w_idx * 2 + 1 < dst_w) {
+                                bv_float4_store(bv_float4_load(dst_block + 12),
+                                                dst_z + dst_w * 4 + 4);
                             }
                         }
                     }

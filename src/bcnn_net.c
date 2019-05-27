@@ -230,17 +230,6 @@ void bcnn_set_input_shape(bcnn_net *net, int input_width, int input_height,
 static bcnn_status bcnn_init_workload(bcnn_net *net) {
     // Allocate tensor for input node
     BCNN_CHECK_STATUS(bcnn_tensor_allocate(&net->tensors[0], net->mode));
-
-#ifdef CONV3X3
-    // Reshape src tensor if depth not multiple of 4
-    if (net->tensors[0].c % 4 != 0) {
-        int src_c4 = bh_div_up(net->tensors[0].c, 4) * 4;
-        size_t src_sz =
-            net->tensors[0].w * net->tensors[0].h * src_c4 * net->tensors[0].n;
-        bcnn_tensor_allocate_buffer(&net->tensors[0], net->mode, src_sz);
-    }
-#endif
-
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_context *cuda_ctx = (bcnn_cuda_context *)net->cuda_ctx;
     cuda_ctx->workspace_gpu = bcnn_cuda_malloc_f32(cuda_ctx->workspace_size);
@@ -308,11 +297,11 @@ void bcnn_forward(bcnn_net *net) {
         if (net->mode == BCNN_MODE_TRAIN) {
             bcnn_reset_gradients(net, node);
         }
-        bh_timer t = {0};
-        bh_timer_start(&t);
+        // bh_timer t = {0};
+        // bh_timer_start(&t);
         node->forward(net, node);
-        bh_timer_stop(&t);
-        fprintf(stderr, "node %d %f\n", i, bh_timer_get_msec(&t));
+        // bh_timer_stop(&t);
+        // fprintf(stderr, "node %d %f\n", i, bh_timer_get_msec(&t));
     }
 }
 
@@ -1058,8 +1047,6 @@ bcnn_status bcnn_load_net(bcnn_net *net, const char *config_path,
         }
         // Parse network parameters
         for (int i = 0; i < config->sections[0].num_keys; ++i) {
-            /*fprintf(stderr, "%s %s\n", config->sections[0].keys[i].name,
-                    config->sections[0].keys[i].val);*/
             bcnn_net_set_param(net, config->sections[0].keys[i].name,
                                config->sections[0].keys[i].val);
         }
@@ -1069,9 +1056,6 @@ bcnn_status bcnn_load_net(bcnn_net *net, const char *config_path,
         for (int i = 1; i < config->num_sections; ++i) {
             // Parse layers parameters
             for (int j = 0; j < config->sections[i].num_keys; ++j) {
-                /*fprintf(stderr, "%s %s\n",
-                   config->sections[i].keys[j].name,
-                        config->sections[i].keys[j].val);*/
                 if (bcnn_layer_param_set(net, i, &lp,
                                          config->sections[i].keys[j].name,
                                          config->sections[i].keys[j].val,
@@ -1213,7 +1197,7 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 slopes_sz, (unsigned long)nr);
         }
     }
-#ifdef CONV3X3
+
     // Re-ordering weights for layout NC4HW4
     if (node->type == BCNN_LAYER_CONV2D) {
         bcnn_conv_param *param = (bcnn_conv_param *)node->param;
@@ -1237,7 +1221,7 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
             }
         }
     }
-#endif
+
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(w->data_gpu, w->data, w_sz);
     bcnn_cuda_memcpy_host2dev(b->data_gpu, b->data, b_sz);

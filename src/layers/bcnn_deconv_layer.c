@@ -166,7 +166,8 @@ void bcnn_forward_deconv_layer_cpu(bcnn_net *net, bcnn_node *node) {
                     param->conv_workspace, n);
 #else
         bcnn_gemm(net->gemm_ctx, 1, 0, m, n, k, 1.0f, weights->data, m,
-                  src_tensor->data + i * sz, n, 0.0f, param->conv_workspace, n);
+                  src_tensor->data + i * sz, n, 0.0f, param->conv_workspace, n,
+                  net->num_threads);
 #endif
         bcnn_col2im(
             param->conv_workspace, param->num, dst_tensor->h, dst_tensor->w,
@@ -175,7 +176,7 @@ void bcnn_forward_deconv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     }
 
     bcnn_add_bias(dst_tensor->data, biases->data, batch_size, param->num,
-                  dst_tensor->w * dst_tensor->h);
+                  dst_tensor->w * dst_tensor->h, net->num_threads);
 
     sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
     // TODO: prelu not supported
@@ -222,7 +223,8 @@ void bcnn_backward_deconv_layer_cpu(bcnn_net *net, bcnn_node *node) {
         bcnn_gemm(net->gemm_ctx, 0, 1, m, n, k, alpha,
                   src_tensor->data +
                       i * src_tensor->c * src_tensor->h * src_tensor->w,
-                  k, param->conv_workspace, k, 1.0f, weights->grad_data, n);
+                  k, param->conv_workspace, k, 1.0f, weights->grad_data, n,
+                  net->num_threads);
 #endif
         if (src_tensor->grad_data) {
 #if BCNN_USE_BLAS
@@ -233,7 +235,7 @@ void bcnn_backward_deconv_layer_cpu(bcnn_net *net, bcnn_node *node) {
 #else
             bcnn_gemm(net->gemm_ctx, 0, 0, src_tensor->c, k, n, 1.0f,
                       weights->data, n, param->conv_workspace, k, 0.0f,
-                      src_tensor->grad_data + i * sz, k);
+                      src_tensor->grad_data + i * sz, k, net->num_threads);
 #endif
         }
     }

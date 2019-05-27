@@ -318,6 +318,16 @@ BCNN_API void bcnn_set_log_context(bcnn_net *net, bcnn_log_callback fct,
 BCNN_API void bcnn_set_num_threads(bcnn_net *net, int num_threads);
 
 /**
+ * \brief Gets the number of threads currently used by the net instance. Use
+ * 'bcnn_set_num_threads' to change the current number of threads.
+ *
+ * \param[in]   net             Pointer to net instance.
+ *
+ * \return Number of threads used by the net instance.
+ */
+BCNN_API int bcnn_get_num_threads(bcnn_net *net);
+
+/**
  * \brief Sets the shape of the primary input tensor.
  *
  * The primary input tensor holds the default name 'input'.

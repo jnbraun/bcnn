@@ -12,7 +12,8 @@
 
 void show_usage(int argc, char **argv) {
     fprintf(stderr,
-            "Usage: ./%s <input> <config> <model> <runs> [mean] [scale]\n",
+            "Usage: ./%s <input> <config> <model> <runs> <num_threads> [mean] "
+            "[scale]\n",
             argv[0]);
     fprintf(stderr,
             "\tRequired:\n"
@@ -20,6 +21,7 @@ void show_usage(int argc, char **argv) {
             "\t\t<config>: path to configuration file.\n"
             "\t\t<model>: path to model weights file.\n"
             "\t\t<runs>: number of inferences to be run.\n"
+            "\t\t<num_threads>: number of threads used.\n"
             "\tOptional:\n"
             "\t\t[mean]: value between [0;255] to be substracted to input "
             "pixel values. Default: 127.5f\n"
@@ -30,21 +32,20 @@ void show_usage(int argc, char **argv) {
 /* This demonstrates how to run a network inference given an input image and
  * benchmark the inference speed */
 int main(int argc, char **argv) {
-    if (argc < 5) {
+    if (argc < 6) {
         show_usage(argc, argv);
         return 1;
     }
     /* Create net */
     bcnn_net *net = NULL;
     bcnn_init_net(&net, BCNN_MODE_PREDICT);
+    bcnn_set_num_threads(net, atoi(argv[5]));
+    fprintf(stderr, "Number of threads used: %d\n", bcnn_get_num_threads(net));
     /* Load net config and weights */
     if (bcnn_load_net(net, argv[2], argv[3]) != BCNN_SUCCESS) {
         bcnn_end_net(&net);
         return -1;
     }
-    /*bcnn_set_input_shape(net, 224, 224, 3, 1);
-    bcnn_add_convolutional_layer(net, 64, 3, 1, 0, 1, 0, BCNN_FILLER_XAVIER,
-                                 BCNN_ACT_NONE, 0, "input", "out");*/
     /* Compile net */
     if (bcnn_compile_net(net) != BCNN_SUCCESS) {
         bcnn_end_net(&net);
@@ -80,9 +81,9 @@ int main(int argc, char **argv) {
     /* Fill the input tensor with the current image data */
     float mean = 127.5f;
     float scale = 1 / 127.5f;
-    if (argc == 7) {
-        mean = atof(argv[5]);
-        scale = atof(argv[6]);
+    if (argc == 8) {
+        mean = atof(argv[6]);
+        scale = atof(argv[7]);
     }
     bcnn_fill_tensor_with_image(net, img, input_tensor->w, input_tensor->h, c,
                                 scale, 0, mean, mean, mean,

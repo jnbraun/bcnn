@@ -197,7 +197,7 @@ void bcnn_backward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
     // Original
     bcnn_gemm(net->gemm_ctx, 1, 0, dst_size, src_size, batch_size, 1.0f,
               dst_tensor->grad_data, dst_size, src_tensor->data, src_size, 1.0f,
-              weights->grad_data, src_size);
+              weights->grad_data, src_size, net->num_threads);
 #endif
 
     if (src_tensor->grad_data) {
@@ -210,7 +210,7 @@ void bcnn_backward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
         // Original
         bcnn_gemm(net->gemm_ctx, 0, 0, batch_size, src_size, dst_size, 1.0f,
                   dst_tensor->grad_data, dst_size, weights->data, src_size,
-                  1.0f, src_tensor->grad_data, src_size);
+                  1.0f, src_tensor->grad_data, src_size, net->num_threads);
 #endif
     }
 

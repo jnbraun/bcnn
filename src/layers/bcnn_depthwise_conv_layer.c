@@ -271,7 +271,7 @@ void bcnn_forward_depthwise_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     }
 
     bcnn_add_bias(dst_tensor->data, biases->data, batch_size, dst_tensor->c,
-                  dst_tensor->w * dst_tensor->h);
+                  dst_tensor->w * dst_tensor->h, net->num_threads);
 
     sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
     // TODO: prelu not supported

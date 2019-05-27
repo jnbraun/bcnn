@@ -191,7 +191,8 @@ void bcnn_forward_batchnorm_cpu(bcnn_tensor *src_tensor,
                                 bcnn_tensor *bn_var, bcnn_tensor *bn_scales,
                                 bcnn_tensor *biases, bcnn_tensor *saved_mean,
                                 bcnn_tensor *saved_variance, float *x_norm,
-                                float *workspace, bcnn_mode mode) {
+                                float *workspace, bcnn_mode mode,
+                                int num_threads) {
     int batch_size = src_tensor->n;
     int sz = dst_tensor->w * dst_tensor->h * dst_tensor->c;
     if (src_tensor != dst_tensor) {
@@ -226,9 +227,9 @@ void bcnn_forward_batchnorm_cpu(bcnn_tensor *src_tensor,
         }
         // dst <- scale * dst + bias
         bcnn_scales(dst_tensor->data, bn_scales->data, batch_size,
-                    dst_tensor->c, dst_tensor->h * dst_tensor->w);
+                    dst_tensor->c, dst_tensor->h * dst_tensor->w, num_threads);
         bcnn_add_bias(dst_tensor->data, biases->data, batch_size, dst_tensor->c,
-                      dst_tensor->h * dst_tensor->w);
+                      dst_tensor->h * dst_tensor->w, num_threads);
     }
     return;
 }
@@ -248,7 +249,7 @@ void bcnn_forward_batchnorm_layer_cpu(bcnn_net *net, bcnn_node *node) {
 
     bcnn_forward_batchnorm_cpu(src_tensor, dst_tensor, bn_mean, bn_var,
                                bn_scales, bn_biases, saved_mean, saved_variance,
-                               x_norm, workspace, net->mode);
+                               x_norm, workspace, net->mode, net->num_threads);
     return;
 }
 
@@ -290,13 +291,11 @@ static void _normalize_backward(float *x, float *mean, float *var,
     }
 }
 
-void bcnn_backward_batchnorm_cpu(bcnn_tensor *src_tensor,
-                                 bcnn_tensor *dst_tensor, bcnn_tensor *bn_mean,
-                                 bcnn_tensor *bn_var, bcnn_tensor *bn_scales,
-                                 bcnn_tensor *bn_biases,
-                                 bcnn_tensor *saved_mean,
-                                 bcnn_tensor *saved_variance, float *x_norm,
-                                 float *workspace, bcnn_mode mode) {
+void bcnn_backward_batchnorm_cpu(
+    bcnn_tensor *src_tensor, bcnn_tensor *dst_tensor, bcnn_tensor *bn_mean,
+    bcnn_tensor *bn_var, bcnn_tensor *bn_scales, bcnn_tensor *bn_biases,
+    bcnn_tensor *saved_mean, bcnn_tensor *saved_variance, float *x_norm,
+    float *workspace, bcnn_mode mode, int num_threads) {
     int batch_size = src_tensor->n;
     int sz = dst_tensor->w * dst_tensor->h * dst_tensor->c;
     if (mode != BCNN_MODE_TRAIN) {
@@ -308,7 +307,7 @@ void bcnn_backward_batchnorm_cpu(bcnn_tensor *src_tensor,
     bcnn_grad_scales(x_norm, dst_tensor->grad_data, batch_size, dst_tensor->c,
                      dst_tensor->h * dst_tensor->w, bn_scales->grad_data);
     bcnn_scales(dst_tensor->grad_data, bn_scales->data, batch_size,
-                dst_tensor->c, dst_tensor->h * dst_tensor->w);
+                dst_tensor->c, dst_tensor->h * dst_tensor->w, num_threads);
     _mean_variance_backward(workspace, dst_tensor->grad_data, saved_mean->data,
                             saved_variance->data, batch_size, dst_tensor->c,
                             dst_tensor->w * dst_tensor->h,
@@ -337,7 +336,7 @@ void bcnn_backward_batchnorm_layer_cpu(bcnn_net *net, bcnn_node *node) {
     bcnn_backward_batchnorm_cpu(src_tensor, dst_tensor, bn_mean, bn_var,
                                 bn_scales, bn_bias, &param->saved_mean,
                                 &param->saved_variance, param->x_norm,
-                                param->workspace, net->mode);
+                                param->workspace, net->mode, net->num_threads);
     return;
 }
 

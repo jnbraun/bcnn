@@ -759,11 +759,10 @@ int bcnn_varmean(int n, float *m, float a, float *var) {
 }
 
 void bcnn_add_bias(float *output, float *bias, int batch_size, int num_channels,
-                   int spatial_size) {
-    int i, j, b;
-    for (b = 0; b < batch_size; ++b) {
-#pragma omp parallel for
-        for (i = 0; i < num_channels; ++i) {
+                   int spatial_size, int num_threads) {
+    for (int b = 0; b < batch_size; ++b) {
+#pragma omp parallel for num_threads(num_threads)
+        for (int i = 0; i < num_channels; ++i) {
             bcnn_add_scalar(spatial_size, bias[i], output + i * spatial_size);
         }
         output += num_channels * spatial_size;
@@ -771,11 +770,10 @@ void bcnn_add_bias(float *output, float *bias, int batch_size, int num_channels,
 }
 
 void bcnn_scales(float *output, float *scales, int batch_size, int num_channels,
-                 int spatial_size) {
-    int i, j, b;
-    for (b = 0; b < batch_size; ++b) {
-#pragma omp parallel for
-        for (i = 0; i < num_channels; ++i) {
+                 int spatial_size, int num_threads) {
+    for (int b = 0; b < batch_size; ++b) {
+#pragma omp parallel for num_threads(num_threads)
+        for (int i = 0; i < num_channels; ++i) {
             bcnn_scal(spatial_size, scales[i], output + i * spatial_size);
         }
         output += num_channels * spatial_size;
@@ -858,12 +856,12 @@ void bcnn_im2col(const float *data_im, const int channels, const int height,
 static void bcnn_im2col_mt_st1(const float *data_im, const int channels,
                                const int height, const int width,
                                const int kernel_size, const int pad,
-                               float *data_col) {
+                               float *data_col, int num_threads) {
     int height_col = (height + 2 * pad - kernel_size) + 1;
     int width_col = (width + 2 * pad - kernel_size) + 1;
     int channels_col = channels * kernel_size * kernel_size;
 
-#pragma omp parallel for schedule(runtime)
+#pragma omp parallel for num_threads(num_threads)
     for (int c = 0; c < channels_col; ++c) {
         int w_offset = c % kernel_size;
         int h_offset = (c / kernel_size) % kernel_size;
@@ -898,16 +896,16 @@ static void bcnn_im2col_mt_st1(const float *data_im, const int channels,
 
 void bcnn_im2col_mt(const float *data_im, const int channels, const int height,
                     const int width, const int kernel_size, const int pad,
-                    const int stride, float *data_col) {
+                    const int stride, float *data_col, int num_threads) {
     int height_col = (height + 2 * pad - kernel_size) / stride + 1;
     int width_col = (width + 2 * pad - kernel_size) / stride + 1;
     int channels_col = channels * kernel_size * kernel_size;
 
     if (stride == 1) {
         bcnn_im2col_mt_st1(data_im, channels, height, width, kernel_size, pad,
-                           data_col);
+                           data_col, num_threads);
     } else {
-#pragma omp parallel for schedule(runtime)
+#pragma omp parallel for num_threads(num_threads)
         for (int c = 0; c < channels_col; ++c) {
             int w_offset = c % kernel_size;
             int h_offset = (c / kernel_size) % kernel_size;
@@ -1997,7 +1995,6 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
     // fprintf(stderr, "num_threads %d\n", num_threads);
     int workspace_thread_stride = workspace_sz / num_threads;
 
-    // auto postFunction = mPostFunction;
     bcnn_post_conv_nc4hw4_func post_function =
         bcnn_post_conv_nc4hw4_lut[post_func];
     // print("dst_w=%d, dst_h=%d\n", dst_w, dst_h);
@@ -2017,7 +2014,6 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
 
 #pragma omp parallel for num_threads(num_threads)
         for (int tId = 0; tId < num_threads; tId++) {
-            // outsideFunction((int)tId);
             float *_srcOrigin = workspace + tId * workspace_thread_stride;
             /*fprintf(stderr, "num_threads %d stride %d\n", num_threads,
                     workspace_thread_stride);*/
@@ -2128,7 +2124,7 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
 
                 /*fprintf(stderr, "%d %f %f\n", tIndex, _dstOrigin[0],
                         _dstOrigin[5]);*/
-                // Dest Transform
+                // dst
                 for (int xi = 0; xi < xC; ++xi) {
                     int index = xIndex + xi;
                     float *srcUnit = _dstOrigin + 4 * xi;
@@ -2236,12 +2232,13 @@ static void sgemm_nn_pack_MRxk4(int k, const float *A, int inc_row_A,
 }
 
 static void sgemm_nn_pack_A(int mc, int kc, const float *A, int inc_row_A,
-                            int inc_col_A, float *buffer, int mr) {
+                            int inc_col_A, float *buffer, int mr,
+                            int num_threads) {
     int mp = mc / mr;
     int _mr = mc % mr;
     int tmp1 = kc * mr;
     int tmp2 = mr * inc_row_A;
-#pragma omp parallel for
+#pragma omp parallel for num_threads(num_threads)
     for (int i = 0; i < mp; ++i) {
 #ifdef BCNN_USE_NEON
 #if (defined(__aarch64__))
@@ -2315,11 +2312,12 @@ static void sgemm_nn_pack_kxNR(int k, const float *B, int inc_row_B,
 }
 
 static void sgemm_nn_pack_B(int kc, int nc, const float *B, int inc_row_B,
-                            int inc_col_B, float *buffer, int nr) {
+                            int inc_col_B, float *buffer, int nr,
+                            int num_threads) {
     int np = nc / nr;
     int _nr = nc % nr;
     int tmp1 = kc * nr;
-#pragma omp parallel for
+#pragma omp parallel for num_threads(num_threads)
     for (int j = 0; j < np; ++j) {
         sgemm_nn_pack_kxNR(kc, B + nr * j, inc_row_B, inc_col_B,
                            buffer + tmp1 * j, nr);
@@ -2552,16 +2550,16 @@ static void sgemm_scal(int m, int n, float alpha, float *X, int incRowX,
 static void sgemm_mkernel(int mc, int nc, int kc, float alpha, float beta,
                           float *C, int inc_row_C, int inc_col_C,
                           float *buffer_A, float *buffer_B, float *buffer_AB,
-                          float *buffer_C, int mr, int nr) {
+                          float *buffer_C, int mr, int nr, int num_threads) {
     int mp = (mc + mr - 1) / mr;
     int np = (nc + nr - 1) / nr;
 
     int _mr = mc % mr;
     int _nr = nc % nr;
-#pragma omp parallel for
+#pragma omp parallel for num_threads(num_threads)
     for (int j = 0; j < np; ++j) {
         int nrj = (j != np - 1 || _nr == 0) ? nr : _nr;
-#pragma omp parallel for
+#pragma omp parallel for num_threads(num_threads)
         for (int i = 0; i < mp; ++i) {
             int mri = (i != mp - 1 || _mr == 0) ? mr : _mr;
             if (mri == mr && nrj == nr) {
@@ -2587,7 +2585,7 @@ static void sgemm_mkernel(int mc, int nc, int kc, float alpha, float beta,
 static void sgemm_nn(bcnn_gemm_context *ctx, int m, int n, int k, float alpha,
                      const float *A, int inc_row_A, int inc_col_A,
                      const float *B, int inc_row_B, int inc_col_B, float beta,
-                     float *C, int inc_row_C, int inc_col_C) {
+                     float *C, int inc_row_C, int inc_col_C, int num_threads) {
     int mb = (m + MC - 1) / MC;
     int nb = (n + NC - 1) / NC;
     int kb = (k + KC - 1) / KC;
@@ -2606,15 +2604,16 @@ static void sgemm_nn(bcnn_gemm_context *ctx, int m, int n, int k, float alpha,
             int kc = (l != kb - 1 || _kc == 0) ? KC : _kc;
             float _beta = (l == 0) ? beta : 1.0f;
             sgemm_nn_pack_B(kc, nc, &B[l * KC * inc_row_B + j * NC], inc_row_B,
-                            inc_col_B, ctx->buffer_b, NR);
+                            inc_col_B, ctx->buffer_b, NR, num_threads);
             for (int i = 0; i < mb; ++i) {
                 int mc = (i != mb - 1 || _mc == 0) ? MC : _mc;
                 sgemm_nn_pack_A(mc, kc, &A[i * MC * inc_row_A + l * KC],
-                                inc_row_A, inc_col_A, ctx->buffer_a, MR);
-                sgemm_mkernel(mc, nc, kc, alpha, _beta,
-                              &C[i * MC * inc_row_C + j * NC], inc_row_C,
-                              inc_col_C, ctx->buffer_a, ctx->buffer_b,
-                              ctx->buffer_ab, ctx->buffer_c, MR, NR);
+                                inc_row_A, inc_col_A, ctx->buffer_a, MR,
+                                num_threads);
+                sgemm_mkernel(
+                    mc, nc, kc, alpha, _beta, &C[i * MC * inc_row_C + j * NC],
+                    inc_row_C, inc_col_C, ctx->buffer_a, ctx->buffer_b,
+                    ctx->buffer_ab, ctx->buffer_c, MR, NR, num_threads);
             }
         }
     }
@@ -2623,7 +2622,7 @@ static void sgemm_nn(bcnn_gemm_context *ctx, int m, int n, int k, float alpha,
 static void sgemm(bcnn_gemm_context *ctx, int m, int n, int k, float alpha,
                   const float *A, int inc_row_A, int inc_col_A, const float *B,
                   int inc_row_B, int inc_col_B, float beta, float *C,
-                  int inc_row_C, int inc_col_C) {
+                  int inc_row_C, int inc_col_C, int num_threads) {
     int mb = (m + MC - 1) / MC;
     int nb = (n + NC - 1) / NC;
     int kb = (k + KC - 1) / KC;
@@ -2648,10 +2647,10 @@ static void sgemm(bcnn_gemm_context *ctx, int m, int n, int k, float alpha,
                 int mc = (i != mb - 1 || _mc == 0) ? MC : _mc;
                 sgemm_pack_A(mc, kc, &A[i * MC * inc_row_A + l * KC], inc_row_A,
                              inc_col_A, ctx->buffer_a, MR);
-                sgemm_mkernel(mc, nc, kc, alpha, _beta,
-                              &C[i * MC * inc_row_C + j * NC], inc_row_C,
-                              inc_col_C, ctx->buffer_a, ctx->buffer_b,
-                              ctx->buffer_ab, ctx->buffer_c, MR, NR);
+                sgemm_mkernel(
+                    mc, nc, kc, alpha, _beta, &C[i * MC * inc_row_C + j * NC],
+                    inc_row_C, inc_col_C, ctx->buffer_a, ctx->buffer_b,
+                    ctx->buffer_ab, ctx->buffer_c, MR, NR, num_threads);
             }
         }
     }
@@ -2659,7 +2658,7 @@ static void sgemm(bcnn_gemm_context *ctx, int m, int n, int k, float alpha,
 
 int bcnn_gemm(bcnn_gemm_context *ctx, int trans_a, int trans_b, int m, int n,
               int k, float alpha, float *A, int lda, float *B, int ldb,
-              float beta, float *C, int ldc) {
+              float beta, float *C, int ldc, int num_threads) {
 #if (defined(__aarch64__))
     // Switch A and B as OpenBlas is column major
     openblas_sgemm(ctx, trans_b, trans_a, n, m, k, alpha, B, ldb, A, lda, beta,
@@ -2673,10 +2672,10 @@ int bcnn_gemm(bcnn_gemm_context *ctx, int trans_a, int trans_b, int m, int n,
 
     if (!trans_a && !trans_b) {
         sgemm_nn(ctx, m, n, k, alpha, A, inc_row_A, inc_col_A, B, inc_row_B,
-                 inc_col_B, beta, C, ldc, 1);
+                 inc_col_B, beta, C, ldc, 1, num_threads);
     } else {
         sgemm(ctx, m, n, k, alpha, A, inc_row_A, inc_col_A, B, inc_row_B,
-              inc_col_B, beta, C, ldc, 1);
+              inc_col_B, beta, C, ldc, 1, num_threads);
     }
 #endif
     return 0;

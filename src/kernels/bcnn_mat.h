@@ -154,18 +154,18 @@ int bcnn_gemv(int trans_a, int m, int n, float alpha, float *a, float *x,
               float beta, float *y);
 int bcnn_gemm(bcnn_gemm_context *ctx, int trans_a, int trans_b, int M, int N,
               int K, float ALPHA, float *A, int lda, float *B, int ldb,
-              float BETA, float *C, int ldc);
+              float BETA, float *C, int ldc, int num_threads);
 float bcnn_l2_distance(float *x, float *y, int n);
 float bcnn_sqrdiff_vs(float *x, float a, int n);
 float bcnn_shiftdot(int n, float *x, float a, float *y, float b);
 int bcnn_varnorm(int n, float *a, float c, float *y);
 int bcnn_varmean(int n, float *m, float a, float *var);
 void bcnn_add_bias(float *output, float *bias, int batch_size, int num_channels,
-                   int spatial_size);
+                   int spatial_size, int num_threads);
 void bcnn_grad_bias(float *grad_bias, float *grad_data, int batch_size,
                     int num_channels, int spatial_size);
 void bcnn_scales(float *output, float *scales, int batch_size, int num_channels,
-                 int spatial_size);
+                 int spatial_size, int num_threads);
 void bcnn_grad_scales(float *x_norm, float *delta, int batch, int n, int size,
                       float *scale_updates);
 void bcnn_im2col(const float *data_im, const int channels, const int height,
@@ -176,7 +176,7 @@ void bcnn_col2im(const float *data_col, const int channels, const int height,
                  const int stride, float *data_im);
 void bcnn_im2col_mt(const float *data_im, const int channels, const int height,
                     const int width, const int kernel_size, const int pad,
-                    const int stride, float *data_col);
+                    const int stride, float *data_col, int num_threads);
 void bcnn_conv3x3_convert_weights(const float *src, float *dst,
                                   int src_channels, int dst_channels);
 void bcnn_conv3x3_convert_dst(const float *src, float *dst, size_t step);

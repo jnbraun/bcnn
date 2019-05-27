@@ -435,7 +435,8 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
 #ifdef BCNN_USE_OPENMP
                     bcnn_im2col_mt(src, src_tensor->c / param->num_groups,
                                    src_tensor->h, src_tensor->w, param->size,
-                                   param->pad, param->stride, b);
+                                   param->pad, param->stride, b,
+                                   net->num_threads);
 #else
                 bcnn_im2col(src, src_tensor->c / param->num_groups,
                             src_tensor->h, src_tensor->w, param->size,
@@ -447,18 +448,19 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
                             1.0f, a, k, b, n, 1.0f, c, n);
 #else
             bcnn_gemm(net->gemm_ctx, 0, 0, m, n, k, 1.0f, a, k, b, n, 1.0f, c,
-                      n);
+                      n, net->num_threads);
 #endif
             }
         }
         if (param->batch_norm) {  // inplace batch norm
-            bcnn_forward_batchnorm_cpu(dst_tensor, dst_tensor, bn_mean, bn_var,
-                                       bn_scales, biases, &param->saved_mean,
-                                       &param->saved_variance, param->x_norm,
-                                       param->workspace, net->mode);
+            bcnn_forward_batchnorm_cpu(
+                dst_tensor, dst_tensor, bn_mean, bn_var, bn_scales, biases,
+                &param->saved_mean, &param->saved_variance, param->x_norm,
+                param->workspace, net->mode, net->num_threads);
         } else {
             bcnn_add_bias(dst_tensor->data, biases->data, batch_size,
-                          param->num, dst_tensor->w * dst_tensor->h);
+                          param->num, dst_tensor->w * dst_tensor->h,
+                          net->num_threads);
         }
         sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
         bcnn_forward_activation_cpu(dst_tensor->data, sz, slopes_data,
@@ -516,10 +518,10 @@ void bcnn_backward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
         param->activation);
 
     if (param->batch_norm) {  // inplace batch norm
-        bcnn_backward_batchnorm_cpu(dst_tensor, dst_tensor, bn_mean, bn_var,
-                                    bn_scales, biases, &param->saved_mean,
-                                    &param->saved_variance, param->x_norm,
-                                    param->workspace, net->mode);
+        bcnn_backward_batchnorm_cpu(
+            dst_tensor, dst_tensor, bn_mean, bn_var, bn_scales, biases,
+            &param->saved_mean, &param->saved_variance, param->x_norm,
+            param->workspace, net->mode, net->num_threads);
     } else {
         bcnn_grad_bias(biases->grad_data, dst_tensor->grad_data, batch_size,
                        param->num, k);
@@ -544,7 +546,7 @@ void bcnn_backward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
                         a, k, b, k, 1.0f, c, n);
 #else
             bcnn_gemm(net->gemm_ctx, 0, 1, m, n, k, 1.0f, a, k, b, k, 1.0f, c,
-                      n);
+                      n, net->num_threads);
 #endif
 
             if (src_tensor->grad_data) {
@@ -560,7 +562,7 @@ void bcnn_backward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
                                 m, 1.0f, a, n, b, k, 0.0f, src_grad, k);
 #else
                     bcnn_gemm(net->gemm_ctx, 1, 0, n, k, m, 1.0f, a, n, b, k,
-                              0.0f, src_grad, k);
+                              0.0f, src_grad, k, net->num_threads);
 #endif
                 } else {
 #if BCNN_USE_BLAS
@@ -568,7 +570,7 @@ void bcnn_backward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
                                 m, 1.0f, a, n, b, k, 0.0f, c, k);
 #else
                     bcnn_gemm(net->gemm_ctx, 1, 0, n, k, m, 1.0f, a, n, b, k,
-                              0.0f, c, k);
+                              0.0f, c, k, net->num_threads);
 #endif
                     bcnn_col2im(param->conv_workspace,
                                 src_tensor->c / param->num_groups,

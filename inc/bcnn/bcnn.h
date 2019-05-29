@@ -365,6 +365,25 @@ BCNN_API bcnn_status bcnn_add_input(bcnn_net *net, int width, int height,
 BCNN_API int bcnn_get_batch_size(bcnn_net *net);
 
 /**
+ * \brief Resizes the network according to given input width, height and
+ * channels.
+ *
+ * \note This function is valid only when applied to a fully convolutionnal
+ * network.
+ *
+ * \param[in]   net                  Pointer to net instance.
+ * \param[in]   w                    New input width.
+ * \param[in]   h                    New input height.
+ * \param[in]   c                    New input number of channels.
+ * \param[in]   need_realloc         Set to '1' if a memory allocation is
+ * needed, '0' otherwise.
+ *
+ * \return      Possible error include BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_resize_net(bcnn_net *net, int w, int h, int c,
+                                     int need_realloc);
+
+/**
  * \brief Finalizes the net configuration.
  *
  * This function needs to be called after everything has been setup (the model

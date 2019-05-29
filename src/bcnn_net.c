@@ -227,6 +227,56 @@ void bcnn_set_input_shape(bcnn_net *net, int input_width, int input_height,
                           input_height, input_width, 0);
 }
 
+bcnn_status bcnn_resize_net(bcnn_net *net, int w, int h, int c,
+                            int need_realloc) {
+    bcnn_set_input_shape(net, w, h, c, 1);
+    for (int i = 0; i < net->num_nodes; ++i) {
+        if (net->nodes[i].type == BCNN_LAYER_CONV2D) {
+            bcnn_conv_param *param = (bcnn_conv_param *)(net->nodes[i].param);
+            bcnn_tensor_set_shape(&net->tensors[net->nodes[i].dst[0]],
+                                  net->tensors[net->nodes[i].src[0]].n,
+                                  param->num,
+                                  (net->tensors[net->nodes[i].src[0]].h +
+                                   2 * param->pad - param->size) /
+                                          param->stride +
+                                      1,
+                                  (net->tensors[net->nodes[i].src[0]].w +
+                                   2 * param->pad - param->size) /
+                                          param->stride +
+                                      1,
+                                  1);
+            if (need_realloc) {
+                BCNN_CHECK_STATUS(bcnn_tensor_allocate(
+                    &net->tensors[net->nodes[i].dst[0]], net->mode));
+            }
+        } else if (net->nodes[i].type == BCNN_LAYER_MAXPOOL) {
+            bcnn_maxpool_param *param =
+                (bcnn_maxpool_param *)(net->nodes[i].param);
+            bcnn_tensor_set_shape(
+                &net->tensors[net->nodes[i].dst[0]],
+                net->tensors[net->nodes[i].src[0]].n,
+                net->tensors[net->nodes[i].src[0]].c,
+                (net->tensors[net->nodes[i].src[0]].h - 1) / param->stride + 1,
+                (net->tensors[net->nodes[i].src[0]].w - 1) / param->stride + 1,
+                1);
+            if (need_realloc) {
+                BCNN_CHECK_STATUS(bcnn_tensor_allocate(
+                    &net->tensors[net->nodes[i].dst[0]], net->mode));
+            }
+        } else {
+            bcnn_tensor_set_shape(&net->tensors[net->nodes[i].dst[0]],
+                                  net->tensors[net->nodes[i].src[0]].n,
+                                  net->tensors[net->nodes[i].src[0]].c,
+                                  net->tensors[net->nodes[i].src[0]].h,
+                                  net->tensors[net->nodes[i].src[0]].w, 1);
+            if (need_realloc) {
+                BCNN_CHECK_STATUS(bcnn_tensor_allocate(
+                    &net->tensors[net->nodes[i].dst[0]], net->mode));
+            }
+        }
+    }
+}
+
 static bcnn_status bcnn_init_workload(bcnn_net *net) {
     // Allocate tensor for input node
     BCNN_CHECK_STATUS(bcnn_tensor_allocate(&net->tensors[0], net->mode));

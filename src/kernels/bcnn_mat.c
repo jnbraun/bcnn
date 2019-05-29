@@ -2210,6 +2210,8 @@ static void sgemm_nn_pack_A(int mc, int kc, const float *A, int inc_row_A,
                             buffer + tmp1 * i, mr);
 #endif
     }
+    A += (tmp2 * mp);
+    buffer += (tmp1 * mp);
     if (_mr > 0) {
         for (int j = 0; j < kc; ++j) {
             for (int i = 0; i < _mr; ++i) {

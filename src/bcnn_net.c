@@ -1266,6 +1266,16 @@ static bcnn_status bcnn_load_batchnorm_weights(bcnn_net *net, bcnn_node *node,
             "Inconsistent biases size: expected %d but found %lu\n", sz,
             (unsigned long)nr);
     }
+    if (net->mode == BCNN_MODE_PREDICT) {
+        // Fuse mean / variance into scales and biases for optimal
+        // inference speed
+        for (int i = 0; i < sz; ++i) {
+            b->data[i] =
+                b->data[i] -
+                (s->data[i] * m->data[i]) / (sqrtf(v->data[i] + 0.000001f));
+            s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
+        }
+    }
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(m->data_gpu, m->data, sz);
     bcnn_cuda_memcpy_host2dev(v->data_gpu, v->data, sz);

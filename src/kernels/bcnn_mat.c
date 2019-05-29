@@ -2279,6 +2279,8 @@ static void sgemm_nn_pack_B(int kc, int nc, const float *B, int inc_row_B,
         sgemm_nn_pack_kxNR(kc, B + nr * j, inc_row_B, inc_col_B,
                            buffer + tmp1 * j, nr);
     }
+    B += (nr * np);
+    buffer += (tmp1 * np);
     if (_nr > 0) {
         for (int i = 0; i < kc; ++i) {
             for (int j = 0; j < _nr; ++j) {

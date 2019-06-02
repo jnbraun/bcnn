@@ -111,14 +111,14 @@ bcnn_status bcnn_tensor_allocate_buffer(bcnn_tensor *t, int net_state,
     }
     t->data = (float *)bh_align_calloc(size * sizeof(float), align_offset_);
     BCNN_CHECK_ALLOC(t->data);
-    if (t->has_grad && net_state == BCNN_MODE_TRAIN) {
+    if (t->has_grad && net_state != BCNN_MODE_PREDICT) {
         t->grad_data =
             (float *)bh_align_calloc(size * sizeof(float), align_offset_);
         BCNN_CHECK_ALLOC(t->grad_data);
     }
 #ifdef BCNN_USE_CUDA
     t->data_gpu = bcnn_cuda_memcpy_f32(t->data, size);
-    if (t->has_grad && net_state == BCNN_MODE_TRAIN) {
+    if (t->has_grad && net_state != BCNN_MODE_PREDICT) {
         t->grad_data_gpu = bcnn_cuda_memcpy_f32(t->grad_data, size);
     }
 #endif

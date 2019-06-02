@@ -260,8 +260,9 @@ void bcnn_forward_cost_layer(bcnn_net *net, bcnn_node *node) {
             bcnn_lifted_struct_loss_forward(net, node);
             break;
     }
-
-    bcnn_compute_error(param, src_tensor, label, dst_tensor);
+    if (net->mode != BCNN_MODE_PREDICT) {
+        bcnn_compute_error(param, src_tensor, label, dst_tensor);
+    }
 
     return;
 }

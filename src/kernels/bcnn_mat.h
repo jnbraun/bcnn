@@ -188,9 +188,9 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                            float *workspace, int workspace_sz, int post_func,
                            int num_threads);
 void bcnn_nchw_to_nc4hw4(float *dst, const float *src, size_t area,
-                         size_t depth);
+                         size_t depth, int batch_size);
 void bcnn_nc4hw4_to_nchw(float *dst, const float *src, size_t area,
-                         size_t depth);
+                         size_t depth, int batch_size);
 
 typedef void (*bcnn_post_conv_nc4hw4_func)(
     float *dst, const float *src, const float *bias, const float *alpha,

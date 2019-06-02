@@ -381,7 +381,8 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
         // bh_timer t = {0};
         // bh_timer_start(&t);
         bcnn_nchw_to_nc4hw4(param->src_workspace, src_tensor->data,
-                            src_tensor->h * src_tensor->w, src_tensor->c);
+                            src_tensor->h * src_tensor->w, src_tensor->c,
+                            src_tensor->n);
         // bh_timer_stop(&t);
         // fprintf(stderr, "pack %f msecs\n", bh_timer_get_msec(&t));
         // bh_timer_start(&t);
@@ -396,7 +397,8 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
         // fprintf(stderr, "conv3x3 %f msecs\n", bh_timer_get_msec(&t));
         // bh_timer_start(&t);
         bcnn_nc4hw4_to_nchw(dst_tensor->data, param->dst_workspace,
-                            dst_tensor->w * dst_tensor->h, dst_tensor->c);
+                            dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                            dst_tensor->n);
         // bh_timer_stop(&t);
         // fprintf(stderr, "%s unpack %f msecs\n", dst_tensor->name,
         //        bh_timer_get_msec(&t));

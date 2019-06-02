@@ -1365,31 +1365,37 @@ bcnn_post_conv_nc4hw4_func bcnn_post_conv_nc4hw4_lut[8] = {
     bcnn_scale_and_add_bias_with_prelu_nc4hw4};
 
 void bcnn_nchw_to_nc4hw4(float *dst, const float *src, size_t area,
-                         size_t depth) {
+                         size_t depth, int batch_size) {
     int z, x;
     int cur = 0;
-    memset(dst, 0, area * bh_div_up(depth, 4) * 4 * sizeof(float));
-    for (z = 0; z < depth; ++z) {
-        int plane = z / 4;
-        float *dstPlane = plane * area * 4 + dst;
-        int offset = z % 4;
-        for (x = 0; x < area; ++x) {
-            dstPlane[4 * x + offset] = src[cur++];
+    memset(dst, 0, batch_size * area * bh_div_up(depth, 4) * 4 * sizeof(float));
+    for (int b = 0; b < batch_size; ++b) {
+        float *dst_batch = dst + b * area * bh_div_up(depth, 4) * 4;
+        for (z = 0; z < depth; ++z) {
+            int plane = z / 4;
+            float *dst_plane = dst_batch + plane * area * 4;
+            int offset = z % 4;
+            for (x = 0; x < area; ++x) {
+                dst_plane[4 * x + offset] = src[cur++];
+            }
         }
     }
 }
 
 void bcnn_nc4hw4_to_nchw(float *dst, const float *src, size_t area,
-                         size_t depth) {
+                         size_t depth, int batch_size) {
     int x;
     int z;
     int cur = 0;
-    for (z = 0; z < depth; ++z) {
-        int plane = z / 4;
-        const float *srcPlane = plane * area * 4 + src;
-        int offset = z % 4;
-        for (x = 0; x < area; ++x) {
-            dst[cur++] = srcPlane[4 * x + offset];
+    for (int b = 0; b < batch_size; ++b) {
+        const float *src_batch = src + b * area * bh_div_up(depth, 4) * 4;
+        for (z = 0; z < depth; ++z) {
+            int plane = z / 4;
+            const float *src_plane = src_batch + plane * area * 4;
+            int offset = z % 4;
+            for (x = 0; x < area; ++x) {
+                dst[cur++] = src_plane[4 * x + offset];
+            }
         }
     }
 }

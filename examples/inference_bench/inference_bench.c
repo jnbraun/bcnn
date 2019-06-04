@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     /* Create net */
     bcnn_net *net = NULL;
     bcnn_init_net(&net, BCNN_MODE_PREDICT);
-    bcnn_set_num_threads(net, atoi(argv[5]));
+    bcnn_set_num_threads(net, atoi(argv[5]), NULL);
     fprintf(stderr, "Number of threads used: %d\n", bcnn_get_num_threads(net));
     /* Load net config and weights */
     if (bcnn_load_net(net, argv[2], argv[3]) != BCNN_SUCCESS) {

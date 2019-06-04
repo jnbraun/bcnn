@@ -23,6 +23,7 @@
 #include <bcnn/bcnn.h>
 
 #include <bh/bh_macros.h>
+#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
 #ifdef BCNN_USE_BLAS
@@ -115,8 +116,10 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     if (net->learner != NULL) {
         if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
             int weights_size = bcnn_tensor_size(&weights);
-            param->adam_m = (float *)calloc(weights_size, sizeof(float));
-            param->adam_v = (float *)calloc(weights_size, sizeof(float));
+            param->adam_m = (float *)bh_align_calloc(
+                weights_size * sizeof(float), align_offset_);
+            param->adam_v = (float *)bh_align_calloc(
+                weights_size * sizeof(float), align_offset_);
         }
     }
     bcnn_tensor_set_shape(
@@ -136,7 +139,8 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     BCNN_CHECK_STATUS(bcnn_node_add_output(net, &node, net->num_tensors - 1));
     int sz_wk = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
                 num_channels_per_group * size * size;
-    param->conv_workspace = (float *)calloc(sz_wk, sizeof(float));
+    param->conv_workspace =
+        (float *)bh_align_calloc(sz_wk * sizeof(float), align_offset_);
     if (batch_norm) {
         param->batch_norm = 1;
         int sz = bcnn_tensor_size(&net->tensors[node.dst[0]]);
@@ -175,8 +179,10 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         BCNN_CHECK_STATUS(
             bcnn_node_add_input(net, &node, net->num_tensors - 1));
         // Internal workspace for batch norm
-        param->x_norm = (float *)calloc(sz, sizeof(float));
-        param->workspace = (float *)calloc(sz, sizeof(float));
+        param->x_norm =
+            (float *)bh_align_calloc(sz * sizeof(float), align_offset_);
+        param->workspace =
+            (float *)bh_align_calloc(sz * sizeof(float), align_offset_);
     }
     if (param->activation == BCNN_ACT_PRELU) {
         char prelu_slopes_name[256];
@@ -192,35 +198,40 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
     // Special case for conv 3x3/s1
     if (param->size == 3 && param->stride == 1 && param->num_groups == 1 &&
         net->mode == BCNN_MODE_PREDICT) {
-        bh_free(param->conv_workspace);
+        bh_align_free(param->conv_workspace);
         int src_c_div4 = bh_div_up(net->tensors[node.src[0]].c, 4);
         int dst_c_div4 = bh_div_up(n, 4);
         param->workspace_size = net->num_threads * CONV_TILED *
                                 (src_c_div4 + bh_div_up(n, 4) + 1) *
                                 CONV3x3_SRC_BLOCK;
-        param->conv_workspace =
-            (float *)calloc(param->workspace_size, sizeof(float));
-        param->weights_workspace =
-            (float *)calloc(src_c_div4 * dst_c_div4 * 256, sizeof(float));
-        param->biases_workspace = (float *)calloc(
-            bh_round_up(net->tensors[node.dst[0]].c, 4), sizeof(float));
+        param->conv_workspace = (float *)bh_align_calloc(
+            param->workspace_size * sizeof(float), align_offset_);
+        param->weights_workspace = (float *)bh_align_calloc(
+            src_c_div4 * dst_c_div4 * 256 * sizeof(float), align_offset_);
+        param->biases_workspace = (float *)bh_align_calloc(
+            bh_round_up(net->tensors[node.dst[0]].c, 4) * sizeof(float),
+            align_offset_);
         if (param->batch_norm == 1) {
-            param->scales_workspace = (float *)calloc(
-                bh_round_up(net->tensors[node.dst[0]].c, 4), sizeof(float));
+            param->scales_workspace = (float *)bh_align_calloc(
+                bh_round_up(net->tensors[node.dst[0]].c, 4) * sizeof(float),
+                align_offset_);
         }
         if (param->activation == BCNN_ACT_PRELU) {
-            param->slopes_workspace = (float *)calloc(
-                bh_round_up(net->tensors[node.dst[0]].c, 4), sizeof(float));
+            param->slopes_workspace = (float *)bh_align_calloc(
+                bh_round_up(net->tensors[node.dst[0]].c, 4) * sizeof(float),
+                align_offset_);
         }
         // Reshape src tensor
         size_t src_sz = net->tensors[node.src[0]].w *
                         net->tensors[node.src[0]].h * src_c_div4 * 4 *
                         net->tensors[node.src[0]].n;
-        param->src_workspace = (float *)calloc(src_sz, sizeof(float));
+        param->src_workspace =
+            (float *)bh_align_calloc(src_sz * sizeof(float), align_offset_);
         size_t dst_sz = net->tensors[node.dst[0]].w *
                         net->tensors[node.dst[0]].h * dst_c_div4 * 4 *
                         net->tensors[node.dst[0]].n;
-        param->dst_workspace = (float *)calloc(dst_sz, sizeof(float));
+        param->dst_workspace =
+            (float *)bh_align_calloc(dst_sz * sizeof(float), align_offset_);
         // Post-function (fused batchnorm and activation)
         // TODO: hacky, and will break when post-function table is updated
         param->post_func = 0;
@@ -417,9 +428,8 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
                 float *a = weights->data + j * wsz / param->num_groups;
                 float *c =
                     dst_tensor->data + (i * param->num_groups + j) * n * m;
-                float *src =
-                    src_tensor->data +
-                    (i * param->num_groups + j) * sz / param->num_groups;
+                float *src = src_tensor->data + (i * param->num_groups + j) *
+                                                    sz / param->num_groups;
                 if (param->size == 1) {
                     b = src;
                 } else {
@@ -638,7 +648,7 @@ void bcnn_forward_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
                                    ,
                                    param->dst_tensor_desc, param->bias_desc
 #endif
-                                   );
+        );
     }
     sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
     bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, param->activation);
@@ -685,7 +695,7 @@ void bcnn_backward_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
                                     ,
                                     param->dst_tensor_desc, param->bias_desc
 #endif
-                                    );
+        );
     } else {
 #ifndef BCNN_USE_CUDNN
         bcnn_cuda_grad_bias(biases->grad_data_gpu, dst_tensor->grad_data_gpu,
@@ -726,9 +736,9 @@ void bcnn_backward_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
             }
             bcnn_cuda_gemm(
                 0, 1, param->num / param->num_groups, n, dst_sz2d, 1,
-                dst_tensor->grad_data_gpu +
-                    (i * param->num_groups + j) * param->num /
-                        param->num_groups * dst_sz2d,
+                dst_tensor->grad_data_gpu + (i * param->num_groups + j) *
+                                                param->num / param->num_groups *
+                                                dst_sz2d,
                 dst_sz2d, param->conv_workspace_gpu, dst_sz2d, 1,
                 weights->grad_data_gpu + j * w_sz / param->num_groups, n);
             if (src_tensor->grad_data_gpu) {
@@ -739,8 +749,9 @@ void bcnn_backward_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
                         dst_tensor->grad_data_gpu +
                             (i * param->num_groups + j) * param->num /
                                 param->num_groups * dst_sz2d,
-                        dst_sz2d, 0, src_tensor->grad_data_gpu +
-                                         (i * param->num_groups + j) * sz,
+                        dst_sz2d, 0,
+                        src_tensor->grad_data_gpu +
+                            (i * param->num_groups + j) * sz,
                         dst_sz2d);
                 } else {
                     bcnn_cuda_gemm(
@@ -833,17 +844,17 @@ void bcnn_release_param_conv_layer(bcnn_node *node) {
     bcnn_conv_param *param = (bcnn_conv_param *)node->param;
     bcnn_tensor_destroy(&param->saved_mean);
     bcnn_tensor_destroy(&param->saved_variance);
-    bh_free(param->conv_workspace);
-    bh_free(param->x_norm);
-    bh_free(param->workspace);
-    bh_free(param->adam_m);
-    bh_free(param->adam_v);
-    bh_free(param->weights_workspace);
-    bh_free(param->biases_workspace);
-    bh_free(param->scales_workspace);
-    bh_free(param->slopes_workspace);
-    bh_free(param->src_workspace);
-    bh_free(param->dst_workspace);
+    bh_align_free(param->conv_workspace);
+    bh_align_free(param->x_norm);
+    bh_align_free(param->workspace);
+    bh_align_free(param->adam_m);
+    bh_align_free(param->adam_v);
+    bh_align_free(param->weights_workspace);
+    bh_align_free(param->biases_workspace);
+    bh_align_free(param->scales_workspace);
+    bh_align_free(param->slopes_workspace);
+    bh_align_free(param->src_workspace);
+    bh_align_free(param->dst_workspace);
 #ifdef BCNN_USE_CUDA
     if (param->x_norm_gpu) {
         bcnn_cuda_free(param->x_norm_gpu);

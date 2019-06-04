@@ -21,6 +21,8 @@
  */
 
 #include <math.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 /* include bh helpers */
 #include <bh/bh_ini.h>
@@ -175,12 +177,53 @@ bcnn_status bcnn_net_create_cuda_context(bcnn_net *net) {
 }
 #endif
 
-void bcnn_set_num_threads(bcnn_net *net, int num_threads) {
+static int bcnn_set_thread_cpu_affinity(const int *cpu_ids, int num_cpus) {
+#define CPU_SETSIZE 1024
+#define __NCPUBITS (8 * sizeof(unsigned long))
+    typedef struct {
+        unsigned long __bits[CPU_SETSIZE / __NCPUBITS];
+    } cpu_set_t;
+
+#define CPU_SET(cpu, cpusetp) \
+    ((cpusetp)->__bits[(cpu) / __NCPUBITS] |= (1UL << ((cpu) % __NCPUBITS)))
+
+    //#define CPU_ZERO(cpusetp) memset((cpusetp), 0, sizeof(cpu_set_t))
+
+#ifdef __GLIBC__
+    pid_t pid = syscall(SYS_gettid);
+#else
+    pid_t pid = gettid();
+#endif
+    cpu_set_t mask;
+    memset(&mask, 0, sizeof(cpu_set_t));
+    for (int i = 0; i < num_cpus; i++) {
+        CPU_SET(cpu_ids[i], &mask);
+    }
+    int syscallret = syscall(__NR_sched_setaffinity, pid, sizeof(mask), &mask);
+    if (syscallret) {
+        return -1;
+    }
+    return 0;
+}
+
+bcnn_status bcnn_set_num_threads(bcnn_net *net, int num_threads,
+                                 const int *cpu_ids) {
     net->num_threads = 1;
 #ifdef BCNN_USE_OPENMP
-    net->num_threads = bh_clamp(num_threads, 1, 8);
+    net->num_threads = bh_clamp(num_threads, 1, omp_get_max_threads());
     omp_set_num_threads(net->num_threads);
+    int ret = 0;
+    if (cpu_ids) {
+#pragma omp parallel for num_threads(net->num_threads)
+        for (int i = 0; i < net->num_threads; ++i) {
+            ret += bcnn_set_thread_cpu_affinity(cpu_ids, net->num_threads);
+        }
+    }
 #endif
+    if (ret != 0) {
+        return BCNN_INVALID_PARAMETER;
+    }
+    return BCNN_SUCCESS;
 }
 
 int bcnn_get_num_threads(bcnn_net *net) { return net->num_threads; }
@@ -343,6 +386,7 @@ bcnn_tensor *bcnn_get_tensor_by_name(bcnn_net *net, const char *name) {
 
 void bcnn_forward(bcnn_net *net) {
     for (int i = 0; i < net->num_nodes; ++i) {
+        fprintf(stderr, "%d threads %d\n", i, net->num_threads);
         bcnn_node *node = &net->nodes[i];
         if (net->mode == BCNN_MODE_TRAIN) {
             bcnn_reset_gradients(net, node);
@@ -1191,12 +1235,13 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 "Inconsistent batchnorm means size: expected %d but found "
                 "%lu\n",
                 m_sz, (unsigned long)nr);
-            BCNN_CHECK_AND_LOG(net->log_ctx, (nr = fread(v->data, sizeof(float),
-                                                         v_sz, fp)) == v_sz,
-                               BCNN_INVALID_MODEL,
-                               "Inconsistent batchnorm variances size: "
-                               "expected %d but found %lu\n",
-                               v_sz, (unsigned long)nr);
+            BCNN_CHECK_AND_LOG(
+                net->log_ctx,
+                (nr = fread(v->data, sizeof(float), v_sz, fp)) == v_sz,
+                BCNN_INVALID_MODEL,
+                "Inconsistent batchnorm variances size: "
+                "expected %d but found %lu\n",
+                v_sz, (unsigned long)nr);
             if (format == 0) {
                 BCNN_CHECK_AND_LOG(
                     net->log_ctx,
@@ -1210,9 +1255,9 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 // Fuse mean / variance into scales and biases for optimal
                 // inference speed
                 for (int i = 0; i < s_sz; ++i) {
-                    b->data[i] = b->data[i] -
-                                 (s->data[i] * m->data[i]) /
-                                     (sqrtf(v->data[i] + 0.000001f));
+                    b->data[i] =
+                        b->data[i] - (s->data[i] * m->data[i]) /
+                                         (sqrtf(v->data[i] + 0.000001f));
                     s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
                 }
             }
@@ -1240,8 +1285,9 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
             int slopes_sz = bcnn_tensor_size(slopes);
             int nr = 0;
             BCNN_CHECK_AND_LOG(
-                net->log_ctx, (nr = fread(slopes->data, sizeof(float),
-                                          slopes_sz, fp)) == slopes_sz,
+                net->log_ctx,
+                (nr = fread(slopes->data, sizeof(float), slopes_sz, fp)) ==
+                    slopes_sz,
                 BCNN_INVALID_MODEL,
                 "Inconsistent prelu slopes size: expected %d but found %lu\n",
                 slopes_sz, (unsigned long)nr);
@@ -1320,9 +1366,8 @@ static bcnn_status bcnn_load_batchnorm_weights(bcnn_net *net, bcnn_node *node,
         // Fuse mean / variance into scales and biases for optimal
         // inference speed
         for (int i = 0; i < sz; ++i) {
-            b->data[i] =
-                b->data[i] -
-                (s->data[i] * m->data[i]) / (sqrtf(v->data[i] + 0.000001f));
+            b->data[i] = b->data[i] - (s->data[i] * m->data[i]) /
+                                          (sqrtf(v->data[i] + 0.000001f));
             s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
         }
     }

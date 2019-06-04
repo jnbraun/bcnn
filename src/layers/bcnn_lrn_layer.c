@@ -28,6 +28,7 @@
 #include "bcnn_utils.h"
 
 #include <bh/bh_macros.h>
+#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
 bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
@@ -78,8 +79,10 @@ bcnn_status bcnn_add_lrn_layer(bcnn_net *net, int local_size, float alpha,
     param->alpha = alpha;
     param->beta = beta;
     int sz = bcnn_tensor_size(&net->tensors[node.src[0]]);
-    param->tmp_sum = (float *)calloc(sz, sizeof(float));
-    param->tmp_squared = (float *)calloc(sz, sizeof(float));
+    param->tmp_sum =
+        (float *)bh_align_calloc(sz * sizeof(float), align_offset_);
+    param->tmp_squared =
+        (float *)bh_align_calloc(sz * sizeof(float), align_offset_);
     node.forward = bcnn_forward_lrn_layer;
     node.backward = bcnn_backward_lrn_layer;
     node.release_param = bcnn_release_param_lrn_layer;
@@ -218,8 +221,8 @@ void bcnn_backward_lrn_layer(bcnn_net *net, bcnn_node *node) {
 
 void bcnn_release_param_lrn_layer(bcnn_node *node) {
     bcnn_lrn_param *param = (bcnn_lrn_param *)node->param;
-    bh_free(param->tmp_squared);
-    bh_free(param->tmp_sum);
+    bh_align_free(param->tmp_squared);
+    bh_align_free(param->tmp_sum);
 #ifdef BCNN_USE_CUDA
 // Not implemented
 #endif

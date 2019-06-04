@@ -26,6 +26,7 @@
 #include "cblas.h"
 #endif
 
+#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
 #include "bcnn_activation_layer.h"
@@ -107,12 +108,15 @@ bcnn_status bcnn_add_deconvolutional_layer(
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
     int sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
              net->tensors[node.src[0]].c * size * size;
-    param->conv_workspace = (float *)calloc(sz, sizeof(float));
+    param->conv_workspace =
+        (float *)bh_align_calloc(sz * sizeof(float), align_offset_);
     if (net->learner != NULL) {
         if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
             int weights_size = bcnn_tensor_size(&weights);
-            param->adam_m = (float *)calloc(weights_size, sizeof(float));
-            param->adam_v = (float *)calloc(weights_size, sizeof(float));
+            param->adam_m = (float *)bh_align_calloc(
+                weights_size * sizeof(float), align_offset_);
+            param->adam_v = (float *)bh_align_calloc(
+                weights_size * sizeof(float), align_offset_);
         }
     }
 #ifdef BCNN_USE_CUDA
@@ -391,9 +395,9 @@ void bcnn_update_deconv_layer(bcnn_net *net, bcnn_node *node) {
 
 void bcnn_release_param_deconv_layer(bcnn_node *node) {
     bcnn_deconv_param *param = (bcnn_deconv_param *)node->param;
-    bh_free(param->conv_workspace);
-    bh_free(param->adam_m);
-    bh_free(param->adam_v);
+    bh_align_free(param->conv_workspace);
+    bh_align_free(param->adam_m);
+    bh_align_free(param->adam_v);
 #ifdef BCNN_USE_CUDA
     if (param->adam_m_gpu) {
         bcnn_cuda_free(param->adam_m_gpu);

@@ -33,6 +33,7 @@
 #include "cblas.h"
 #endif
 
+#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
 /* Depthwise Separable convolution */
@@ -99,8 +100,10 @@ bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
     if (net->learner != NULL) {
         if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
             int weights_size = bcnn_tensor_size(&weights);
-            param->adam_m = (float *)calloc(weights_size, sizeof(float));
-            param->adam_v = (float *)calloc(weights_size, sizeof(float));
+            param->adam_m = (float *)bh_align_calloc(
+                weights_size * sizeof(float), align_offset_);
+            param->adam_v = (float *)bh_align_calloc(
+                weights_size * sizeof(float), align_offset_);
         }
     }
 #ifdef BCNN_USE_CUDA
@@ -601,8 +604,8 @@ void bcnn_update_depthwise_conv_layer(bcnn_net *net, bcnn_node *node) {
 
 void bcnn_release_param_depthwise_conv_layer(bcnn_node *node) {
     bcnn_depthwise_conv_param *param = (bcnn_depthwise_conv_param *)node->param;
-    bh_free(param->adam_m);
-    bh_free(param->adam_v);
+    bh_align_free(param->adam_m);
+    bh_align_free(param->adam_v);
 #ifdef BCNN_USE_CUDA
     if (param->adam_m_gpu) {
         bcnn_cuda_free(param->adam_m_gpu);

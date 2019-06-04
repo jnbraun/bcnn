@@ -307,13 +307,23 @@ BCNN_API void bcnn_set_log_context(bcnn_net *net, bcnn_log_callback fct,
                                    bcnn_log_level level);
 
 /**
- * \brief Sets the number of threads for BCNN to use (maximal: 8).
+ * \brief Sets the number of threads for BCNN to use and optionally sets the CPU
+ * affinity per thread.
  *
  * \param[in]   net             Pointer to net instance.
  * \param[in]   num_threads     Number of threads to use. BCNN_USE_OPENMP must
  *                              be defined.
+ * \param[in]   cpu_ids         Pointer to the array of CPUs on which the
+ *                              threads will run. The number of elements of
+ *                              'cpu_ids' should be equal or superior to
+ *                              'num_threads'. If the pointer is set to 'NULL',
+ *                              no particular CPU affinity will be set.
+ *
+ * \return  BCNN_INVALID_PARAMETER if the cpu affinity scheduling
+ * failed, BCNN_SUCCESS otherwise.
  */
-BCNN_API void bcnn_set_num_threads(bcnn_net *net, int num_threads);
+BCNN_API bcnn_status bcnn_set_num_threads(bcnn_net *net, int num_threads,
+                                          const int *cpu_ids);
 
 /**
  * \brief Gets the number of threads currently used by the net instance. Use

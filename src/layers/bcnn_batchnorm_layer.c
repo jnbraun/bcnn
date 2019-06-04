@@ -29,6 +29,7 @@
 #include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
+#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
 bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
@@ -105,8 +106,9 @@ bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
     bcnn_net_add_tensor(net, biases);
     bcnn_node_add_input(net, &node, net->num_tensors - 1);
     // Internal data
-    param->x_norm = (float *)calloc(sz, sizeof(float));
-    param->workspace = (float *)calloc(sz, sizeof(float));
+    param->x_norm = (float *)bh_align_calloc(sz * sizeof(float), align_offset_);
+    param->workspace =
+        (float *)bh_align_calloc(sz * sizeof(float), align_offset_);
 #ifdef BCNN_USE_CUDA
     param->x_norm_gpu =
         bcnn_cuda_memcpy_f32(net->tensors[node.dst[0]].data, sz);
@@ -358,8 +360,8 @@ void bcnn_backward_batchnorm_layer(bcnn_net *net, bcnn_node *node) {
 
 void bcnn_release_param_batchnorm_layer(bcnn_node *node) {
     bcnn_batchnorm_param *param = (bcnn_batchnorm_param *)node->param;
-    bh_free(param->workspace);
-    bh_free(param->x_norm);
+    bh_align_free(param->workspace);
+    bh_align_free(param->x_norm);
     bcnn_tensor_destroy(&param->saved_mean);
     bcnn_tensor_destroy(&param->saved_variance);
 #ifdef BCNN_USE_CUDA

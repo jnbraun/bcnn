@@ -386,7 +386,6 @@ bcnn_tensor *bcnn_get_tensor_by_name(bcnn_net *net, const char *name) {
 
 void bcnn_forward(bcnn_net *net) {
     for (int i = 0; i < net->num_nodes; ++i) {
-        fprintf(stderr, "%d threads %d\n", i, net->num_threads);
         bcnn_node *node = &net->nodes[i];
         if (net->mode == BCNN_MODE_TRAIN) {
             bcnn_reset_gradients(net, node);

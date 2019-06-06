@@ -1640,9 +1640,9 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
     int weight_z_step = 16 * src_depth_quad + weight_depth_offset;
     int x13 = src_depth_quad;
     int w8 = width / 8;
-    int w8tail = w8 * 8;
-    int w4 = (width - w8tail) / 4;
-    int w4tail = w8tail + w4 * 4;
+    int w8tail = (w8 * 8) / 4;
+    int w4 = width / 4;
+    int w4tail = w4 * 4;
     for (int dz = 0; dz < dst_depth_quad; ++dz) {
         float *dst_z = dst + dz * dst_step;
         const float *weight_dz = weight + dz * weight_z_step;
@@ -1837,7 +1837,7 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
         }
         for (int dx = w4tail; dx < width; ++dx) {
             float *dst_x = dst_z + dx * 4;
-            const float *src_dx = src + dx * 16;
+            const float *src_dx = src + dx * 4;
             float32x4_t dst0 = vdupq_n_f32(0.0f);
             float32x4_t dst1 = vdupq_n_f32(0.0f);
             float32x4_t w0 = vld1q_f32(weight_dz + 4 * 0);
@@ -1857,6 +1857,7 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
                 w1 = vld1q_f32(weight_z + 4 * 1);
                 w2 = vld1q_f32(weight_z + 4 * 2);
                 w3 = vld1q_f32(weight_z + 4 * 3);
+                v0 = vld1q_f32(src_z);
                 dst0 = vfmaq_laneq_f32(dst0, w0, v0, 0);
                 dst1 = vfmaq_laneq_f32(dst1, w1, v0, 1);
             }

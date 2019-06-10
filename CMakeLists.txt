@@ -214,7 +214,7 @@ if (BUILD_EXAMPLES)
     add_subdirectory(examples/mnist)
     add_subdirectory(examples/cifar10)
     add_subdirectory(examples/yolo)
-    add_subdirectory(examples/inference_bench)
+    add_subdirectory(examples/inference_benchmark)
 endif()
 
 if (BUILD_TOOLS)

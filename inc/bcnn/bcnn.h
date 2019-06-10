@@ -310,6 +310,9 @@ BCNN_API void bcnn_set_log_context(bcnn_net *net, bcnn_log_callback fct,
  * \brief Sets the number of threads for BCNN to use and optionally sets the CPU
  * affinity per thread.
  *
+ * \note This function must be called before any function that defines or loads
+ * the network architecture.
+ *
  * \param[in]   net             Pointer to net instance.
  * \param[in]   num_threads     Number of threads to use. BCNN_USE_OPENMP must
  *                              be defined.
@@ -398,7 +401,7 @@ BCNN_API bcnn_status bcnn_resize_net(bcnn_net *net, int w, int h, int c,
  *
  * This function needs to be called after everything has been setup (the model
  * architecture, the dataset loader, the data augmentation, the training
- * configuration and the model weights) have been setup and before effectively
+ * configuration and the model weights) and before effectively
  * starting the model training or inference.
  *
  * \param[in]   net         Pointer to net instance.
@@ -585,11 +588,11 @@ BCNN_API void bcnn_set_sgd_optimizer(bcnn_net *net, float learning_rate,
  *
  * \param[in]   net         Pointer to net instance.
  * \param[in]   decay_type  Decay policy. \see bcnn_lr_decay
- * \param[in]   gamma
- * \param[in]   scale
- * \param[in]   power
- * \param[in]   max_batches
- * \param[in]   step
+ * \param[in]   gamma       A coefficient for some learning rate decay schemes.
+ * \param[in]   scale       A coefficient for some learning rate decay schemes.
+ * \param[in]   power       A coefficient for some learning rate decay schemes.
+ * \param[in]   max_batches A coefficient for some learning rate decay schemes.
+ * \param[in]   step        A coefficient for some learning rate decay schemes.
  */
 BCNN_API void bcnn_set_learning_rate_policy(bcnn_net *net,
                                             bcnn_lr_decay decay_type,

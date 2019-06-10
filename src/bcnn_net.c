@@ -209,10 +209,10 @@ static int bcnn_set_thread_cpu_affinity(const int *cpu_ids, int num_cpus) {
 bcnn_status bcnn_set_num_threads(bcnn_net *net, int num_threads,
                                  const int *cpu_ids) {
     net->num_threads = 1;
+    int ret = 0;
 #ifdef BCNN_USE_OPENMP
     net->num_threads = bh_clamp(num_threads, 1, omp_get_max_threads());
     omp_set_num_threads(net->num_threads);
-    int ret = 0;
     if (cpu_ids) {
 #pragma omp parallel for num_threads(net->num_threads)
         for (int i = 0; i < net->num_threads; ++i) {
@@ -1250,6 +1250,7 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                     "expected %d but found %lu\n",
                     s_sz, (unsigned long)nr);
             }
+#ifndef BCNN_USE_CUDA
             if (net->mode == BCNN_MODE_PREDICT) {
                 // Fuse mean / variance into scales and biases for optimal
                 // inference speed
@@ -1260,6 +1261,7 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                     s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
                 }
             }
+#endif
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(m->data_gpu, m->data, m_sz);
             bcnn_cuda_memcpy_host2dev(v->data_gpu, v->data, v_sz);
@@ -1361,6 +1363,7 @@ static bcnn_status bcnn_load_batchnorm_weights(bcnn_net *net, bcnn_node *node,
             "Inconsistent biases size: expected %d but found %lu\n", sz,
             (unsigned long)nr);
     }
+#ifndef BCNN_USE_CUDA
     if (net->mode == BCNN_MODE_PREDICT) {
         // Fuse mean / variance into scales and biases for optimal
         // inference speed
@@ -1370,6 +1373,7 @@ static bcnn_status bcnn_load_batchnorm_weights(bcnn_net *net, bcnn_node *node,
             s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
         }
     }
+#endif
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(m->data_gpu, m->data, sz);
     bcnn_cuda_memcpy_host2dev(v->data_gpu, v->data, sz);

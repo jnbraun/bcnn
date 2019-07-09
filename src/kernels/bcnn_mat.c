@@ -2307,7 +2307,7 @@ static void sgemm_nn_pack_B(int kc, int nc, const float *B, int inc_row_B,
 static void sgemm_ukernel(int kc, float alpha, const float *A, const float *B,
                           float beta, float *C, int inc_row_C, int inc_col_C,
                           int mr, int nr, float *AB0) {
-    float AB[MR * NR];
+    float AB[MR * NR] __attribute__((aligned(32)));
 #if (defined(BCNN_USE_AVX))
     __m256 abv0 = _mm256_setzero_ps();
     __m256 abv1 = _mm256_setzero_ps();

@@ -5,10 +5,7 @@
 #include <bcnn/bcnn.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_timer.h>
-#include <bip/bip.h>
-
-#include "bcnn_utils.h"
-#include "kernels/bcnn_mat.h"
+#include <bip/bip.h> /* Image loading */
 
 void show_usage(int argc, char **argv) {
     fprintf(stderr,
@@ -49,7 +46,7 @@ int main(int argc, char **argv) {
     /* Compile net */
     if (bcnn_compile_net(net) != BCNN_SUCCESS) {
         bcnn_end_net(&net);
-        return -1;
+        return -2;
     }
     /* Load test image */
     unsigned char *img = NULL;
@@ -57,7 +54,7 @@ int main(int argc, char **argv) {
     int ret = bip_load_image(argv[1], &img, &w, &h, &c);
     if (ret != BIP_SUCCESS) {
         fprintf(stderr, "[ERROR] Failed to open image %s\n", argv[1]);
-        return -1;
+        return -3;
     }
     /* Get a pointer to the input tensor */
     bcnn_tensor *input_tensor = bcnn_get_tensor_by_name(net, "input");
@@ -66,9 +63,9 @@ int main(int argc, char **argv) {
         fprintf(stderr,
                 "[ERROR] Image depth is not supported: expected %d, found %d\n",
                 input_tensor->c, c);
-        return -1;
+        return -4;
     }
-    /* Resize image if needed */
+    /* If needed, resize image to fit the input tensor dimensions */
     if (input_tensor->w != w || input_tensor->h != h) {
         uint8_t *img_rz = (uint8_t *)calloc(
             input_tensor->w * input_tensor->h * c, sizeof(uint8_t));
@@ -119,9 +116,6 @@ int main(int argc, char **argv) {
     if (out != NULL) {
         float max_p = -1.f;
         int max_class = -1;
-#ifdef BCNN_USE_CUDA
-        bcnn_cuda_memcpy_dev2host(out->data_gpu, out->data, out->c);
-#endif
         for (int i = 0; i < out->c; ++i) {
             if (out->data[i] > max_p) {
                 max_p = out->data[i];

@@ -25,6 +25,7 @@
 #include "cblas.h"
 #endif
 
+#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
 #include "bcnn_activation_layer.h"
@@ -102,8 +103,10 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
     if (net->learner != NULL) {
         if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
             int weights_size = bcnn_tensor_size(&weights);
-            param->adam_m = (float *)calloc(weights_size, sizeof(float));
-            param->adam_v = (float *)calloc(weights_size, sizeof(float));
+            param->adam_m = (float *)bh_align_calloc(
+                weights_size * sizeof(float), align_offset_);
+            param->adam_v = (float *)bh_align_calloc(
+                weights_size * sizeof(float), align_offset_);
         }
     }
 #ifdef BCNN_USE_CUDA
@@ -143,25 +146,28 @@ void bcnn_forward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int src_size = bcnn_tensor_size3d(src_tensor);
     int dst_size = bcnn_tensor_size3d(dst_tensor);
     int sz = bcnn_tensor_size(dst_tensor);
+    int spatial_size = bcnn_tensor_size2d(src_tensor);
 
     memset(dst_tensor->data, 0, dst_size * batch_size * sizeof(float));
-
-#ifdef BCNN_USE_BLAS
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, batch_size, dst_size,
-                src_size, 1.0f, src_tensor->data, src_size, weights->data,
-                src_size, 1.0f, dst_tensor->data, dst_size);
-#else
-    // Original
-    bcnn_gemm(net->gemm_ctx, 0, 1, batch_size, dst_size, src_size, 1.0f,
-              src_tensor->data, src_size, weights->data, src_size, 1.0f,
-              dst_tensor->data, dst_size);
-#endif
-
+    for (int b = 0; b < batch_size; ++b) {
+#pragma omp parallel for num_threads(net->num_threads)
+        for (int p = 0; p < dst_tensor->c; p++) {
+            float sum = 0.0f;
+            for (int q = 0; q < src_tensor->c; q++) {
+                float *w = weights->data + src_size * p + spatial_size * q;
+                float *x = src_tensor->data + b * src_size + q * spatial_size;
+                sum += bcnn_dot(spatial_size, x, w);
+            }
+            dst_tensor->data[b * dst_tensor->c + p] = sum;
+        }
+    }
     for (int i = 0; i < batch_size; ++i) {
         bcnn_axpy(dst_size, 1, biases->data, dst_tensor->data + i * dst_size);
     }
-
-    bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
+    // TODO: prelu not supported
+    bcnn_forward_activation_cpu(dst_tensor->data, sz, NULL,
+                                dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                                param->activation);
 
     return;
 }
@@ -178,7 +184,8 @@ void bcnn_backward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int sz = bcnn_tensor_size(dst_tensor);
 
     bcnn_backward_activation_cpu(dst_tensor->data, dst_tensor->grad_data, sz,
-                                 param->activation);
+                                 NULL, NULL, dst_tensor->w * dst_tensor->h,
+                                 dst_tensor->c, param->activation);
 
     for (int i = 0; i < batch_size; ++i) {
         bcnn_axpy(dst_size, 1, dst_tensor->grad_data + i * dst_size,
@@ -193,7 +200,7 @@ void bcnn_backward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
     // Original
     bcnn_gemm(net->gemm_ctx, 1, 0, dst_size, src_size, batch_size, 1.0f,
               dst_tensor->grad_data, dst_size, src_tensor->data, src_size, 1.0f,
-              weights->grad_data, src_size);
+              weights->grad_data, src_size, net->num_threads);
 #endif
 
     if (src_tensor->grad_data) {
@@ -206,7 +213,7 @@ void bcnn_backward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
         // Original
         bcnn_gemm(net->gemm_ctx, 0, 0, batch_size, src_size, dst_size, 1.0f,
                   dst_tensor->grad_data, dst_size, weights->data, src_size,
-                  1.0f, src_tensor->grad_data, src_size);
+                  1.0f, src_tensor->grad_data, src_size, net->num_threads);
 #endif
     }
 
@@ -337,8 +344,8 @@ void bcnn_update_fullc_layer(bcnn_net *net, bcnn_node *node) {
 
 void bcnn_release_param_fullc_layer(bcnn_node *node) {
     bcnn_fullc_param *param = (bcnn_fullc_param *)node->param;
-    bh_free(param->adam_m);
-    bh_free(param->adam_v);
+    bh_align_free(param->adam_m);
+    bh_align_free(param->adam_v);
 #ifdef BCNN_USE_CUDA
     if (param->adam_m_gpu) {
         bcnn_cuda_free(param->adam_m_gpu);

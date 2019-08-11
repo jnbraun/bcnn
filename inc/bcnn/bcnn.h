@@ -307,6 +307,38 @@ BCNN_API void bcnn_set_log_context(bcnn_net *net, bcnn_log_callback fct,
                                    bcnn_log_level level);
 
 /**
+ * \brief Sets the number of threads for BCNN to use and optionally sets the CPU
+ * affinity per thread.
+ *
+ * \note This function must be called before any function that defines or loads
+ * the network architecture.
+ *
+ * \param[in]   net             Pointer to net instance.
+ * \param[in]   num_threads     Number of threads to use. BCNN_USE_OPENMP must
+ *                              be defined.
+ * \param[in]   cpu_ids         Pointer to the array of CPUs on which the
+ *                              threads will run. The number of elements of
+ *                              'cpu_ids' should be equal or superior to
+ *                              'num_threads'. If the pointer is set to 'NULL',
+ *                              no particular CPU affinity will be set.
+ *
+ * \return  BCNN_INVALID_PARAMETER if the cpu affinity scheduling
+ * failed, BCNN_SUCCESS otherwise.
+ */
+BCNN_API bcnn_status bcnn_set_num_threads(bcnn_net *net, int num_threads,
+                                          const int *cpu_ids);
+
+/**
+ * \brief Gets the number of threads currently used by the net instance. Use
+ * 'bcnn_set_num_threads' to change the current number of threads.
+ *
+ * \param[in]   net             Pointer to net instance.
+ *
+ * \return Number of threads used by the net instance.
+ */
+BCNN_API int bcnn_get_num_threads(bcnn_net *net);
+
+/**
  * \brief Sets the shape of the primary input tensor.
  *
  * The primary input tensor holds the default name 'input'.
@@ -346,11 +378,30 @@ BCNN_API bcnn_status bcnn_add_input(bcnn_net *net, int width, int height,
 BCNN_API int bcnn_get_batch_size(bcnn_net *net);
 
 /**
+ * \brief Resizes the network according to given input width, height and
+ * channels.
+ *
+ * \note This function is valid only when applied to a fully convolutionnal
+ * network.
+ *
+ * \param[in]   net                  Pointer to net instance.
+ * \param[in]   w                    New input width.
+ * \param[in]   h                    New input height.
+ * \param[in]   c                    New input number of channels.
+ * \param[in]   need_realloc         Set to '1' if a memory allocation is
+ * needed, '0' otherwise.
+ *
+ * \return      Possible error include BCNN_FAILED_ALLOC.
+ */
+BCNN_API bcnn_status bcnn_resize_net(bcnn_net *net, int w, int h, int c,
+                                     int need_realloc);
+
+/**
  * \brief Finalizes the net configuration.
  *
  * This function needs to be called after everything has been setup (the model
  * architecture, the dataset loader, the data augmentation, the training
- * configuration and the model weights) have been setup and before effectively
+ * configuration and the model weights) and before effectively
  * starting the model training or inference.
  *
  * \param[in]   net         Pointer to net instance.
@@ -537,11 +588,11 @@ BCNN_API void bcnn_set_sgd_optimizer(bcnn_net *net, float learning_rate,
  *
  * \param[in]   net         Pointer to net instance.
  * \param[in]   decay_type  Decay policy. \see bcnn_lr_decay
- * \param[in]   gamma
- * \param[in]   scale
- * \param[in]   power
- * \param[in]   max_batches
- * \param[in]   step
+ * \param[in]   gamma       A coefficient for some learning rate decay schemes.
+ * \param[in]   scale       A coefficient for some learning rate decay schemes.
+ * \param[in]   power       A coefficient for some learning rate decay schemes.
+ * \param[in]   max_batches A coefficient for some learning rate decay schemes.
+ * \param[in]   step        A coefficient for some learning rate decay schemes.
  */
 BCNN_API void bcnn_set_learning_rate_policy(bcnn_net *net,
                                             bcnn_lr_decay decay_type,

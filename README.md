@@ -7,10 +7,10 @@
 BCNN (Bare Convolutional Neural Networks) is a minimalist framework designed to prototype, train and deploy convolutional neural networks for embedded computer vision applications. 
 
 ### Features
-* Written in C99. Clean C API designed to be integrated in C or C++ codebase. **No** Python.
+* Written in C99. Clean C API designed to be integrated in C or C++ codebase.
 * Lightweight: the minimal build requires **no** external dependency.
 * Modular: Can leverage a Blas library such as OpenBLAS on CPU. Can also run on Nvidia's GPU. CuDNN is supported to offer maximal speed.
-* Fast: Optimized inference speed using AVX and ARM Neon SIMD instructions. Particularly efficient on ARMv8 architecture.
+* Fast: Optimized CPU inference speed using AVX and ARM Neon vectorizations and OpenMP multithreading.
 * Flexible: Supports multi inputs / outputs / branches. Provides the commonly used operators to build state-of-the-art CNN architectures (ResNet, DenseNet, MobileNet, [Yolo](https://github.com/jnbraun/bcnn/tree/master/examples/yolo) ...)
 * [Command line tool](https://github.com/jnbraun/bcnn/tree/master/examples/mnist_cl) to train / evaluate models via simple configuration file.
 * Online data augmentation via [bip](https://github.com/jnbraun/bcnn/tree/master/src/bip), a fast image processing library (usable as standalone module).
@@ -41,6 +41,7 @@ option(USE_CUDA "Build with CUDA libraries" OFF)
 option(USE_CUDNN "Build with CuDNN library" OFF)
 option(USE_BLAS "Build with BLAS library" ON)
 option(USE_NEON "Build with Neon instructions" OFF)
+option(USE_OPENMP "Enable OpenMP multithreading" ON)
 ```
 
 * [Optional] When building with CUDA and / or CuDNN, you may need to adjust the following line depending on the compute capability of your GPU:

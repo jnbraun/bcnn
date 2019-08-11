@@ -228,14 +228,16 @@ void bcnn_forward_yolo_layer_cpu(bcnn_net *net, bcnn_yolo_param *param,
             int index = entry_index(param, dst_tensor, b,
                                     n * src_tensor->w * src_tensor->h, 0);
             bcnn_forward_activation_cpu(dst_tensor->data + index,
-                                        2 * src_tensor->w * src_tensor->h,
-                                        BCNN_ACT_LOGISTIC);
+                                        2 * src_tensor->w * src_tensor->h, NULL,
+                                        src_tensor->w * src_tensor->h,
+                                        src_tensor->c, BCNN_ACT_LOGISTIC);
             index =
                 entry_index(param, dst_tensor, b,
                             n * src_tensor->w * src_tensor->h, param->coords);
             bcnn_forward_activation_cpu(
                 dst_tensor->data + index,
-                (1 + param->classes) * src_tensor->w * src_tensor->h,
+                (1 + param->classes) * src_tensor->w * src_tensor->h, NULL,
+                src_tensor->w * src_tensor->h, src_tensor->c,
                 BCNN_ACT_LOGISTIC);
         }
     }

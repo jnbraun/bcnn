@@ -134,8 +134,10 @@ static bcnn_status bcnn_load_image_from_path(bcnn_net *net, char *path, int w,
         memcpy(img, buf, w * h * c);
     }
     bh_free(buf);
-    *x_shift = x_ul;
-    *y_shift = y_ul;
+    if (x_shift && y_shift) {
+        *x_shift = x_ul;
+        *y_shift = y_ul;
+    }
 
     return BCNN_SUCCESS;
 }
@@ -331,9 +333,16 @@ bcnn_status bcnn_apply_data_augmentation(unsigned char *img, int width,
 
 void bcnn_fill_input_tensor(bcnn_net *net, bcnn_loader *iter, char *path_img,
                             int idx) {
-    bcnn_load_image_from_path(
-        net, path_img, net->tensors[0].w, net->tensors[0].h, net->tensors[0].c,
-        iter->input_uchar, &net->data_aug->shift_x, &net->data_aug->shift_y);
+    if (net->data_aug) {
+        bcnn_load_image_from_path(net, path_img, net->tensors[0].w,
+                                  net->tensors[0].h, net->tensors[0].c,
+                                  iter->input_uchar, &net->data_aug->shift_x,
+                                  &net->data_aug->shift_y);
+    } else {
+        bcnn_load_image_from_path(net, path_img, net->tensors[0].w,
+                                  net->tensors[0].h, net->tensors[0].c,
+                                  iter->input_uchar, NULL, NULL);
+    }
     // Data augmentation
     if (net->mode == BCNN_MODE_TRAIN) {
         int use_buffer_img = (net->data_aug->range_shift_x != 0 ||
@@ -356,10 +365,13 @@ void bcnn_fill_input_tensor(bcnn_net *net, bcnn_loader *iter, char *path_img,
     int input_sz = bcnn_tensor_size3d(&net->tensors[0]);
     float *x = net->tensors[0].data + idx * input_sz;
     // Map [0;255] uint8 values to [-1;1] float values
+    int swap_to_bgr = 0;
+    if (net->data_aug) {
+        swap_to_bgr = net->data_aug->swap_to_bgr;
+    }
     bcnn_convert_img_to_float(iter->input_uchar, net->tensors[0].w,
                               net->tensors[0].h, net->tensors[0].c, 1 / 127.5f,
-                              net->data_aug->swap_to_bgr, 127.5f, 127.5f,
-                              127.5f, x);
+                              swap_to_bgr, 127.5f, 127.5f, 127.5f, x);
 }
 
 bcnn_loader_init_func bcnn_iterator_init_lut[BCNN_NUM_LOADERS] = {

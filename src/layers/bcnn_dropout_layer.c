@@ -21,6 +21,7 @@
  */
 #include "bcnn_dropout_layer.h"
 
+#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
 #include "bcnn_net.h"
@@ -53,7 +54,7 @@ bcnn_status bcnn_add_dropout_layer(bcnn_net *net, float rate,
     bcnn_dropout_param *param = (bcnn_dropout_param *)node.param;
     param->dropout_rate = rate;
     int sz = bcnn_tensor_size(&net->tensors[node.src[0]]);
-    param->rand = (float *)calloc(sz, sizeof(float));
+    param->rand = (float *)bh_align_calloc(sz * sizeof(float), align_offset_);
     param->scale = 1.0f / (1.0f - rate);
 #ifdef BCNN_USE_CUDA
     param->rand_gpu = bcnn_cuda_memcpy_f32(param->rand, sz);
@@ -130,9 +131,9 @@ void bcnn_backward_dropout_layer(bcnn_net *net, bcnn_node *node) {
 
 void bcnn_release_param_dropout_layer(bcnn_node *node) {
     bcnn_dropout_param *param = (bcnn_dropout_param *)node->param;
-    bh_free(param->rand);
+    bh_align_free(param->rand);
 #ifdef BCNN_USE_CUDA
-    bh_free(param->rand_gpu);
+    bcnn_cuda_free(param->rand_gpu);
 #endif
     return;
 }

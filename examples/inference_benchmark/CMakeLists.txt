@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.0)
-project (inference-bench)
+project (inference-benchmark)
 
 include_directories (
     ${PROJECT_SOURCE_DIR}/../../inc
@@ -7,6 +7,6 @@ include_directories (
     )
 
 file(GLOB SRC *.c)
-add_executable(inference-bench ${SRC})
+add_executable(inference-benchmark ${SRC})
 
-target_link_libraries(inference-bench bcnn -lstdc++ -lm)
+target_link_libraries(inference-benchmark bcnn -lstdc++ -lm)

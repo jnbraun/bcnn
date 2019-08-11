@@ -35,6 +35,9 @@ typedef struct tensor_filler {
     bcnn_filler_type type;
 } bcnn_tensor_filler;
 
+// Alignment for align_malloc
+static const size_t align_offset_ = 32;
+
 void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
                         int has_grad, const char *name, int net_state);
 
@@ -45,6 +48,8 @@ void bcnn_tensor_destroy(bcnn_tensor *t);
 void bcnn_tensor_set_shape(bcnn_tensor *t, int n, int c, int h, int w,
                            int has_grad);
 
+bcnn_status bcnn_tensor_allocate_buffer(bcnn_tensor *t, int net_state,
+                                        size_t size);
 bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state);
 
 void bcnn_tensor_free(bcnn_tensor *t);

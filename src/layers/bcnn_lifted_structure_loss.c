@@ -70,7 +70,7 @@ void bcnn_lifted_struct_loss_forward(bcnn_net *net, bcnn_node *node) {
                 src_tensor->data, K_, src_tensor->data, K_, 0, dot_, N_);
 #else
     bcnn_gemm(net->gemm_ctx, 0, 1, M_, N_, K_, -2.0, src_tensor->data, K_,
-              src_tensor->data, K_, 0, dot_, N_);
+              src_tensor->data, K_, 0, dot_, N_, net->num_threads);
 #endif
 
     // one array

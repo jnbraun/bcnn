@@ -37,9 +37,6 @@
         }                                    \
     } while (0)
 
-// Alignment for align_malloc
-static const size_t align_offset_ = 32;
-
 void bcnn_tensor_create(bcnn_tensor *t, int n, int c, int h, int w,
                         int has_grad, const char *name, int net_state) {
     bcnn_tensor_set_shape(t, n, c, h, w, has_grad);
@@ -103,27 +100,31 @@ int bcnn_tensor_size3d(const bcnn_tensor *t) { return t->w * t->h * t->c; }
 
 int bcnn_tensor_size2d(const bcnn_tensor *t) { return t->w * t->h; }
 
-bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
-    int size = t->n * t->c * t->h * t->w;
-
+bcnn_status bcnn_tensor_allocate_buffer(bcnn_tensor *t, int net_state,
+                                        size_t size) {
     bcnn_tensor_free(t);
     if (size <= 0) {
         return BCNN_INVALID_PARAMETER;
     }
     t->data = (float *)bh_align_calloc(size * sizeof(float), align_offset_);
     BCNN_CHECK_ALLOC(t->data);
-    if (t->has_grad && net_state == BCNN_MODE_TRAIN) {
+    if (t->has_grad && net_state != BCNN_MODE_PREDICT) {
         t->grad_data =
             (float *)bh_align_calloc(size * sizeof(float), align_offset_);
         BCNN_CHECK_ALLOC(t->grad_data);
     }
 #ifdef BCNN_USE_CUDA
     t->data_gpu = bcnn_cuda_memcpy_f32(t->data, size);
-    if (t->has_grad && net_state == BCNN_MODE_TRAIN) {
+    if (t->has_grad && net_state != BCNN_MODE_PREDICT) {
         t->grad_data_gpu = bcnn_cuda_memcpy_f32(t->grad_data, size);
     }
 #endif
     return BCNN_SUCCESS;
+}
+
+bcnn_status bcnn_tensor_allocate(bcnn_tensor *t, int net_state) {
+    int size = t->n * t->c * t->h * t->w;
+    return bcnn_tensor_allocate_buffer(t, net_state, size);
 }
 
 void bcnn_tensor_free(bcnn_tensor *t) {

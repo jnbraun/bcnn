@@ -142,35 +142,32 @@ void bcnn_forward_maxpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int size = param->size;
     int stride = param->stride;
     int *indexes = param->indexes;
-    int b, i, j, k, m, n, dst_index, valid, src_index, cur_w, cur_h, max_i;
-    float max_f = -FLT_MAX, val;
-
     int batch_size = dst_tensor->n;
-    int offset0, offset1, offset2;
-
-    for (b = 0; b < batch_size; ++b) {  // batch_size
-        offset0 = dst_tensor->c * b;
-        for (k = 0; k < dst_tensor->c; ++k) {  // depth
-            offset1 = dst_tensor->h * (k + offset0);
-            for (i = 0; i < dst_tensor->h; ++i) {  // height
-                offset2 = dst_tensor->w * (offset1 + i);
-                for (j = 0; j < dst_tensor->w; ++j) {  // width
-                    dst_index = j + offset2;
-                    max_f = -FLT_MAX;
-                    max_i = -1;
-                    for (n = 0; n < size; ++n) {  // pooling window
-                        for (m = 0; m < size; ++m) {
-                            cur_h = i * stride + n;
-                            cur_w = j * stride + m;
-                            src_index =
+    for (int b = 0; b < batch_size; ++b) {  // batch_size
+        int offset0 = dst_tensor->c * b;
+#pragma omp parallel for num_threads(net->num_threads)
+        for (int k = 0; k < dst_tensor->c; ++k) {  // depth
+            int offset1 = dst_tensor->h * (k + offset0);
+            for (int i = 0; i < dst_tensor->h; ++i) {  // height
+                int offset2 = dst_tensor->w * (offset1 + i);
+                for (int j = 0; j < dst_tensor->w; ++j) {  // width
+                    int dst_index = j + offset2;
+                    float max_f = -FLT_MAX;
+                    int max_i = -1;
+                    for (int n = 0; n < size; ++n) {  // pooling window
+                        for (int m = 0; m < size; ++m) {
+                            int cur_h = i * stride + n;
+                            int cur_w = j * stride + m;
+                            int src_index =
                                 cur_w +
                                 src_tensor->w *
                                     (cur_h +
                                      src_tensor->h * (k + b * src_tensor->c));
-                            valid = (cur_h >= 0 && cur_h < src_tensor->h &&
-                                     cur_w >= 0 && cur_w < src_tensor->w);
-                            val = (valid != 0) ? src_tensor->data[src_index]
-                                               : -FLT_MAX;
+                            int valid = (cur_h >= 0 && cur_h < src_tensor->h &&
+                                         cur_w >= 0 && cur_w < src_tensor->w);
+                            float val = (valid != 0)
+                                            ? src_tensor->data[src_index]
+                                            : -FLT_MAX;
                             if (val > max_f) {
                                 max_f = val;
                                 max_i = src_index;

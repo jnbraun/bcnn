@@ -33,10 +33,8 @@ extern "C" {
 void bcnn_forward_avgpool_layer(bcnn_net *net, bcnn_node *node);
 void bcnn_backward_avgpool_layer(bcnn_net *net, bcnn_node *node);
 #ifdef BCNN_USE_CUDA
-void bcnn_forward_avgpool_layer_gpu(bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor);
-void bcnn_backward_avgpool_layer_gpu(bcnn_tensor *src_tensor,
-                                     bcnn_tensor *dst_tensor);
+void bcnn_forward_avgpool_layer_gpu(bcnn_net *net, bcnn_node *node);
+void bcnn_backward_avgpool_layer_gpu(bcnn_net *net, bcnn_node *node);
 #endif
 
 #ifdef __cplusplus

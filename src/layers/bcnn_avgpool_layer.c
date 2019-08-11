@@ -74,9 +74,11 @@ bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, const char *src_id,
     return 0;
 }
 
-void bcnn_forward_avgpool_layer_cpu(bcnn_tensor *src_tensor,
-                                    bcnn_tensor *dst_tensor) {
+void bcnn_forward_avgpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     for (int b = 0; b < src_tensor->n; ++b) {
+#pragma omp parallel for num_threads(net->num_threads)
         for (int k = 0; k < src_tensor->c; ++k) {
             int idx = k + b * src_tensor->c;
             dst_tensor->data[idx] = 0;
@@ -92,17 +94,16 @@ void bcnn_forward_avgpool_layer_cpu(bcnn_tensor *src_tensor,
 }
 
 void bcnn_forward_avgpool_layer(bcnn_net *net, bcnn_node *node) {
-    bcnn_tensor *src = &net->tensors[node->src[0]];
-    bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_forward_avgpool_layer_gpu(src, dst);
+    return bcnn_forward_avgpool_layer_gpu(net, node);
 #else
-    return bcnn_forward_avgpool_layer_cpu(src, dst);
+    return bcnn_forward_avgpool_layer_cpu(net, node);
 #endif
 }
 
-void bcnn_backward_avgpool_layer_cpu(bcnn_tensor *src_tensor,
-                                     bcnn_tensor *dst_tensor) {
+void bcnn_backward_avgpool_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
+    bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     for (int b = 0; b < src_tensor->n; ++b) {
         for (int k = 0; k < src_tensor->c; ++k) {
             int idx = k + b * src_tensor->c;
@@ -122,8 +123,8 @@ void bcnn_backward_avgpool_layer(bcnn_net *net, bcnn_node *node) {
     bcnn_tensor *src = &net->tensors[node->src[0]];
     bcnn_tensor *dst = &net->tensors[node->dst[0]];
 #ifdef BCNN_USE_CUDA
-    return bcnn_backward_avgpool_layer_gpu(src, dst);
+    return bcnn_backward_avgpool_layer_gpu(net, node);
 #else
-    return bcnn_backward_avgpool_layer_cpu(src, dst);
+    return bcnn_backward_avgpool_layer_cpu(net, node);
 #endif
 }

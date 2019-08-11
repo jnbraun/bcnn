@@ -26,6 +26,7 @@
 #include "cblas.h"
 #endif
 
+#include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
 #include "bcnn_activation_layer.h"
@@ -107,12 +108,15 @@ bcnn_status bcnn_add_deconvolutional_layer(
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
     int sz = net->tensors[node.dst[0]].w * net->tensors[node.dst[0]].h *
              net->tensors[node.src[0]].c * size * size;
-    param->conv_workspace = (float *)calloc(sz, sizeof(float));
+    param->conv_workspace =
+        (float *)bh_align_calloc(sz * sizeof(float), align_offset_);
     if (net->learner != NULL) {
         if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
             int weights_size = bcnn_tensor_size(&weights);
-            param->adam_m = (float *)calloc(weights_size, sizeof(float));
-            param->adam_v = (float *)calloc(weights_size, sizeof(float));
+            param->adam_m = (float *)bh_align_calloc(
+                weights_size * sizeof(float), align_offset_);
+            param->adam_v = (float *)bh_align_calloc(
+                weights_size * sizeof(float), align_offset_);
         }
     }
 #ifdef BCNN_USE_CUDA
@@ -166,7 +170,8 @@ void bcnn_forward_deconv_layer_cpu(bcnn_net *net, bcnn_node *node) {
                     param->conv_workspace, n);
 #else
         bcnn_gemm(net->gemm_ctx, 1, 0, m, n, k, 1.0f, weights->data, m,
-                  src_tensor->data + i * sz, n, 0.0f, param->conv_workspace, n);
+                  src_tensor->data + i * sz, n, 0.0f, param->conv_workspace, n,
+                  net->num_threads);
 #endif
         bcnn_col2im(
             param->conv_workspace, param->num, dst_tensor->h, dst_tensor->w,
@@ -175,10 +180,13 @@ void bcnn_forward_deconv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     }
 
     bcnn_add_bias(dst_tensor->data, biases->data, batch_size, param->num,
-                  dst_tensor->w * dst_tensor->h);
+                  dst_tensor->w * dst_tensor->h, net->num_threads);
 
     sz = dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size;
-    bcnn_forward_activation_cpu(dst_tensor->data, sz, param->activation);
+    // TODO: prelu not supported
+    bcnn_forward_activation_cpu(dst_tensor->data, sz, NULL,
+                                dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                                param->activation);
 
     return;
 }
@@ -196,11 +204,11 @@ void bcnn_backward_deconv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int k = src_tensor->w * src_tensor->h;
     float *pdst = NULL;
     float alpha = 1.0f / batch_size;
-
+    // TODO: prelu not supported
     bcnn_backward_activation_cpu(
         dst_tensor->data, dst_tensor->grad_data,
-        dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size,
-        param->activation);
+        dst_tensor->w * dst_tensor->h * dst_tensor->c * batch_size, NULL, NULL,
+        dst_tensor->w * dst_tensor->h, dst_tensor->c, param->activation);
 
     bcnn_grad_bias(biases->grad_data, dst_tensor->grad_data, batch_size,
                    param->num, dst_tensor->w * dst_tensor->h);
@@ -219,7 +227,8 @@ void bcnn_backward_deconv_layer_cpu(bcnn_net *net, bcnn_node *node) {
         bcnn_gemm(net->gemm_ctx, 0, 1, m, n, k, alpha,
                   src_tensor->data +
                       i * src_tensor->c * src_tensor->h * src_tensor->w,
-                  k, param->conv_workspace, k, 1.0f, weights->grad_data, n);
+                  k, param->conv_workspace, k, 1.0f, weights->grad_data, n,
+                  net->num_threads);
 #endif
         if (src_tensor->grad_data) {
 #if BCNN_USE_BLAS
@@ -230,7 +239,7 @@ void bcnn_backward_deconv_layer_cpu(bcnn_net *net, bcnn_node *node) {
 #else
             bcnn_gemm(net->gemm_ctx, 0, 0, src_tensor->c, k, n, 1.0f,
                       weights->data, n, param->conv_workspace, k, 0.0f,
-                      src_tensor->grad_data + i * sz, k);
+                      src_tensor->grad_data + i * sz, k, net->num_threads);
 #endif
         }
     }
@@ -386,9 +395,9 @@ void bcnn_update_deconv_layer(bcnn_net *net, bcnn_node *node) {
 
 void bcnn_release_param_deconv_layer(bcnn_node *node) {
     bcnn_deconv_param *param = (bcnn_deconv_param *)node->param;
-    bh_free(param->conv_workspace);
-    bh_free(param->adam_m);
-    bh_free(param->adam_v);
+    bh_align_free(param->conv_workspace);
+    bh_align_free(param->adam_m);
+    bh_align_free(param->adam_v);
 #ifdef BCNN_USE_CUDA
     if (param->adam_m_gpu) {
         bcnn_cuda_free(param->adam_m_gpu);

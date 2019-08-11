@@ -20,8 +20,13 @@
  * SOFTWARE.
  */
 
+#include <math.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
 /* include bh helpers */
 #include <bh/bh_ini.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
@@ -49,6 +54,9 @@
 #include "bcnn_upsample_layer.h"
 #include "bcnn_utils.h"
 #include "bcnn_yolo.h"
+
+// PROFILE
+#include <bh/bh_timer.h>
 
 bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
     bcnn_net *p_net = (bcnn_net *)calloc(1, sizeof(bcnn_net));
@@ -79,6 +87,10 @@ bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
 #ifndef BCNN_USE_BLAS
     // Internal context for gemm
     BCNN_CHECK_STATUS(bcnn_net_create_gemm_context(p_net));
+#endif
+    p_net->num_threads = 1;
+#ifdef BCNN_USE_OPENMP
+    p_net->num_threads = bcnn_omp_get_num_threads();
 #endif
     *net = p_net;
     return BCNN_SUCCESS;
@@ -165,6 +177,57 @@ bcnn_status bcnn_net_create_cuda_context(bcnn_net *net) {
 }
 #endif
 
+static int bcnn_set_thread_cpu_affinity(const int *cpu_ids, int num_cpus) {
+#define CPU_SETSIZE 1024
+#define __NCPUBITS (8 * sizeof(unsigned long))
+    typedef struct {
+        unsigned long __bits[CPU_SETSIZE / __NCPUBITS];
+    } cpu_set_t;
+
+#define CPU_SET(cpu, cpusetp) \
+    ((cpusetp)->__bits[(cpu) / __NCPUBITS] |= (1UL << ((cpu) % __NCPUBITS)))
+
+//#define CPU_ZERO(cpusetp) memset((cpusetp), 0, sizeof(cpu_set_t))
+
+#ifdef __GLIBC__
+    pid_t pid = syscall(SYS_gettid);
+#else
+    pid_t pid = gettid();
+#endif
+    cpu_set_t mask;
+    memset(&mask, 0, sizeof(cpu_set_t));
+    for (int i = 0; i < num_cpus; i++) {
+        CPU_SET(cpu_ids[i], &mask);
+    }
+    int syscallret = syscall(__NR_sched_setaffinity, pid, sizeof(mask), &mask);
+    if (syscallret) {
+        return -1;
+    }
+    return 0;
+}
+
+bcnn_status bcnn_set_num_threads(bcnn_net *net, int num_threads,
+                                 const int *cpu_ids) {
+    net->num_threads = 1;
+    int ret = 0;
+#ifdef BCNN_USE_OPENMP
+    net->num_threads = bh_clamp(num_threads, 1, omp_get_max_threads());
+    omp_set_num_threads(net->num_threads);
+    if (cpu_ids) {
+#pragma omp parallel for num_threads(net->num_threads)
+        for (int i = 0; i < net->num_threads; ++i) {
+            ret += bcnn_set_thread_cpu_affinity(cpu_ids, net->num_threads);
+        }
+    }
+#endif
+    if (ret != 0) {
+        return BCNN_INVALID_PARAMETER;
+    }
+    return BCNN_SUCCESS;
+}
+
+int bcnn_get_num_threads(bcnn_net *net) { return net->num_threads; }
+
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node) {
     bcnn_node *p_node = NULL;
     net->num_nodes++;
@@ -207,10 +270,59 @@ void bcnn_set_input_shape(bcnn_net *net, int input_width, int input_height,
                           input_height, input_width, 0);
 }
 
+bcnn_status bcnn_resize_net(bcnn_net *net, int w, int h, int c,
+                            int need_realloc) {
+    bcnn_set_input_shape(net, w, h, c, 1);
+    for (int i = 0; i < net->num_nodes; ++i) {
+        if (net->nodes[i].type == BCNN_LAYER_CONV2D) {
+            bcnn_conv_param *param = (bcnn_conv_param *)(net->nodes[i].param);
+            bcnn_tensor_set_shape(&net->tensors[net->nodes[i].dst[0]],
+                                  net->tensors[net->nodes[i].src[0]].n,
+                                  param->num,
+                                  (net->tensors[net->nodes[i].src[0]].h +
+                                   2 * param->pad - param->size) /
+                                          param->stride +
+                                      1,
+                                  (net->tensors[net->nodes[i].src[0]].w +
+                                   2 * param->pad - param->size) /
+                                          param->stride +
+                                      1,
+                                  1);
+            if (need_realloc) {
+                BCNN_CHECK_STATUS(bcnn_tensor_allocate(
+                    &net->tensors[net->nodes[i].dst[0]], net->mode));
+            }
+        } else if (net->nodes[i].type == BCNN_LAYER_MAXPOOL) {
+            bcnn_maxpool_param *param =
+                (bcnn_maxpool_param *)(net->nodes[i].param);
+            bcnn_tensor_set_shape(
+                &net->tensors[net->nodes[i].dst[0]],
+                net->tensors[net->nodes[i].src[0]].n,
+                net->tensors[net->nodes[i].src[0]].c,
+                (net->tensors[net->nodes[i].src[0]].h - 1) / param->stride + 1,
+                (net->tensors[net->nodes[i].src[0]].w - 1) / param->stride + 1,
+                1);
+            if (need_realloc) {
+                BCNN_CHECK_STATUS(bcnn_tensor_allocate(
+                    &net->tensors[net->nodes[i].dst[0]], net->mode));
+            }
+        } else {
+            bcnn_tensor_set_shape(&net->tensors[net->nodes[i].dst[0]],
+                                  net->tensors[net->nodes[i].src[0]].n,
+                                  net->tensors[net->nodes[i].src[0]].c,
+                                  net->tensors[net->nodes[i].src[0]].h,
+                                  net->tensors[net->nodes[i].src[0]].w, 1);
+            if (need_realloc) {
+                BCNN_CHECK_STATUS(bcnn_tensor_allocate(
+                    &net->tensors[net->nodes[i].dst[0]], net->mode));
+            }
+        }
+    }
+}
+
 static bcnn_status bcnn_init_workload(bcnn_net *net) {
     // Allocate tensor for input node
     BCNN_CHECK_STATUS(bcnn_tensor_allocate(&net->tensors[0], net->mode));
-
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_context *cuda_ctx = (bcnn_cuda_context *)net->cuda_ctx;
     cuda_ctx->workspace_gpu = bcnn_cuda_malloc_f32(cuda_ctx->workspace_size);
@@ -264,6 +376,15 @@ bcnn_tensor *bcnn_get_tensor_by_index(bcnn_net *net, int index) {
         return NULL;
     }
     bcnn_tensor *tensor = &net->tensors[index];
+#ifdef BCNN_USE_CUDA
+    int sz = bcnn_tensor_size(tensor);
+    if (tensor->data_gpu && tensor->data) {
+        bcnn_cuda_memcpy_dev2host(tensor->data_gpu, tensor->data, sz);
+    }
+    if (tensor->grad_data_gpu && tensor->grad_data) {
+        bcnn_cuda_memcpy_dev2host(tensor->grad_data_gpu, tensor->grad_data, sz);
+    }
+#endif
     return tensor;
 }
 
@@ -278,7 +399,11 @@ void bcnn_forward(bcnn_net *net) {
         if (net->mode == BCNN_MODE_TRAIN) {
             bcnn_reset_gradients(net, node);
         }
+        // bh_timer t = {0};
+        // bh_timer_start(&t);
         node->forward(net, node);
+        // bh_timer_stop(&t);
+        // fprintf(stderr, "node %d %f\n", i, bh_timer_get_msec(&t));
     }
 }
 
@@ -1024,8 +1149,6 @@ bcnn_status bcnn_load_net(bcnn_net *net, const char *config_path,
         }
         // Parse network parameters
         for (int i = 0; i < config->sections[0].num_keys; ++i) {
-            /*fprintf(stderr, "%s %s\n", config->sections[0].keys[i].name,
-                    config->sections[0].keys[i].val);*/
             bcnn_net_set_param(net, config->sections[0].keys[i].name,
                                config->sections[0].keys[i].val);
         }
@@ -1035,9 +1158,6 @@ bcnn_status bcnn_load_net(bcnn_net *net, const char *config_path,
         for (int i = 1; i < config->num_sections; ++i) {
             // Parse layers parameters
             for (int j = 0; j < config->sections[i].num_keys; ++j) {
-                /*fprintf(stderr, "%s %s\n",
-                   config->sections[i].keys[j].name,
-                        config->sections[i].keys[j].val);*/
                 if (bcnn_layer_param_set(net, i, &lp,
                                          config->sections[i].keys[j].name,
                                          config->sections[i].keys[j].val,
@@ -1123,13 +1243,12 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 "Inconsistent batchnorm means size: expected %d but found "
                 "%lu\n",
                 m_sz, (unsigned long)nr);
-            BCNN_CHECK_AND_LOG(
-                net->log_ctx,
-                (nr = fread(v->data, sizeof(float), v_sz, fp)) == v_sz,
-                BCNN_INVALID_MODEL,
-                "Inconsistent batchnorm variances size: "
-                "expected %d but found %lu\n",
-                v_sz, (unsigned long)nr);
+            BCNN_CHECK_AND_LOG(net->log_ctx, (nr = fread(v->data, sizeof(float),
+                                                         v_sz, fp)) == v_sz,
+                               BCNN_INVALID_MODEL,
+                               "Inconsistent batchnorm variances size: "
+                               "expected %d but found %lu\n",
+                               v_sz, (unsigned long)nr);
             if (format == 0) {
                 BCNN_CHECK_AND_LOG(
                     net->log_ctx,
@@ -1139,6 +1258,18 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                     "expected %d but found %lu\n",
                     s_sz, (unsigned long)nr);
             }
+#ifndef BCNN_USE_CUDA
+            if (net->mode == BCNN_MODE_PREDICT) {
+                // Fuse mean / variance into scales and biases for optimal
+                // inference speed
+                for (int i = 0; i < s_sz; ++i) {
+                    b->data[i] = b->data[i] -
+                                 (s->data[i] * m->data[i]) /
+                                     (sqrtf(v->data[i] + 0.000001f));
+                    s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
+                }
+            }
+#endif
 #ifdef BCNN_USE_CUDA
             bcnn_cuda_memcpy_host2dev(m->data_gpu, m->data, m_sz);
             bcnn_cuda_memcpy_host2dev(v->data_gpu, v->data, v_sz);
@@ -1154,6 +1285,47 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
             "Inconsistent weights size %s: expected %d but found %lu\n",
             w->name, w_sz, (unsigned long)nr);
     }
+    if (node->type == BCNN_LAYER_CONV2D) {
+        bcnn_conv_param *param = (bcnn_conv_param *)node->param;
+        if (param->activation == BCNN_ACT_PRELU) {
+            // prelu slopes: 3 if no batchnorm, 6 if batchnorm
+            int tid = 3 + 3 * (param->batch_norm);
+            bcnn_tensor *slopes = &net->tensors[node->src[tid]];
+            int slopes_sz = bcnn_tensor_size(slopes);
+            int nr = 0;
+            BCNN_CHECK_AND_LOG(
+                net->log_ctx, (nr = fread(slopes->data, sizeof(float),
+                                          slopes_sz, fp)) == slopes_sz,
+                BCNN_INVALID_MODEL,
+                "Inconsistent prelu slopes size: expected %d but found %lu\n",
+                slopes_sz, (unsigned long)nr);
+        }
+    }
+
+    // Re-ordering weights for layout NC4HW4
+    if (node->type == BCNN_LAYER_CONV2D) {
+        bcnn_conv_param *param = (bcnn_conv_param *)node->param;
+        if (param->size == 3 && param->stride == 1 && param->num_groups == 1 &&
+            net->mode == BCNN_MODE_PREDICT) {
+            bcnn_conv3x3_convert_weights(w->data, param->weights_workspace,
+                                         net->tensors[node->src[0]].c,
+                                         net->tensors[node->dst[0]].c);
+            memcpy(param->biases_workspace, b->data,
+                   bcnn_tensor_size(b) * sizeof(float));
+            if (param->batch_norm == 1) {
+                bcnn_tensor *s = &net->tensors[node->src[5]];
+                memcpy(param->scales_workspace, s->data,
+                       bcnn_tensor_size(s) * sizeof(float));
+            }
+            if (param->activation == BCNN_ACT_PRELU) {
+                int tid = 3 + 3 * (param->batch_norm);
+                bcnn_tensor *slopes = &net->tensors[node->src[tid]];
+                memcpy(param->slopes_workspace, slopes->data,
+                       bcnn_tensor_size(slopes) * sizeof(float));
+            }
+        }
+    }
+
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(w->data_gpu, w->data, w_sz);
     bcnn_cuda_memcpy_host2dev(b->data_gpu, b->data, b_sz);
@@ -1198,6 +1370,18 @@ static bcnn_status bcnn_load_batchnorm_weights(bcnn_net *net, bcnn_node *node,
             "Inconsistent biases size: expected %d but found %lu\n", sz,
             (unsigned long)nr);
     }
+#ifndef BCNN_USE_CUDA
+    if (net->mode == BCNN_MODE_PREDICT) {
+        // Fuse mean / variance into scales and biases for optimal
+        // inference speed
+        for (int i = 0; i < sz; ++i) {
+            b->data[i] =
+                b->data[i] -
+                (s->data[i] * m->data[i]) / (sqrtf(v->data[i] + 0.000001f));
+            s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
+        }
+    }
+#endif
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(m->data_gpu, m->data, sz);
     bcnn_cuda_memcpy_host2dev(v->data_gpu, v->data, sz);

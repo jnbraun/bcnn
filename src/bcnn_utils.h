@@ -25,6 +25,10 @@
 
 #include "bcnn/bcnn.h"
 
+/* OpenMP */
+#ifdef BCNN_USE_OPENMP
+#include <omp.h>
+#endif
 /* Cuda include */
 #ifdef BCNN_USE_CUDA
 #include <cublas_v2.h>
@@ -117,6 +121,17 @@ static inline int rand_between(int min, int max) {
         return 0.f;
     }
     return (int)(((float)rand() / RAND_MAX * (max - min)) + min + 0.5f);
+}
+
+static inline int bcnn_omp_get_num_threads() {
+#ifdef BCNN_USE_OPENMP
+    int n = 0;
+#pragma omp parallel reduction(+ : n)
+    n += 1;
+    return n;
+#else
+    return 1;
+#endif
 }
 
 #ifdef BCNN_USE_CUDA

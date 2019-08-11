@@ -23,6 +23,12 @@
 #ifndef BCNN_MAT_H
 #define BCNN_MAT_H
 
+#include <stdio.h>
+
+/* OpenMP */
+#ifdef BCNN_USE_OPENMP
+#include <omp.h>
+#endif
 /* Cuda include */
 #ifdef BCNN_USE_CUDA
 #include <cublas_v2.h>
@@ -40,6 +46,14 @@
 #include <arm_neon.h>
 #else
 #undef BCNN_USE_NEON
+#endif
+#endif
+/* x86 SSE/AVX */
+#ifdef BCNN_USE_AVX
+#if defined(_MSC_VER)
+#include <intrin.h>
+#else
+#include <x86intrin.h>
 #endif
 #endif
 
@@ -75,6 +89,18 @@ extern "C" {
 #endif  // BCNN_USE_NEON
 #endif  // __aarch64__
 
+#if (defined(__aarch64__))
+#define CONV_TILED 16  // 16
+#else
+#define CONV_TILED 8
+#endif  // __aarch64__
+
+#define CONV3x3_SRC_BLOCK 64
+#define CONV3x3_WEIGHT_BLOCK 256
+#define CONV3x3_SRC_BLOCK_VEC 16
+#define CONV3x3_SRC_BLOCK_UNIT 3
+#define CONV3x3_BLOCK_UNIT 4
+
 typedef struct bcnn_gemm_context {
 #if !defined(BCNN_USE_BLAS) && !defined(BCNN_USE_CUDA)
 #if (defined(__aarch64__))  // use sgemm_openblas
@@ -97,6 +123,16 @@ typedef struct bcnn_gemm_context {
 #endif
 } bcnn_gemm_context;
 
+typedef struct bv_float4_t {
+#if defined(BCNN_USE_AVX)
+    __m128 val;
+#elif defined(BCNN_USE_NEON)
+    float32x4_t val;
+#else
+    float val[4];
+#endif
+} bv_float4;
+
 /* Matrix computation routines */
 int bcnn_fill_f32(int n, float a, float *x);
 int bcnn_copy_f32(int n, float *x, float *y);
@@ -118,18 +154,18 @@ int bcnn_gemv(int trans_a, int m, int n, float alpha, float *a, float *x,
               float beta, float *y);
 int bcnn_gemm(bcnn_gemm_context *ctx, int trans_a, int trans_b, int M, int N,
               int K, float ALPHA, float *A, int lda, float *B, int ldb,
-              float BETA, float *C, int ldc);
+              float BETA, float *C, int ldc, int num_threads);
 float bcnn_l2_distance(float *x, float *y, int n);
 float bcnn_sqrdiff_vs(float *x, float a, int n);
 float bcnn_shiftdot(int n, float *x, float a, float *y, float b);
 int bcnn_varnorm(int n, float *a, float c, float *y);
 int bcnn_varmean(int n, float *m, float a, float *var);
 void bcnn_add_bias(float *output, float *bias, int batch_size, int num_channels,
-                   int spatial_size);
+                   int spatial_size, int num_threads);
 void bcnn_grad_bias(float *grad_bias, float *grad_data, int batch_size,
                     int num_channels, int spatial_size);
 void bcnn_scales(float *output, float *scales, int batch_size, int num_channels,
-                 int spatial_size);
+                 int spatial_size, int num_threads);
 void bcnn_grad_scales(float *x_norm, float *delta, int batch, int n, int size,
                       float *scale_updates);
 void bcnn_im2col(const float *data_im, const int channels, const int height,
@@ -138,6 +174,82 @@ void bcnn_im2col(const float *data_im, const int channels, const int height,
 void bcnn_col2im(const float *data_col, const int channels, const int height,
                  const int width, const int kernel, const int pad,
                  const int stride, float *data_im);
+void bcnn_im2col_mt(const float *data_im, const int channels, const int height,
+                    const int width, const int kernel_size, const int pad,
+                    const int stride, float *data_col, int num_threads);
+void bcnn_conv3x3_convert_weights(const float *src, float *dst,
+                                  int src_channels, int dst_channels);
+void bcnn_conv3x3_convert_dst(const float *src, float *dst, size_t step);
+void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step);
+void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
+                           float *dst, int dst_w, int dst_h, int dst_c,
+                           int batch_size, int pad, float *weights,
+                           float *scales, float *biases, float *slopes,
+                           float *workspace, int workspace_sz, int post_func,
+                           int num_threads);
+void bcnn_nchw_to_nc4hw4(float *dst, const float *src, size_t area,
+                         size_t depth, int batch_size);
+void bcnn_nc4hw4_to_nchw(float *dst, const float *src, size_t area,
+                         size_t depth, int batch_size);
+
+typedef void (*bcnn_post_conv_nc4hw4_func)(
+    float *dst, const float *src, const float *bias, const float *alpha,
+    const float *slope, size_t num_planes, size_t num_biases);
+
+static inline bv_float4 bv_float4_load(const float *x) {
+    bv_float4 v;
+#if defined(BCNN_USE_AVX)
+    v.val = _mm_load_ps(x);
+#elif defined(BCNN_USE_NEON)
+    v.val = vld1q_f32(x);
+#else
+    v.val[0] = x[0];
+    v.val[1] = x[1];
+    v.val[2] = x[2];
+    v.val[3] = x[3];
+#endif
+    return v;
+}
+static inline void bv_float4_store(bv_float4 v, float *x) {
+#if defined(BCNN_USE_AVX)
+    _mm_store_ps(x, v.val);
+#elif defined(BCNN_USE_NEON)
+    vst1q_f32(x, v.val);
+#else
+    x[0] = v.val[0];
+    x[1] = v.val[1];
+    x[2] = v.val[2];
+    x[3] = v.val[3];
+#endif
+}
+static inline bv_float4 bv_float4_add(bv_float4 va, bv_float4 vb) {
+    bv_float4 v;
+#if defined(BCNN_USE_AVX)
+    v.val = _mm_add_ps(va.val, vb.val);
+#elif defined(BCNN_USE_NEON)
+    v.val = vaddq_f32(va.val, vb.val);
+#else
+    v.val[0] = va.val[0] + vb.val[0];
+    v.val[1] = va.val[1] + vb.val[1];
+    v.val[2] = va.val[2] + vb.val[2];
+    v.val[3] = va.val[3] + vb.val[3];
+#endif
+    return v;
+}
+static inline bv_float4 bv_float4_sub(bv_float4 va, bv_float4 vb) {
+    bv_float4 v;
+#if defined(BCNN_USE_AVX)
+    v.val = _mm_sub_ps(va.val, vb.val);
+#elif defined(BCNN_USE_NEON)
+    v.val = vsubq_f32(va.val, vb.val);
+#else
+    v.val[0] = va.val[0] - vb.val[0];
+    v.val[1] = va.val[1] - vb.val[1];
+    v.val[2] = va.val[2] - vb.val[2];
+    v.val[3] = va.val[3] - vb.val[3];
+#endif
+    return v;
+}
 
 /* Cuda kernels routines */
 #ifdef BCNN_USE_CUDA
@@ -195,7 +307,6 @@ void bcnn_cuda_im2col(float *im, int channels, int height, int width, int ksize,
                       int stride, int pad, float *data_col);
 void bcnn_cuda_col2im(float *data_col, int channels, int height, int width,
                       int ksize, int stride, int pad, float *data_im);
-
 #endif
 
 #ifdef __cplusplus

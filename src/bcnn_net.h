@@ -24,6 +24,10 @@
 #ifndef BCNN_NET_H
 #define BCNN_NET_H
 
+#ifdef BCNN_USE_VULKAN
+#include <vulkan/vulkan.h>
+#endif
+
 #include <bcnn/bcnn.h>
 #include "bcnn_data.h"
 #include "bcnn_learner.h"
@@ -39,6 +43,28 @@ typedef struct bcnn_cuda_context {
     int workspace_size;
     float *workspace_gpu;
 } bcnn_cuda_context;
+#endif
+
+#ifdef BCNN_USE_VULKAN
+typedef struct bcnn_vulkan_context {
+    VkInstance instance;
+    VkPhysicalDevice physical_device; /* Graphic card */
+    VkDevice device;                  /* Logical device */
+    VkPipeline pipeline;
+    VkPipelineLayout pipeline_layout;
+    VkShaderModule shader_module; /* Compute shader module */
+    VkCommandPool command_pool;   /* Pool of command buffers */
+    VkCommandBuffer
+        command_buffer; /* Record the commands to submitted to command queues */
+    VkDescriptorPool descriptor_pool;
+    VkDescriptorSet descriptor_set;
+    VkDescriptorSetLayout descriptor_set_layout;
+    VkBuffer buffer;
+    VkDeviceMemory buffer_memory;
+    uint32_t buffer_size; /* Size of 'buffer' in bytes = workspace size */
+    VkQueue queue;
+    uint32_t queue_family_index;
+} bcnn_vulkan_context;
 #endif
 
 /**
@@ -60,12 +86,19 @@ struct bcnn_net {
 #ifdef BCNN_USE_CUDA
     void *cuda_ctx;
 #endif
+#ifdef BCNN_USE_VULKAN
+    void *vulkan_context; /* Vulkan internal context */
+#endif
     int num_threads; /* Number of threads (CPU only) */
 };
 
 bcnn_status bcnn_net_create_gemm_context(bcnn_net *net);
 #ifdef BCNN_USE_CUDA
 bcnn_status bcnn_net_create_cuda_context(bcnn_net *net);
+#endif
+#ifdef BCNN_USE_VULKAN
+bcnn_status bcnn_net_create_vulkan_context(bcnn_net *net);
+bcnn_status bcnn_net_destroy_vulkan_context(bcnn_net *net);
 #endif
 bcnn_status bcnn_net_add_node(bcnn_net *net, bcnn_node node);
 bcnn_status bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor);

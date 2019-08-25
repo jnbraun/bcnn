@@ -21,6 +21,7 @@
  */
 #include "bcnn_upsample_layer.h"
 
+#include <bh/bh_log.h>
 #include <bh/bh_string.h>
 #include "bcnn_net.h"
 #include "bcnn_tensor.h"
@@ -69,12 +70,16 @@ bcnn_status bcnn_add_upsample_layer(bcnn_net *net, int size, const char *src_id,
     node.backward = bcnn_backward_upsample_layer;
     bcnn_net_add_node(net, node);
 
+    char node_opname[256];
+    snprintf(node_opname, 256,
+             BH_LOG_BOLDBLUE "[Upsample]" BH_LOG_RESET "        ");
     BCNN_INFO(net->log_ctx,
-              "[Upsample] input_shape= %dx%dx%d size= %d ouput_shape= "
-              "%dx%dx%d\n",
+              "%-48s %-8s (%4d x%4d x%4d) -> %-8s (%4d x%4d x%4d) %12d x %2d\n",
+              node_opname, net->tensors[node.src[0]].name,
               net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-              net->tensors[node.src[0]].c, size, net->tensors[node.dst[0]].w,
-              net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);
+              net->tensors[node.src[0]].c, net->tensors[node.dst[0]].name,
+              net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
+              net->tensors[node.dst[0]].c, size, size);
     return 0;
 }
 

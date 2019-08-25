@@ -22,6 +22,7 @@
 
 #include "bcnn_eltwise_layer.h"
 
+#include <bh/bh_log.h>
 #include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 
@@ -96,15 +97,14 @@ bcnn_status bcnn_add_eltwise_layer(bcnn_net *net, bcnn_activation activation,
     // Add node to net
     bcnn_net_add_node(net, node);
 
-    BCNN_INFO(
-        net->log_ctx,
-        "[EltWise] input1_shape= %dx%dx%d input2_shape= %dx%dx%d output_shape= "
-        "%dx%dx%d\n",
-        net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-        net->tensors[node.src[0]].c, net->tensors[node.src[1]].w,
-        net->tensors[node.src[1]].h, net->tensors[node.src[1]].c,
-        net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
-        net->tensors[node.dst[0]].c);
+    char node_opname[256];
+    snprintf(node_opname, 256, BH_LOG_BOLDBLUE "[EltWiseAdd]" BH_LOG_RESET);
+    BCNN_INFO(net->log_ctx, "%-48s %-8s , %-16s -> %-8s (%4d x%4d x%4d)\n",
+              node_opname, net->tensors[node.src[0]].name,
+              net->tensors[node.src[1]].name, net->tensors[node.dst[0]].name,
+              net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
+              net->tensors[node.dst[0]].c);
+
     return BCNN_SUCCESS;
 }
 

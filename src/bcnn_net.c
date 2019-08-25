@@ -80,6 +80,9 @@ bcnn_status bcnn_init_net(bcnn_net **net, bcnn_mode mode) {
         p_net->data_aug =
             (bcnn_data_augmenter *)calloc(1, sizeof(bcnn_data_augmenter));
     }
+    // Allocate input index array
+    p_net->num_inputs = 1;
+    p_net->inputs = (int *)calloc(1, sizeof(int));  // 1st input index is 0
 
 #ifdef BCNN_USE_CUDA
     BCNN_CHECK_STATUS(bcnn_net_create_cuda_context(p_net));
@@ -136,6 +139,8 @@ static void bcnn_free_net(bcnn_net *net) {
     bh_free(net->data_aug);
     // Free learner
     bh_free(net->learner);
+    // Free input indexes array
+    bh_free(net->inputs);
 #ifdef BCNN_USE_CUDA
     // Free cuda context
     bh_free(net->cuda_ctx);
@@ -187,7 +192,7 @@ static int bcnn_set_thread_cpu_affinity(const int *cpu_ids, int num_cpus) {
 #define CPU_SET(cpu, cpusetp) \
     ((cpusetp)->__bits[(cpu) / __NCPUBITS] |= (1UL << ((cpu) % __NCPUBITS)))
 
-//#define CPU_ZERO(cpusetp) memset((cpusetp), 0, sizeof(cpu_set_t))
+    //#define CPU_ZERO(cpusetp) memset((cpusetp), 0, sizeof(cpu_set_t))
 
 #ifdef __GLIBC__
     pid_t pid = syscall(SYS_gettid);
@@ -260,7 +265,16 @@ bcnn_status bcnn_add_input(bcnn_net *net, int w, int h, int c,
     bcnn_tensor_allocate(&input, net->mode);
     bh_strfill(&input.name, name);
     // Add tensor to net
-    return bcnn_net_add_tensor(net, input);
+    bcnn_net_add_tensor(net, input);
+    // Add tensor index to inputs index array
+    net->num_inputs++;
+    int *p_idx = (int *)realloc(net->inputs, net->num_inputs * sizeof(int));
+    BCNN_CHECK_AND_LOG(net->log_ctx, (p_idx != NULL), BCNN_FAILED_ALLOC,
+                       "Internal allocation error\n");
+    net->inputs = p_idx;
+    net->inputs[net->num_inputs - 1] =
+        net->num_tensors - 1;  // Index of last added tensor
+    return BCNN_SUCCESS;
 }
 
 void bcnn_set_input_shape(bcnn_net *net, int input_width, int input_height,
@@ -1119,6 +1133,11 @@ bcnn_status bcnn_load_net(bcnn_net *net, const char *config_path,
         }
         bh_free(tok);
     }
+    BCNN_INFO(net->log_ctx,
+              "[Op][FusedOp]                       src (shape)          "
+              "          dst (shape)          filters (groups) size / "
+              "stride, "
+              "pad\n");
     if (format == 0 || format == 1) {
         bh_ini_parser *config = bh_ini_parser_create(config_path);
         if (config == NULL) {
@@ -1243,12 +1262,13 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 "Inconsistent batchnorm means size: expected %d but found "
                 "%lu\n",
                 m_sz, (unsigned long)nr);
-            BCNN_CHECK_AND_LOG(net->log_ctx, (nr = fread(v->data, sizeof(float),
-                                                         v_sz, fp)) == v_sz,
-                               BCNN_INVALID_MODEL,
-                               "Inconsistent batchnorm variances size: "
-                               "expected %d but found %lu\n",
-                               v_sz, (unsigned long)nr);
+            BCNN_CHECK_AND_LOG(
+                net->log_ctx,
+                (nr = fread(v->data, sizeof(float), v_sz, fp)) == v_sz,
+                BCNN_INVALID_MODEL,
+                "Inconsistent batchnorm variances size: "
+                "expected %d but found %lu\n",
+                v_sz, (unsigned long)nr);
             if (format == 0) {
                 BCNN_CHECK_AND_LOG(
                     net->log_ctx,
@@ -1263,9 +1283,9 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 // Fuse mean / variance into scales and biases for optimal
                 // inference speed
                 for (int i = 0; i < s_sz; ++i) {
-                    b->data[i] = b->data[i] -
-                                 (s->data[i] * m->data[i]) /
-                                     (sqrtf(v->data[i] + 0.000001f));
+                    b->data[i] =
+                        b->data[i] - (s->data[i] * m->data[i]) /
+                                         (sqrtf(v->data[i] + 0.000001f));
                     s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
                 }
             }
@@ -1294,8 +1314,9 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
             int slopes_sz = bcnn_tensor_size(slopes);
             int nr = 0;
             BCNN_CHECK_AND_LOG(
-                net->log_ctx, (nr = fread(slopes->data, sizeof(float),
-                                          slopes_sz, fp)) == slopes_sz,
+                net->log_ctx,
+                (nr = fread(slopes->data, sizeof(float), slopes_sz, fp)) ==
+                    slopes_sz,
                 BCNN_INVALID_MODEL,
                 "Inconsistent prelu slopes size: expected %d but found %lu\n",
                 slopes_sz, (unsigned long)nr);
@@ -1375,9 +1396,8 @@ static bcnn_status bcnn_load_batchnorm_weights(bcnn_net *net, bcnn_node *node,
         // Fuse mean / variance into scales and biases for optimal
         // inference speed
         for (int i = 0; i < sz; ++i) {
-            b->data[i] =
-                b->data[i] -
-                (s->data[i] * m->data[i]) / (sqrtf(v->data[i] + 0.000001f));
+            b->data[i] = b->data[i] - (s->data[i] * m->data[i]) /
+                                          (sqrtf(v->data[i] + 0.000001f));
             s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
         }
     }

@@ -122,8 +122,8 @@ static bcnn_status bcnn_load_image_from_path(bcnn_net *net, char *path, int w,
             x_ul = (w_img - w) / 2;
             y_ul = (h_img - h) / 2;
         } else {  // mode train, random crop
-            x_ul = rand_between(0, (w_img - w));
-            y_ul = rand_between(0, (h_img - h));
+            x_ul = bcnn_rand_between(0, (w_img - w));
+            y_ul = bcnn_rand_between(0, (h_img - h));
         }
         pimg = (unsigned char *)calloc(w * h * c, sizeof(unsigned char));
         bip_crop_image(buf, w_img, h_img, w_img * c_img, x_ul, y_ul, pimg, w, h,
@@ -321,7 +321,7 @@ bcnn_status bcnn_apply_data_augmentation(unsigned char *img, int width,
         memcpy(img, buffer, width * height * depth * sizeof(unsigned char));
     }
     if (param->max_random_spots > 0) {
-        int num_spots = rand_between(0, param->max_random_spots);
+        int num_spots = bcnn_rand_between(0, param->max_random_spots);
         bip_add_random_spotlights(img, width * depth, width, height, depth,
                                   buffer, width * depth, num_spots, 0.3f, 3.0f,
                                   0.3f, 3.0f);
@@ -411,8 +411,12 @@ bcnn_status bcnn_loader_next(bcnn_net *net) {
         }
     }
 #ifdef BCNN_USE_CUDA
-    bcnn_cuda_memcpy_host2dev(net->tensors[0].data_gpu, net->tensors[0].data,
-                              bcnn_tensor_size(&net->tensors[0]));
+    for (int i = 0; i < net->num_inputs; ++i) {
+        int idx = net->inputs[i];
+        bcnn_cuda_memcpy_host2dev(net->tensors[idx].data_gpu,
+                                  net->tensors[idx].data,
+                                  bcnn_tensor_size(&net->tensors[idx]));
+    }
     if (net->mode != BCNN_MODE_PREDICT) {
         bcnn_cuda_memcpy_host2dev(net->tensors[1].data_gpu,
                                   net->tensors[1].data,

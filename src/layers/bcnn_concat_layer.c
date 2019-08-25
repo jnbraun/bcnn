@@ -22,6 +22,7 @@
 
 #include "bcnn_concat_layer.h"
 
+#include <bh/bh_log.h>
 #include <bh/bh_string.h>
 
 #include "bcnn_mat.h"
@@ -81,12 +82,15 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, int num_src,
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
     // Add node to net
     bcnn_net_add_node(net, node);
-    BCNN_INFO(net->log_ctx,
-              "[Concat] inputs_shape= %dx%d output_shape= "
-              "%dx%dx%d\n",
-              net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
+
+    char node_opname[256];
+    snprintf(node_opname, 256, BH_LOG_BOLDBLUE "[Concat]" BH_LOG_RESET);
+    BCNN_INFO(net->log_ctx, "%-48s %-8s , %-16s -> %-8s (%4d x%4d x%4d)\n",
+              node_opname, net->tensors[node.src[0]].name,
+              net->tensors[node.src[1]].name, net->tensors[node.dst[0]].name,
               net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
               net->tensors[node.dst[0]].c);
+
     return BCNN_SUCCESS;
 }
 

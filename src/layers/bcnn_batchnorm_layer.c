@@ -29,6 +29,7 @@
 #include "bcnn_tensor.h"
 #include "bcnn_utils.h"
 
+#include <bh/bh_log.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
@@ -130,11 +131,15 @@ bcnn_status bcnn_add_batchnorm_layer(bcnn_net *net, const char *src_id,
     // Add connection to net
     bcnn_net_add_node(net, node);
 
+    char node_opname[256];
+    snprintf(node_opname, 256, BH_LOG_BOLDBLUE "[Batchnorm]" BH_LOG_RESET);
     BCNN_INFO(net->log_ctx,
-              "[Batchnorm] input_shape= %dx%dx%d output_shape= %dx%dx%d\n",
+              "%-48s %-8s (%4d x%4d x%4d) -> %-8s (%4d x%4d x%4d)\n",
+              node_opname, net->tensors[node.src[0]].name,
               net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-              net->tensors[node.src[0]].c, net->tensors[node.dst[0]].w,
-              net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);
+              net->tensors[node.src[0]].c, net->tensors[node.dst[0]].name,
+              net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
+              net->tensors[node.dst[0]].c);
 
     return BCNN_SUCCESS;
 }

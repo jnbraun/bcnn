@@ -25,7 +25,9 @@
 #include <math.h>
 #include <string.h>
 
+#include <bh/bh_log.h>
 #include <bh/bh_macros.h>
+
 #include "bcnn_learner.h"
 #include "bcnn_net.h"
 #include "bcnn_tensor.h"
@@ -34,7 +36,6 @@
 bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
                                       const char *src_id) {
     bcnn_node node = {0};
-    char type_name[256];
 
     BCNN_CHECK_AND_LOG(
         net->log_ctx, net->num_nodes >= 1, BCNN_INVALID_PARAMETER,
@@ -72,41 +73,14 @@ bcnn_status bcnn_add_activation_layer(bcnn_net *net, bcnn_activation type,
 
     bcnn_net_add_node(net, node);
 
-    switch (type) {
-        case BCNN_ACT_TANH:
-            sprintf(type_name, "Tanh");
-            break;
-        case BCNN_ACT_RELU:
-            sprintf(type_name, "ReLU");
-            break;
-        case BCNN_ACT_RAMP:
-            sprintf(type_name, "Ramp");
-            break;
-        case BCNN_ACT_SOFTPLUS:
-            sprintf(type_name, "Softplus");
-            break;
-        case BCNN_ACT_LRELU:
-            sprintf(type_name, "Leaky-ReLU");
-            break;
-        case BCNN_ACT_ABS:
-            sprintf(type_name, "AbsVal");
-            break;
-        case BCNN_ACT_CLAMP:
-            sprintf(type_name, "Clamp");
-            break;
-        case BCNN_ACT_PRELU:
-            sprintf(type_name, "PReLU");
-            break;
-        default:
-            sprintf(type_name, "None");
-            break;
-    }
-
+    char node_opname[256];
+    snprintf(node_opname, 256, BH_LOG_BOLDBLUE "[%s]" BH_LOG_RESET,
+             bcnn_act2str(type));
     BCNN_INFO(net->log_ctx,
-              "[Activation] input_shape= %dx%dx%d function= %s output_shape= "
-              "%dx%dx%d\n",
+              "%-48s %-8s (%4d x%4d x%4d) -> %-8s (%4d x%4d x%4d)\n",
+              node_opname, net->tensors[node.src[0]].name,
               net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-              net->tensors[node.src[0]].c, type_name,
+              net->tensors[node.src[0]].c, net->tensors[node.dst[0]].name,
               net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
               net->tensors[node.dst[0]].c);
 

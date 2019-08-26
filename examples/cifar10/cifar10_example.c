@@ -241,8 +241,11 @@ int run(char *train_data, char *test_data, model_type model) {
     bcnn_set_weight_regularizer(net, 0.0005f);
 
     // Setup loaders for train and validation dataset
-    bcnn_set_data_loader(net, BCNN_LOAD_CIFAR10, train_data, NULL, test_data,
-                         NULL);
+    if (bcnn_set_data_loader(net, BCNN_LOAD_CIFAR10, train_data, NULL,
+                             test_data, NULL) != BCNN_SUCCESS) {
+        bcnn_end_net(&net);
+        return -1;
+    }
 
     // Setup data augmentation
     bcnn_augment_data_with_shift(net, 5, 5);

@@ -116,7 +116,7 @@ void bcnn_draw_color_box(unsigned char *img, int w_img, int h_img, float cx_box,
                          float cy_box, float w_box, float h_box,
                          unsigned char color[3]);
 
-static inline int rand_between(int min, int max) {
+static inline int bcnn_rand_between(int min, int max) {
     if (min > max) {
         return 0.f;
     }
@@ -132,6 +132,29 @@ static inline int bcnn_omp_get_num_threads() {
 #else
     return 1;
 #endif
+}
+
+static inline const char *bcnn_act2str(bcnn_activation a) {
+    switch (a) {
+        case BCNN_ACT_TANH:
+            return "Tanh";
+        case BCNN_ACT_RELU:
+            return "ReLU";
+        case BCNN_ACT_RAMP:
+            return "Ramp";
+        case BCNN_ACT_SOFTPLUS:
+            return "Softplus";
+        case BCNN_ACT_LRELU:
+            return "Leaky-ReLU";
+        case BCNN_ACT_ABS:
+            return "AbsVal";
+        case BCNN_ACT_CLAMP:
+            return "Clamp";
+        case BCNN_ACT_PRELU:
+            return "PReLU";
+        default:
+            return "None";
+    }
 }
 
 #ifdef BCNN_USE_CUDA

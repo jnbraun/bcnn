@@ -24,7 +24,9 @@
 #include <float.h>
 #include <math.h>
 
+#include <bh/bh_log.h>
 #include <bh/bh_string.h>
+
 #include "bcnn_net.h"
 #include "bcnn_tensor.h"
 #include "bcnn_utils.h"
@@ -125,13 +127,17 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
 
     bcnn_net_add_node(net, node);
 
+    char node_opname[256];
+    snprintf(node_opname, 256,
+             BH_LOG_BOLDBLUE "[Maxpool]" BH_LOG_RESET "        ");
     BCNN_INFO(
         net->log_ctx,
-        "[Maxpool] input_shape= %dx%dx%d size= %d stride= %d ouput_shape= "
-        "%dx%dx%d\n",
+        "%-48s %-8s (%4d x%4d x%4d) -> %-8s (%4d x%4d x%4d) %12d x %2d / %2d\n",
+        node_opname, net->tensors[node.src[0]].name,
         net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-        net->tensors[node.src[0]].c, size, stride, net->tensors[node.dst[0]].w,
-        net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);
+        net->tensors[node.src[0]].c, net->tensors[node.dst[0]].name,
+        net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
+        net->tensors[node.dst[0]].c, size, size, stride);
     return 0;
 }
 

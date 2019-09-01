@@ -32,6 +32,24 @@ extern "C" {
 
 #define BH_MAX_LENGTH_MSG 2048
 
+#define BH_LOG_RESET "\033[0m"
+#define BH_LOG_BLACK "\033[30m"
+#define BH_LOG_RED "\033[31m"
+#define BH_LOG_GREEN "\033[32m"
+#define BH_LOG_YELLOW "\033[33m"
+#define BH_LOG_BLUE "\033[34m"
+#define BH_LOG_MAGENTA "\033[35m"
+#define BH_LOG_CYAN "\033[36m"
+#define BH_LOG_WHITE "\033[37m"
+#define BH_LOG_BOLDBLACK "\033[1m\033[30m"
+#define BH_LOG_BOLDRED "\033[1m\033[31m"
+#define BH_LOG_BOLDGREEN "\033[1m\033[32m"
+#define BH_LOG_BOLDYELLOW "\033[1m\033[33m"
+#define BH_LOG_BOLDBLUE "\033[1m\033[34m"
+#define BH_LOG_BOLDMAGENTA "\033[1m\033[35m"
+#define BH_LOG_BOLDCYAN "\033[1m\033[36m"
+#define BH_LOG_BOLDWHITE "\033[1m\033[37m"
+
 typedef enum {
     BH_LOG_INFO = 0,
     BH_LOG_WARNING = 1,
@@ -47,15 +65,16 @@ static inline void bh_log(bh_log_level level, const char *fmt, ...) {
     va_end(args);
     switch (level) {
         case BH_LOG_INFO: {
-            fprintf(stderr, "\e[0;36m[INFO]\e[0m %s", msg);
+            fprintf(stderr, BH_LOG_GREEN "[INFO]" BH_LOG_RESET " %s", msg);
             break;
         }
         case BH_LOG_WARNING: {
-            fprintf(stderr, "\e[1;35m[WARNING] %s\e[0m", msg);
+            fprintf(stderr, BH_LOG_BOLDYELLOW "[WARNING]" BH_LOG_RESET " %s",
+                    msg);
             break;
         }
         case BH_LOG_ERROR: {
-            fprintf(stderr, "\e[1;31m[ERROR] %s\e[0m", msg);
+            fprintf(stderr, BH_LOG_BOLDRED "[ERROR]" BH_LOG_RESET " %s", msg);
             break;
         }
         case BH_LOG_SILENT: {

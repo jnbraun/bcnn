@@ -115,8 +115,8 @@ bcnn_status bcnn_loader_list_detection_next(bcnn_loader *iter, bcnn_net *net,
                         nw * c_img, c_img);
     int dx, dy;  // Canvas offsets
     if (net->mode == BCNN_MODE_TRAIN) {
-        dx = rand_between(0, (net->tensors[0].w - nw));
-        dy = rand_between(0, (net->tensors[0].h - nh));
+        dx = bcnn_rand_between(0, (net->tensors[0].w - nw));
+        dy = bcnn_rand_between(0, (net->tensors[0].h - nh));
     } else {
         dx = (net->tensors[0].w - nw) / 2;
         dy = (net->tensors[0].h - nh) / 2;

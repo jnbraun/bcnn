@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include <bh/bh_log.h>
 #include <bh/bh_string.h>
 
 #include "bcnn_activation_layer.h"
@@ -87,18 +88,23 @@ bcnn_status bcnn_add_yolo_layer(bcnn_net *net, int num_boxes_per_cell,
 
     // Add connection to net
     bcnn_net_add_node(net, node);
+    char node_opname[256];
+    snprintf(node_opname, 256,
+             BH_LOG_BOLDBLUE "[Yolo]" BH_LOG_RESET "        ");
     BCNN_INFO(net->log_ctx,
-              "[Yolo] input_shape= %dx%dx%d num_classes= %d num_coords= %d "
-              "output_shape= %dx%dx%d\n",
+              "%-48s %-8s (%4d x%4d x%4d) -> %-8s (%4d x%4d x%4d) %5d\n",
+              node_opname, net->tensors[node.src[0]].name,
               net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-              net->tensors[node.src[0]].c, classes, coords,
+              net->tensors[node.src[0]].c, net->tensors[node.dst[0]].name,
               net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
-              net->tensors[node.dst[0]].c);
+              net->tensors[node.dst[0]].c, classes);
 
     return 0;
 }
 
-typedef struct bbox { float x, y, w, h; } bbox;
+typedef struct bbox {
+    float x, y, w, h;
+} bbox;
 
 static float overlap(float x1, float w1, float x2, float w2) {
     float l1 = x1 - w1 / 2;

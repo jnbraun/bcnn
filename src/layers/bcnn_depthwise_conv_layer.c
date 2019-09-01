@@ -33,6 +33,7 @@
 #include "cblas.h"
 #endif
 
+#include <bh/bh_log.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
@@ -144,13 +145,19 @@ bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
 
     bcnn_net_add_node(net, node);
 
+    char node_opname[256];
+    snprintf(node_opname, 256,
+             BH_LOG_BOLDBLUE "[DeptwiseConv2d]" BH_LOG_RESET "[%s]",
+             bcnn_act2str(activation));
     BCNN_INFO(net->log_ctx,
-              "[DepthwiseConvolutional] input_shape= %dx%dx%d nb_filters= %d "
-              "kernel_size= %d stride= %d padding= %d output_shape= %dx%dx%d\n",
+              "%-48s %-8s (%4d x%4d x%4d) -> %-8s (%4d x%4d x%4d) %5d %2d x "
+              "%2d / %2d,%2d\n",
+              node_opname, net->tensors[node.src[0]].name,
               net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
-              net->tensors[node.src[0]].c, net->tensors[node.src[0]].c, size,
-              stride, pad, net->tensors[node.dst[0]].w,
-              net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].c);
+              net->tensors[node.src[0]].c, net->tensors[node.dst[0]].name,
+              net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
+              net->tensors[node.dst[0]].c, net->tensors[node.src[0]].c, size,
+              size, stride, pad);
 
     return 0;
 }

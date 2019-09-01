@@ -22,6 +22,8 @@
 
 #include "bcnn_concat_layer.h"
 
+#include <bh/bh_log.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_string.h>
 
 #include "bcnn_mat.h"
@@ -81,12 +83,24 @@ bcnn_status bcnn_add_concat_layer(bcnn_net *net, int num_src,
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
     // Add node to net
     bcnn_net_add_node(net, node);
-    BCNN_INFO(net->log_ctx,
-              "[Concat] inputs_shape= %dx%d output_shape= "
-              "%dx%dx%d\n",
-              net->tensors[node.src[0]].w, net->tensors[node.src[0]].h,
+
+    char node_opname[256];
+    snprintf(node_opname, 256, BH_LOG_BOLDBLUE "[Concat]" BH_LOG_RESET);
+    int src_names_length = 0;
+    for (int i = 0; i < num_src; ++i) {
+        src_names_length += strlen(net->tensors[node.src[i]].name);
+    }
+    char *src_names = (char *)calloc(src_names_length + 1, sizeof(char));
+    for (int i = 0; i < num_src; ++i) {
+        strcat(src_names, net->tensors[node.src[i]].name);
+        strcat(src_names, " ");
+    }
+    BCNN_INFO(net->log_ctx, "%-48s %-27s -> %-8s (%4d x%4d x%4d)\n",
+              node_opname, src_names, net->tensors[node.dst[0]].name,
               net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
               net->tensors[node.dst[0]].c);
+    bh_free(src_names);
+
     return BCNN_SUCCESS;
 }
 
@@ -153,9 +167,10 @@ void bcnn_backward_concat_layer_gpu(bcnn_net *net, bcnn_node *node) {
         int src_sz = bcnn_tensor_size3d(src_tensor);
         if (src_tensor->grad_data) {
             for (int j = 0; j < src_tensor->n; ++j) {
-                bcnn_cuda_axpy(src_sz, 1.0f, dst_tensor->grad_data_gpu +
-                                                 dst_offset + j * dst_sz,
-                               1, src_tensor->grad_data_gpu + j * src_sz, 1);
+                bcnn_cuda_axpy(
+                    src_sz, 1.0f,
+                    dst_tensor->grad_data_gpu + dst_offset + j * dst_sz, 1,
+                    src_tensor->grad_data_gpu + j * src_sz, 1);
             }
         }
         dst_offset += src_sz;

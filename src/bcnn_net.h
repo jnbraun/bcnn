@@ -74,6 +74,9 @@ struct bcnn_net {
     int batch_size;
     int num_nodes;   /* Number of nodes hold in the network */
     int num_tensors; /* Number of tensors hold in the network */
+    int num_inputs;  /* Number of input tensors */
+    int *inputs;     /* Indexes of the input tensors in the below 'tensors'
+                            array */
     bcnn_mode mode;
     bcnn_log_context log_ctx; /* Logging stuff */
     bcnn_node *nodes;         /* Array of 'num_nodes' nodes */

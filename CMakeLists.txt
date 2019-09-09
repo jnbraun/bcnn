@@ -8,6 +8,8 @@ option(USE_CUDNN "Build with CuDNN library" OFF)
 option(USE_BLAS "Build with BLAS library" OFF)
 option(USE_NEON "Build with Neon instructions" OFF)
 option(USE_OPENMP "Enable OpenMP multithreading" ON)
+# Build shared library
+option(BUILD_SHARED_LIB "Build as shared library" OFF)
 # Building examples
 option(BUILD_EXAMPLES "Build examples" ON)
 # Building tools
@@ -33,6 +35,12 @@ set(CMAKE_ASM_FLAGS "${CFLAGS} -x assembler-with-cpp")
 
 # Get the target system processor
 message(STATUS "[bcnn] Targeted system processor: " ${CMAKE_SYSTEM_PROCESSOR})
+
+# Shared library build
+if (BUILD_SHARED_LIB)
+    add_definitions(-DBCNN_BUILD_SHARED)
+    message(STATUS "[bcnn] Build as shared library")
+endif()
 
 # Blas backend
 if (USE_BLAS)
@@ -193,8 +201,19 @@ if (USE_CUDA)
         target_link_libraries(bcnn bip ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} ${CUDA_curand_LIBRARY})
     endif()
 else()
-    add_library(bcnn STATIC ${SRC_LIB})
-    target_link_libraries(bcnn bip ${BLAS_LIBRARY})
+    if (BUILD_SHARED_LIB)
+        add_library(bcnn SHARED ${SRC_LIB})
+        list(APPEND BCNN_LIBRARIES "${BLAS_LIBRARY}")
+        list(APPEND BCNN_LIBRARIES "bip")
+        if (UNIX)
+            target_compile_options(bcnn PRIVATE "-fvisibility=hidden")
+        endif()
+        target_compile_definitions(bcnn INTERFACE BCNN_DLL)
+        target_link_libraries(bcnn PRIVATE ${BCNN_LIBRARIES})
+    else()
+        add_library(bcnn STATIC ${SRC_LIB})
+        target_link_libraries(bcnn bip ${BLAS_LIBRARY})
+    endif(BUILD_SHARED_LIB)
 endif()
 
 add_executable(bcnn-cl ${SRC_CLI})

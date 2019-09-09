@@ -953,8 +953,9 @@ BCNN_API bcnn_status bcnn_add_avgpool_layer(bcnn_net *net, const char *src_id,
  *
  * \return Possible errors include BCNN_INVALID_PARAMETER and BCNN_FAILED_ALLOC.
  */
-bcnn_status bcnn_add_concat_layer(bcnn_net *net, int num_src,
-                                  char *const *src_ids, const char *dst_id);
+BCNN_API bcnn_status bcnn_add_concat_layer(bcnn_net *net, int num_src,
+                                           char *const *src_ids,
+                                           const char *dst_id);
 
 /**
  * \brief Elementwise addition layer.

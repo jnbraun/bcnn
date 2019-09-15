@@ -32,8 +32,7 @@
 typedef enum {
     BVK_SUCCESS,
     BVK_VULKAN_INTERNAL_ERROR,
-    BVK_FAILED_DEBUG_CALLBACK,
-    BVK_NO_DEVICE_FOUND
+    BVK_OTHER_ERROR
 } bvk_status;
 
 /**

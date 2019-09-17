@@ -21,10 +21,31 @@
  * SOFTWARE.
  */
 
-#ifndef BVK_H
-#define BVK_H
+#ifndef BCNN_VULKAN_H
+#define BCNN_VULKAN_H
 
 #include <vulkan/vulkan.h>
+
+typedef struct bcnn_vulkan_context {
+    VkInstance instance;
+    VkPhysicalDevice physical_device; /* Graphic card */
+    VkDevice device;                  /* Logical device */
+    VkPipeline pipeline;
+    VkPipelineLayout pipeline_layout;
+    VkShaderModule shader_module; /* Compute shader module */
+    VkCommandPool command_pool;   /* Pool of command buffers */
+    VkCommandBuffer
+        command_buffer; /* Record the commands to submitted to command queues */
+    VkDescriptorPool descriptor_pool;
+    VkDescriptorSet descriptor_set;
+    VkDescriptorSetLayout descriptor_set_layout;
+    VkBuffer buffer;
+    VkDeviceMemory buffer_memory;
+    uint32_t buffer_size; /* Size of 'buffer' in bytes = workspace size */
+    VkQueue queue;
+    uint32_t queue_family_index;
+    VkBool32 debug_utils_available;
+} bcnn_vk_context;
 
 /**
  * Error codes.
@@ -38,11 +59,16 @@ typedef enum {
 /**
  * \brief Create a vulkan instance with a given application name.
  *
+ * \param[in]   context     Pointer to vulkan context.
  * \param[in]   app_name    A name of the application.
- * \param[out]  instance    Pointer to the created vulkan instance.
  *
- * \return BVK_SUCCESS if vkCreateInstance is successful.
+ * \return 0 if vkCreateInstance is successful.
  */
-bvk_status bvk_create_instance(const char* app_name, VkInstance* instance);
+int32_t bcnn_vk_create_instance(bcnn_vk_context* context, const char* app_name);
 
-#endif
+/**
+ * \brief Destroy a vulkan instance created by bcnn_vk_create_instance.
+ */
+void bcnn_vk_destroy_instance(bcnn_vk_context* context);
+
+#endif  // BCNN_VULKAN_H

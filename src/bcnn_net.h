@@ -24,15 +24,15 @@
 #ifndef BCNN_NET_H
 #define BCNN_NET_H
 
-#ifdef BCNN_USE_VULKAN
-#include <vulkan/vulkan.h>
-#endif
-
 #include <bcnn/bcnn.h>
 #include "bcnn_data.h"
 #include "bcnn_learner.h"
 #include "bcnn_node.h"
 #include "bcnn_utils.h"
+
+#ifdef BCNN_USE_VULKAN
+#include "bcnn_vulkan.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,28 +43,6 @@ typedef struct bcnn_cuda_context {
     int workspace_size;
     float *workspace_gpu;
 } bcnn_cuda_context;
-#endif
-
-#ifdef BCNN_USE_VULKAN
-typedef struct bcnn_vulkan_context {
-    VkInstance instance;
-    VkPhysicalDevice physical_device; /* Graphic card */
-    VkDevice device;                  /* Logical device */
-    VkPipeline pipeline;
-    VkPipelineLayout pipeline_layout;
-    VkShaderModule shader_module; /* Compute shader module */
-    VkCommandPool command_pool;   /* Pool of command buffers */
-    VkCommandBuffer
-        command_buffer; /* Record the commands to submitted to command queues */
-    VkDescriptorPool descriptor_pool;
-    VkDescriptorSet descriptor_set;
-    VkDescriptorSetLayout descriptor_set_layout;
-    VkBuffer buffer;
-    VkDeviceMemory buffer_memory;
-    uint32_t buffer_size; /* Size of 'buffer' in bytes = workspace size */
-    VkQueue queue;
-    uint32_t queue_family_index;
-} bcnn_vulkan_context;
 #endif
 
 /**

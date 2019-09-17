@@ -95,6 +95,7 @@ typedef enum {
     BCNN_FAILED_ALLOC,
     BCNN_INTERNAL_ERROR,
     BCNN_CUDA_FAILED_ALLOC,
+    BCNN_VULKAN_ERROR,
     BCNN_UNKNOWN_ERROR
 } bcnn_status;
 

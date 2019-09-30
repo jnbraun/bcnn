@@ -28,7 +28,8 @@
 
 typedef struct bcnn_vulkan_context {
     VkInstance instance;
-    VkPhysicalDevice physical_device; /* Graphic card */
+    VkPhysicalDevice physical_device; /* GPU device */
+    int32_t physical_device_index;    /* GPU id */
     VkDevice device;                  /* Logical device */
     VkPipeline pipeline;
     VkPipelineLayout pipeline_layout;

@@ -221,7 +221,6 @@ int32_t bcnn_vk_create_instance(bcnn_vk_context* context,
     VK_CHECK(
         vkEnumeratePhysicalDevices(context->instance, &num_phys_devices, 0));
     num_phys_devices = bh_min(8, num_phys_devices);
-
     VkPhysicalDevice phys_devices[8] = {0};
     VkResult res = vkEnumeratePhysicalDevices(context->instance,
                                               &num_phys_devices, phys_devices);
@@ -229,16 +228,46 @@ int32_t bcnn_vk_create_instance(bcnn_vk_context* context,
         fprintf(stderr, "[ERROR] vkEnumeratePhysicalDevices failed.\n");
         return (int32_t)(res);
     }
-
+    VkBool32 found_valid_gpu = VK_FALSE;
+    VkPhysicalDeviceType device_type[8] = {0};
+    for (uint32_t i = 0; i < num_phys_devices; i++) {
+        /* Retrieve the device type */
+        VkPhysicalDeviceProperties phys_device_properties;
+        vkGetPhysicalDeviceProperties(phys_devices[i], &phys_device_properties);
+        device_type[i] = phys_device_properties.deviceType;
+    }
+    /* Pick GPU device index */
+    context->physical_device_index = -1;
+    /* Prefer discrete GPU */
+    for (uint32_t i = 0; i < num_phys_devices; i++) {
+        if (device_type[i] == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+            context->physical_device = phys_devices[i];
+            context->physical_device_index = i;
+            found_valid_gpu = VK_TRUE;
+            break;
+        }
+    }
+    if (found_valid_gpu == VK_FALSE) {
+        for (uint32_t i = 0; i < num_phys_devices; i++) {
+            if (device_type[i] == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) {
+                context->physical_device = phys_devices[i];
+                context->physical_device_index = i;
+                found_valid_gpu = VK_TRUE;
+                break;
+            }
+        }
+    }
     return 0;
 }
+
+int32_t bcnn_vk_create_device(bcnn_vk_context* context) { return 0; }
 
 void bcnn_vk_destroy_instance(bcnn_vk_context* context) {
 #ifdef BCNN_VK_ENABLE_DEBUG
     if (context->debug_utils_available) {
         DestroyDebugUtilsMessengerEXT(context->instance, callback, NULL);
     }
-#endif  // ENABLE_VALIDATION_LAYER
+#endif
     vkDestroyInstance(context->instance, 0);
 }
 

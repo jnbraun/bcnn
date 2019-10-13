@@ -34,7 +34,8 @@ typedef struct bcnn_vulkan_context {
     VkPipeline pipeline;
     VkPipelineLayout pipeline_layout;
     VkShaderModule shader_module; /* Compute shader module */
-    VkCommandPool command_pool;   /* Pool of command buffers */
+    VkPipelineCache pipeline_cache;
+    VkCommandPool command_pool; /* Pool of command buffers */
     VkCommandBuffer
         command_buffer; /* Record the commands to submitted to command queues */
     VkDescriptorPool descriptor_pool;
@@ -46,7 +47,21 @@ typedef struct bcnn_vulkan_context {
     VkQueue queue;
     uint32_t queue_family_index;
     VkBool32 debug_utils_available;
+    bcnn_log_context* log_ctx; /* Hold by net struct */
 } bcnn_vk_context;
+
+/* Layer pipeline */
+typedef struct bcnn_vulkan_pipeline {
+    const bcnn_vk_context* context;
+    VkShaderModule shader_module; /* should be shared among each instance of a
+                                     specific layer */
+    VkDescriptorSetLayout descriptor_set_layout;
+    VkPipelineLayout pipeline_layout;
+    VkPipeline pipeline;
+    uint32_t local_size_x;
+    uint32_t local_size_y;
+    uint32_t local_size_z;
+} bcnn_vk_pipeline;
 
 /**
  * Error codes.
@@ -71,5 +86,9 @@ int32_t bcnn_vk_create_instance(bcnn_vk_context* context, const char* app_name);
  * \brief Destroy a vulkan instance created by bcnn_vk_create_instance.
  */
 void bcnn_vk_destroy_instance(bcnn_vk_context* context);
+
+bcnn_vk_pipeline* bcnn_vk_pipeline_create(bcnn_vk_context* context);
+
+void bcnn_vk_pipeline_destroy(bcnn_vk_pipeline* pipeline);
 
 #endif  // BCNN_VULKAN_H

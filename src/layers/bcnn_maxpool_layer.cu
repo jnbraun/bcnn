@@ -25,12 +25,15 @@
 #include "bcnn_maxpool_layer.h"
 #include "bcnn_tensor.h"
 
-__global__ void bcnn_forward_maxpool_layer_kernel(int n, int in_h, int in_w,
-                                                  int in_c, int stride,
-                                                  int size, float *input,
-                                                  float *output, int *indexes) {
+__global__ void bcnn_forward_maxpool_layer_kernel(
+    int n, int in_h, int in_w, int in_c, int stride, int size,
+    bcnn_padding padding, float *input, float *output, int *indexes) {
     int h = (in_h - 1) / stride + 1;
     int w = (in_w - 1) / stride + 1;
+    if (padding == BCNN_PADDING_VALID) {
+        h = (in_h - size) / stride + 1;
+        w = (in_w - size) / stride + 1;
+    }
     int c = in_c;
 
     int id = (blockIdx.x + blockIdx.y * gridDim.x) * blockDim.x + threadIdx.x;
@@ -80,23 +83,26 @@ void bcnn_forward_maxpool_layer_gpu(bcnn_net *net, bcnn_node *node) {
     int sz = bcnn_tensor_size(dst_tensor);
 
     bcnn_forward_maxpool_layer_kernel<<<
-        /*bcnn_cuda_blocks(sz)*/ (sz - 1) / BCNN_CUDA_THREADS + 1,
+        (sz - 1) / BCNN_CUDA_THREADS + 1,
         BCNN_CUDA_THREADS>>>(sz, src_tensor->h, src_tensor->w, src_tensor->c,
-                               param->stride, param->size, src_tensor->data_gpu,
-                               dst_tensor->data_gpu, param->indexes_gpu);
+                               param->stride, param->size, param->padding,
+                               src_tensor->data_gpu, dst_tensor->data_gpu,
+                               param->indexes_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
 #endif
 
     return;
 }
 
-__global__ void bcnn_backward_maxpool_layer_kernel(int n, int in_h, int in_w,
-                                                   int in_c, int stride,
-                                                   int size, float *diff,
-                                                   float *prev_delta,
-                                                   int *indexes) {
+__global__ void bcnn_backward_maxpool_layer_kernel(
+    int n, int in_h, int in_w, int in_c, int stride, int size,
+    bcnn_padding padding, float *diff, float *prev_delta, int *indexes) {
     int h = (in_h - 1) / stride + 1;
     int w = (in_w - 1) / stride + 1;
+    if (padding == BCNN_PADDING_VALID) {
+        h = (in_h - size) / stride + 1;
+        w = (in_w - size) / stride + 1;
+    }
     int c = in_c;
     int area = (size - 1) / stride;
 
@@ -144,12 +150,13 @@ void bcnn_backward_maxpool_layer_gpu(bcnn_net *net, bcnn_node *node) {
         param->src_tensor_desc, src_tensor->grad_data_gpu));
 #else
     int sz = bcnn_tensor_size(src_tensor);
-
+    // clang-format off
     bcnn_backward_maxpool_layer_kernel<<<bcnn_cuda_blocks(sz),
-                                         BCNN_CUDA_THREADS>>>(
+        BCNN_CUDA_THREADS>>>(
         sz, src_tensor->h, src_tensor->w, src_tensor->c, param->stride,
-        param->size, dst_tensor->grad_data_gpu, src_tensor->grad_data_gpu,
-        param->indexes_gpu);
+         param->size, param->padding, dst_tensor->grad_data_gpu,
+        src_tensor->grad_data_gpu, param->indexes_gpu);
+    // clang-format on
     bcnn_cuda_check(cudaPeekAtLastError());
 #endif
 

@@ -34,6 +34,7 @@ extern "C" {
 typedef struct bcnn_maxpool_param {
     int size;
     int stride;
+    bcnn_padding padding;
     int *indexes;
 #ifdef BCNN_USE_CUDA
     int *indexes_gpu;

@@ -101,6 +101,7 @@ bcnn_status bcnn_add_maxpool_layer(bcnn_net *net, int size, int stride,
     bcnn_maxpool_param *param = (bcnn_maxpool_param *)node.param;
     param->size = size;
     param->stride = stride;
+    param->padding = padding;
     param->indexes = (int *)calloc(sz, sizeof(int));
 #ifdef BCNN_USE_CUDA
     param->indexes_gpu = bcnn_cuda_malloc_i32(sz);

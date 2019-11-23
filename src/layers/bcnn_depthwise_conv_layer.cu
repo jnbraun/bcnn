@@ -70,15 +70,30 @@ void bcnn_forward_depthwise_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
     bcnn_depthwise_conv_param *param = (bcnn_depthwise_conv_param *)node->param;
     int sz = bcnn_tensor_size(dst_tensor);
 
+#ifdef BCNN_USE_CUDNN
+    float alpha = 1.0f, beta = 0.0f;
+    bcnn_cudnn_check(cudnnConvolutionForward(
+        bcnn_cudnn_handle(), &alpha, param->src_tensor_desc,
+        src_tensor->data_gpu, param->filter_desc, weights->data_gpu,
+        param->conv_desc, param->fwd_algo, param->conv_workspace_gpu,
+        param->workspace_size, &beta, param->dst_tensor_desc,
+        dst_tensor->data_gpu));
+    bcnn_cudnn_check(cudnnAddTensor(
+        bcnn_cudnn_handle(), &alpha, param->bias_desc, biases->data_gpu, &alpha,
+        param->dst_tensor_desc, dst_tensor->data_gpu));
+#else
+    // clang_format off
     _bcnn_forward_depthwise_conv_weight_kernel<<<bcnn_cuda_blocks(sz),
                                                  BCNN_CUDA_THREADS>>>(
         sz, src_tensor->data_gpu, weights->data_gpu, dst_tensor->c,
         dst_tensor->h, dst_tensor->w, src_tensor->h, src_tensor->w, param->size,
         param->stride, param->pad, dst_tensor->data_gpu);
+    // clang_format on
     bcnn_cuda_check(cudaPeekAtLastError());
 
     bcnn_cuda_add_bias(dst_tensor->data_gpu, biases->data_gpu, dst_tensor->n,
                        src_tensor->c, dst_tensor->h * dst_tensor->w);
+#endif
 
     bcnn_forward_activation_gpu(dst_tensor->data_gpu, sz, param->activation);
 
@@ -165,18 +180,39 @@ void bcnn_backward_depthwise_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
     int src_sz = bcnn_tensor_size(src_tensor);
     int dst_sz = bcnn_tensor_size(dst_tensor);
 
-    if (src_tensor->grad_data_gpu)
+    if (src_tensor->grad_data_gpu) {
         bcnn_cuda_fill_f32(src_sz, 0.0f, src_tensor->grad_data_gpu, 1);
+    }
 
     bcnn_backward_activation_gpu(
         dst_tensor->data_gpu, dst_tensor->grad_data_gpu,
         dst_tensor->w * dst_tensor->h * dst_tensor->c * dst_tensor->n,
         param->activation);
 
+#ifdef BCNN_USE_CUDNN
+    float one = 1.0f, zero = 0.0f;
+    bcnn_cudnn_check(cudnnConvolutionBackwardBias(
+        bcnn_cudnn_handle(), &one, param->dst_tensor_desc,
+        dst_tensor->grad_data_gpu, &one, param->bias_desc,
+        biases->grad_data_gpu));
+    bcnn_cudnn_check(cudnnConvolutionBackwardFilter(
+        bcnn_cudnn_handle(), &one, param->src_tensor_desc, src_tensor->data_gpu,
+        param->dst_tensor_desc, dst_tensor->grad_data_gpu, param->conv_desc,
+        param->bwd_filter_algo, param->conv_workspace_gpu,
+        param->workspace_size, &one, param->filter_desc,
+        weights->grad_data_gpu));
+    if (src_tensor->grad_data_gpu) {
+        bcnn_cudnn_check(cudnnConvolutionBackwardData(
+            bcnn_cudnn_handle(), &one, param->filter_desc, weights->data_gpu,
+            param->dst_tensor_desc, dst_tensor->grad_data_gpu, param->conv_desc,
+            param->bwd_data_algo, param->conv_workspace_gpu,
+            param->workspace_size, &zero, param->src_tensor_desc,
+            src_tensor->grad_data_gpu));
+    }
+#else
     bcnn_cuda_grad_bias(biases->grad_data_gpu, dst_tensor->grad_data_gpu,
                         src_tensor->n, src_tensor->c,
                         dst_tensor->w * dst_tensor->h);
-
     _bcnn_backward_depthwise_conv_weight_kernel<<<bcnn_cuda_blocks(src_sz),
                                                   BCNN_CUDA_THREADS>>>(
         src_sz, dst_tensor->grad_data_gpu, src_tensor->data_gpu, src_tensor->n,
@@ -184,7 +220,6 @@ void bcnn_backward_depthwise_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
         src_tensor->w, param->size, param->stride, param->pad,
         weights->grad_data_gpu);
     bcnn_cuda_check(cudaPeekAtLastError());
-
     if (src_tensor->grad_data_gpu) {
         _bcnn_backward_depthwise_conv_data_kernel<<<bcnn_cuda_blocks(src_sz),
                                                     BCNN_CUDA_THREADS>>>(
@@ -194,6 +229,7 @@ void bcnn_backward_depthwise_conv_layer_gpu(bcnn_net *net, bcnn_node *node) {
             src_tensor->grad_data_gpu);
         bcnn_cuda_check(cudaPeekAtLastError());
     }
+#endif
 
     return;
 }

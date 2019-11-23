@@ -179,22 +179,42 @@ void bcnn_im2col_mt(const float *data_im, const int channels, const int height,
                     const int stride, float *data_col, int num_threads);
 void bcnn_conv3x3_convert_weights(const float *src, float *dst,
                                   int src_channels, int dst_channels);
-void bcnn_conv3x3_convert_dst(const float *src, float *dst, size_t step);
-void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step);
+// void bcnn_conv3x3_convert_dst(const float *src, float *dst, size_t step);
+// void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step);
 void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                            float *dst, int dst_w, int dst_h, int dst_c,
                            int batch_size, int pad, float *weights,
                            float *scales, float *biases, float *slopes,
                            float *workspace, int workspace_sz, int post_func,
                            int num_threads);
+void bcnn_conv_default_kernel(float *src, int src_w, int src_h, int src_c,
+                              float *dst, int dst_w, int dst_h, int dst_c,
+                              int batch_size, int kernel_width,
+                              int kernel_height, int stride, int pad,
+                              float *weights, float *scales, float *biases,
+                              float *slopes, float *workspace, int workspace_sz,
+                              int post_func, int num_threads);
+void bcnn_dwconv3x3s1_kernel(float *src, int src_w, int src_h, float *dst,
+                             int dst_w, int dst_h, int num_channels,
+                             int batch_size, int pad, float *weights,
+                             float *scales, float *biases, float *slopes,
+                             float *workspace, int workspace_sz, int post_func,
+                             int num_threads);
+void bcnn_dwconv_default_kernel(float *src, int src_w, int src_h, float *dst,
+                                int dst_w, int dst_h, int num_channels,
+                                int batch_size, int pad, int stride,
+                                int kernel_width, int kernel_height,
+                                float *weights, float *scales, float *biases,
+                                float *slopes, int post_func, int num_threads);
 void bcnn_nchw_to_nc4hw4(float *dst, const float *src, size_t area,
                          size_t depth, int batch_size);
 void bcnn_nc4hw4_to_nchw(float *dst, const float *src, size_t area,
                          size_t depth, int batch_size);
 
-typedef void (*bcnn_post_conv_nc4hw4_func)(
-    float *dst, const float *src, const float *bias, const float *alpha,
-    const float *slope, size_t num_planes, size_t num_biases);
+typedef void (*bcnn_fused_op_nc4hw4_func)(float *dst, const float *src,
+                                          const float *bias, const float *alpha,
+                                          const float *slope, size_t num_planes,
+                                          size_t num_biases);
 
 static inline bv_float4 bv_float4_load(const float *x) {
     bv_float4 v;
@@ -210,6 +230,7 @@ static inline bv_float4 bv_float4_load(const float *x) {
 #endif
     return v;
 }
+
 static inline void bv_float4_store(bv_float4 v, float *x) {
 #if defined(BCNN_USE_AVX)
     _mm_store_ps(x, v.val);
@@ -222,6 +243,22 @@ static inline void bv_float4_store(bv_float4 v, float *x) {
     x[3] = v.val[3];
 #endif
 }
+
+static inline bv_float4 bv_float4_set(float x) {
+    bv_float4 v;
+#if defined(BCNN_USE_AVX)
+    v.val = _mm_set1_ps(x);
+#elif defined(BCNN_USE_NEON)
+    v.val = vdupq_n_f32(x);
+#else
+    v.val[0] = x;
+    v.val[1] = x;
+    v.val[2] = x;
+    v.val[3] = x;
+#endif
+    return v;
+}
+
 static inline bv_float4 bv_float4_add(bv_float4 va, bv_float4 vb) {
     bv_float4 v;
 #if defined(BCNN_USE_AVX)
@@ -236,6 +273,7 @@ static inline bv_float4 bv_float4_add(bv_float4 va, bv_float4 vb) {
 #endif
     return v;
 }
+
 static inline bv_float4 bv_float4_sub(bv_float4 va, bv_float4 vb) {
     bv_float4 v;
 #if defined(BCNN_USE_AVX)
@@ -247,6 +285,21 @@ static inline bv_float4 bv_float4_sub(bv_float4 va, bv_float4 vb) {
     v.val[1] = va.val[1] - vb.val[1];
     v.val[2] = va.val[2] - vb.val[2];
     v.val[3] = va.val[3] - vb.val[3];
+#endif
+    return v;
+}
+
+static inline bv_float4 bv_float4_mul(bv_float4 va, bv_float4 vb) {
+    bv_float4 v;
+#if defined(BCNN_USE_AVX)
+    v.val = _mm_mul_ps(va.val, vb.val);
+#elif defined(BCNN_USE_NEON)
+    v.val = vmulq_f32(va.val, vb.val);
+#else
+    v.val[0] = va.val[0] * vb.val[0];
+    v.val[1] = va.val[1] * vb.val[1];
+    v.val[2] = va.val[2] * vb.val[2];
+    v.val[3] = va.val[3] * vb.val[3];
 #endif
     return v;
 }

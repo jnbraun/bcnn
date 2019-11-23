@@ -34,6 +34,7 @@
 #endif
 
 #include <bh/bh_log.h>
+#include <bh/bh_macros.h>  // bh_max
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
 
@@ -107,17 +108,6 @@ bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
                 weights_size * sizeof(float), align_offset_);
         }
     }
-#ifdef BCNN_USE_CUDA
-    if (net->learner != NULL) {
-        if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
-            int weights_size = bcnn_tensor_size(&weights);
-            param->adam_m_gpu =
-                bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
-            param->adam_v_gpu =
-                bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
-        }
-    }
-#endif
 
     bcnn_tensor_set_shape(
         &dst_tensor, net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
@@ -136,18 +126,91 @@ bcnn_status bcnn_add_depthwise_conv_layer(bcnn_net *net, int size, int stride,
     bcnn_node_add_output(net, &node, net->num_tensors - 1);
 
 #ifdef BCNN_USE_CUDA
-    if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
-        int weights_size = bcnn_tensor_size(&weights);
-        param->adam_m_gpu = bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
-        param->adam_v_gpu = bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
+    if (net->learner != NULL) {
+        if (net->learner->optimizer == BCNN_OPTIM_ADAM) {
+            int weights_size = bcnn_tensor_size(&weights);
+            param->adam_m_gpu =
+                bcnn_cuda_memcpy_f32(param->adam_m, weights_size);
+            param->adam_v_gpu =
+                bcnn_cuda_memcpy_f32(param->adam_v, weights_size);
+        }
     }
-#endif
+#ifdef BCNN_USE_CUDNN
+    bcnn_cudnn_check(cudnnCreateTensorDescriptor(&param->src_tensor_desc));
+    bcnn_cudnn_check(cudnnCreateTensorDescriptor(&param->dst_tensor_desc));
+    bcnn_cudnn_check(cudnnCreateFilterDescriptor(&param->filter_desc));
+    bcnn_cudnn_check(cudnnCreateTensorDescriptor(&param->bias_desc));
+    bcnn_cudnn_check(cudnnCreateConvolutionDescriptor(&param->conv_desc));
+    bcnn_cudnn_check(cudnnSetTensor4dDescriptor(
+        param->src_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+        net->tensors[node.src[0]].n, net->tensors[node.src[0]].c,
+        net->tensors[node.src[0]].h, net->tensors[node.src[0]].w));
+    bcnn_cudnn_check(cudnnSetTensor4dDescriptor(
+        param->dst_tensor_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+        net->tensors[node.dst[0]].n, net->tensors[node.dst[0]].c,
+        net->tensors[node.dst[0]].h, net->tensors[node.dst[0]].w));
+    bcnn_cudnn_check(cudnnSetFilter4dDescriptor(
+        param->filter_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, param->num, 1,
+        param->size, param->size));
+    bcnn_cudnn_check(cudnnSetTensor4dDescriptor(
+        param->bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1,
+        net->tensors[node.dst[0]].c, 1, 1));
+#if CUDNN_MAJOR >= 6
+    bcnn_cudnn_check(cudnnSetConvolution2dDescriptor(
+        param->conv_desc, param->pad, param->pad, param->stride, param->stride,
+        1, 1, CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+#else
+    bcnn_cudnn_check(cudnnSetConvolution2dDescriptor(
+        param->conv_desc, param->pad, param->pad, param->stride, param->stride,
+        1, 1, CUDNN_CROSS_CORRELATION));
+#endif  // CUDNN_MAJOR
+#if CUDNN_MAJOR >= 7
+    bcnn_cudnn_check(
+        cudnnSetConvolutionGroupCount(param->conv_desc, param->num));
+#else
+    BCNN_CHECK_AND_LOG(net->log_ctx, param->num == 1, BCNN_INVALID_PARAMETER,
+                       "CUDNN version doesn't support groups > 1.\n");
+#endif  // CUDNN_MAJOR
+    bcnn_cudnn_check(cudnnGetConvolutionForwardAlgorithm(
+        bcnn_cudnn_handle(), param->src_tensor_desc, param->filter_desc,
+        param->conv_desc, param->dst_tensor_desc,
+        CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, 0, &param->fwd_algo));
+    bcnn_cudnn_check(cudnnGetConvolutionBackwardDataAlgorithm(
+        bcnn_cudnn_handle(), param->filter_desc, param->dst_tensor_desc,
+        param->conv_desc, param->src_tensor_desc,
+        CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &param->bwd_data_algo));
+    bcnn_cudnn_check(cudnnGetConvolutionBackwardFilterAlgorithm(
+        bcnn_cudnn_handle(), param->src_tensor_desc, param->dst_tensor_desc,
+        param->conv_desc, param->filter_desc,
+        CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0,
+        &param->bwd_filter_algo));
+    size_t cudnn_wrk_sz = 0;
+    bcnn_cudnn_check(cudnnGetConvolutionForwardWorkspaceSize(
+        bcnn_cudnn_handle(), param->src_tensor_desc, param->filter_desc,
+        param->conv_desc, param->dst_tensor_desc, param->fwd_algo,
+        &cudnn_wrk_sz));
+    param->workspace_size = bh_max(0, cudnn_wrk_sz);
+    bcnn_cudnn_check(cudnnGetConvolutionBackwardFilterWorkspaceSize(
+        bcnn_cudnn_handle(), param->src_tensor_desc, param->dst_tensor_desc,
+        param->conv_desc, param->filter_desc, param->bwd_filter_algo,
+        &cudnn_wrk_sz));
+    param->workspace_size = bh_max(param->workspace_size, cudnn_wrk_sz);
+    bcnn_cudnn_check(cudnnGetConvolutionBackwardDataWorkspaceSize(
+        bcnn_cudnn_handle(), param->filter_desc, param->dst_tensor_desc,
+        param->conv_desc, param->src_tensor_desc, param->bwd_data_algo,
+        &cudnn_wrk_sz));
+    param->workspace_size = bh_max(param->workspace_size, cudnn_wrk_sz);
+    bcnn_cuda_context *cuda_ctx = (bcnn_cuda_context *)net->cuda_ctx;
+    cuda_ctx->workspace_size =
+        bh_max(cuda_ctx->workspace_size, param->workspace_size);
+#endif  // BCNN_USE_CUDNN
+#endif  // BCNN_USE_CUDA
 
     bcnn_net_add_node(net, node);
 
     char node_opname[256];
     snprintf(node_opname, 256,
-             BH_LOG_BOLDBLUE "[DeptwiseConv2d]" BH_LOG_RESET "[%s]",
+             BH_LOG_BOLDBLUE "[DeptwiseSepConv2d]" BH_LOG_RESET "[%s]",
              bcnn_act2str(activation));
     BCNN_INFO(net->log_ctx,
               "%-48s %-8s (%4d x%4d x%4d) -> %-8s (%4d x%4d x%4d) %5d %2d x "

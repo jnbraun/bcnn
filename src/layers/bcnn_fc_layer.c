@@ -26,8 +26,10 @@
 #endif
 
 #include <bh/bh_log.h>
+#include <bh/bh_macros.h>
 #include <bh/bh_mem.h>
 #include <bh/bh_string.h>
+#include <bh/bh_timer.h>
 
 #include "bcnn_activation_layer.h"
 #include "bcnn_learner.h"
@@ -137,6 +139,33 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
               net->tensors[node.src[0]].c, net->tensors[node.dst[0]].name,
               net->tensors[node.dst[0]].w, net->tensors[node.dst[0]].h,
               net->tensors[node.dst[0]].c);
+    if (net->mode == BCNN_MODE_PREDICT) {
+        int src_c_div4 = bh_div_up(net->tensors[node.src[0]].c, 4);
+        int dst_c_div4 = bh_div_up(net->tensors[node.dst[0]].c, 4);
+        size_t src_sz = net->tensors[node.src[0]].w *
+                        net->tensors[node.src[0]].h * src_c_div4 * 4 *
+                        net->tensors[node.src[0]].n;
+        param->src_workspace =
+            (float *)bh_align_calloc(src_sz * sizeof(float), align_offset_);
+        size_t dst_sz = net->tensors[node.dst[0]].w *
+                        net->tensors[node.dst[0]].h * dst_c_div4 * 4 *
+                        net->tensors[node.dst[0]].n;
+        param->dst_workspace =
+            (float *)bh_align_calloc(dst_sz * sizeof(float), align_offset_);
+        param->weights_workspace = (float *)bh_align_calloc(
+            src_c_div4 * dst_c_div4 * 16 * net->tensors[node.src[0]].w *
+                net->tensors[node.src[0]].h * sizeof(float),
+            align_offset_);
+        param->workspace_size = net->num_threads * CONV_TILED *
+                                (src_c_div4 * net->tensors[node.src[0]].w *
+                                 net->tensors[node.src[0]].h) *
+                                4;
+        param->conv_workspace = (float *)bh_align_calloc(
+            param->workspace_size * sizeof(float), align_offset_);
+        param->biases_workspace = (float *)bh_align_calloc(
+            bh_round_up(net->tensors[node.dst[0]].c, 4) * sizeof(float),
+            align_offset_);
+    }
 
     return BCNN_SUCCESS;
 }
@@ -154,25 +183,54 @@ void bcnn_forward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int spatial_size = bcnn_tensor_size2d(src_tensor);
 
     memset(dst_tensor->data, 0, dst_size * batch_size * sizeof(float));
-    for (int b = 0; b < batch_size; ++b) {
+    if (net->mode == BCNN_MODE_PREDICT) {
+        bh_timer t0 = {0};
+        bh_timer_start(&t0);
+        bcnn_nchw_to_nc4hw4(param->src_workspace, src_tensor->data,
+                            src_tensor->h * src_tensor->w, src_tensor->c,
+                            src_tensor->n);
+        bh_timer_stop(&t0);
+        bcnn_conv_default_kernel(
+            param->src_workspace, src_tensor->w, src_tensor->h, src_tensor->c,
+            param->dst_workspace, dst_tensor->w, dst_tensor->h, dst_tensor->c,
+            batch_size, src_tensor->w, src_tensor->h, 1, 0,
+            param->weights_workspace, NULL, param->biases_workspace, NULL,
+            param->conv_workspace, param->workspace_size, 0, net->num_threads);
+        bh_timer t1 = {0};
+        bh_timer_start(&t1);
+        bcnn_nc4hw4_to_nchw(dst_tensor->data, param->dst_workspace,
+                            dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                            dst_tensor->n);
+        bh_timer_stop(&t1);
+        // TODO: prelu not supported
+        bcnn_forward_activation_cpu(dst_tensor->data, sz, NULL,
+                                    dst_tensor->w * dst_tensor->h,
+                                    dst_tensor->c, param->activation);
+        // fprintf(stderr, "fc_pre-post %f msecs ",
+        //        bh_timer_get_msec(&t0) + bh_timer_get_msec(&t1));
+    } else {
+        for (int b = 0; b < batch_size; ++b) {
 #pragma omp parallel for num_threads(net->num_threads)
-        for (int p = 0; p < dst_tensor->c; p++) {
-            float sum = 0.0f;
-            for (int q = 0; q < src_tensor->c; q++) {
-                float *w = weights->data + src_size * p + spatial_size * q;
-                float *x = src_tensor->data + b * src_size + q * spatial_size;
-                sum += bcnn_dot(spatial_size, x, w);
+            for (int p = 0; p < dst_tensor->c; p++) {
+                float sum = 0.0f;
+                for (int q = 0; q < src_tensor->c; q++) {
+                    float *w = weights->data + src_size * p + spatial_size * q;
+                    float *x =
+                        src_tensor->data + b * src_size + q * spatial_size;
+                    sum += bcnn_dot(spatial_size, x, w);
+                }
+                dst_tensor->data[b * dst_tensor->c + p] = sum;
             }
-            dst_tensor->data[b * dst_tensor->c + p] = sum;
         }
+        for (int i = 0; i < batch_size; ++i) {
+            bcnn_axpy(dst_size, 1, biases->data,
+                      dst_tensor->data + i * dst_size);
+        }
+        // TODO: prelu not supported
+        bcnn_forward_activation_cpu(dst_tensor->data, sz, NULL,
+                                    dst_tensor->w * dst_tensor->h,
+                                    dst_tensor->c, param->activation);
     }
-    for (int i = 0; i < batch_size; ++i) {
-        bcnn_axpy(dst_size, 1, biases->data, dst_tensor->data + i * dst_size);
-    }
-    // TODO: prelu not supported
-    bcnn_forward_activation_cpu(dst_tensor->data, sz, NULL,
-                                dst_tensor->w * dst_tensor->h, dst_tensor->c,
-                                param->activation);
 
     return;
 }

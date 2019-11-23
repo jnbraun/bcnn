@@ -1354,7 +1354,7 @@ void bcnn_scale_and_add_bias_with_prelu_nc4hw4(
 }
 
 /* Look-up Table for the post convolution functions */
-bcnn_post_conv_nc4hw4_func bcnn_post_conv_nc4hw4_lut[8] = {
+bcnn_fused_op_nc4hw4_func bcnn_fused_op_nc4hw4_lut[8] = {
     bcnn_add_bias_nc4hw4,
     bcnn_add_bias_with_relu_nc4hw4,
     bcnn_add_bias_with_lrelu_nc4hw4,
@@ -1400,7 +1400,8 @@ void bcnn_nc4hw4_to_nchw(float *dst, const float *src, size_t area,
     }
 }
 
-void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step) {
+static void bcnn_conv3x3_convert_src(const float *src, float *dst,
+                                     size_t step) {
     float *_x = (float *)src;
     float *_y = dst;
     bv_float4 m00 =
@@ -1454,8 +1455,8 @@ void bcnn_conv3x3_convert_src(const float *src, float *dst, size_t step) {
     bv_float4_store(bv_float4_sub(m33, m31), _y + step * 15);
 }
 
-void bcnn_conv3x3_convert_dst(const float *src_z, float *dst_block,
-                              size_t step) {
+static void bcnn_conv3x3_convert_dst(const float *src_z, float *dst_block,
+                                     size_t step) {
     float *yy = dst_block;
     float *x = (float *)src_z;
     bv_float4 m00 = bv_float4_add(bv_float4_add(bv_float4_load(x + step * 0),
@@ -1553,42 +1554,50 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
                                 size_t width, size_t weight_depth_offset) {
 #if defined(BCNN_USE_AVX)
     int src_depth_step = 4 * width;
-    int wC4 = width / 4;
-    int w4End = wC4 * 4;
+    int wC8 = width / 8;
+    int w8End = wC8 * 8;
     for (int dz = 0; dz < dst_depth_quad; ++dz) {
         float *dst_z = dst + dz * dst_step;
         const float *weight_dz =
             weight + dz * (src_depth_quad * 16 + weight_depth_offset);
 
-        for (int dx = 0; dx < wC4; ++dx) {
-            float *dst_x = dst_z + dx * 4 * 4;
-            __m128 dst0 = _mm_set1_ps(0.0f);
-            __m128 dst1 = _mm_set1_ps(0.0f);
-            __m128 dst2 = _mm_set1_ps(0.0f);
-            __m128 dst3 = _mm_set1_ps(0.0f);
-            const float *src_dx = src + 4 * dx * 4;
+        for (int dx = 0; dx < wC8; ++dx) {
+            float *dst_x = dst_z + dx * 8 * 4;
+            __m256 dst0 = _mm256_set1_ps(0.0f);
+            __m256 dst1 = _mm256_set1_ps(0.0f);
+            __m256 dst2 = _mm256_set1_ps(0.0f);
+            __m256 dst3 = _mm256_set1_ps(0.0f);
+            const float *src_dx = src + 8 * dx * 4;
             for (int sz = 0; sz < src_depth_quad; ++sz) {
                 const float *src_z = src_dx + sz * src_depth_step;
                 const float *weight_z = weight_dz + sz * 16;
-                __m128 w0 = _mm_loadu_ps(weight_z + 4 * 0);
-                __m128 w1 = _mm_loadu_ps(weight_z + 4 * 1);
-                __m128 w2 = _mm_loadu_ps(weight_z + 4 * 2);
-                __m128 w3 = _mm_loadu_ps(weight_z + 4 * 3);
-#define COMPUTE(v)                                     \
-    {                                                  \
-        __m128 srcValue = _mm_loadu_ps(src_z + 4 * v); \
-        __m128 s0 = _mm_set1_ps(srcValue[0]);          \
-        __m128 s1 = _mm_set1_ps(srcValue[1]);          \
-        __m128 s2 = _mm_set1_ps(srcValue[2]);          \
-        __m128 s3 = _mm_set1_ps(srcValue[3]);          \
-        __m128 sw0 = _mm_mul_ps(s0, w0);               \
-        __m128 sw1 = _mm_mul_ps(s1, w1);               \
-        __m128 sw2 = _mm_mul_ps(s2, w2);               \
-        __m128 sw3 = _mm_mul_ps(s3, w3);               \
-        dst##v = _mm_add_ps(dst##v, sw0);              \
-        dst##v = _mm_add_ps(dst##v, sw1);              \
-        dst##v = _mm_add_ps(dst##v, sw2);              \
-        dst##v = _mm_add_ps(dst##v, sw3);              \
+                __m256 w0 =
+                    _mm256_broadcast_ps((const __m128 *)(weight_z + 4 * 0));
+                __m256 w1 =
+                    _mm256_broadcast_ps((const __m128 *)(weight_z + 4 * 1));
+                __m256 w2 =
+                    _mm256_broadcast_ps((const __m128 *)(weight_z + 4 * 2));
+                __m256 w3 =
+                    _mm256_broadcast_ps((const __m128 *)(weight_z + 4 * 3));
+#define COMPUTE(v)                                                          \
+    {                                                                       \
+        __m256 srcValue = _mm256_loadu_ps(src_z + 8 * v);                   \
+        __m256 s0 =                                                         \
+            _mm256_shuffle_ps(srcValue, srcValue, _MM_SHUFFLE(0, 0, 0, 0)); \
+        __m256 s1 =                                                         \
+            _mm256_shuffle_ps(srcValue, srcValue, _MM_SHUFFLE(1, 1, 1, 1)); \
+        __m256 s2 =                                                         \
+            _mm256_shuffle_ps(srcValue, srcValue, _MM_SHUFFLE(2, 2, 2, 2)); \
+        __m256 s3 =                                                         \
+            _mm256_shuffle_ps(srcValue, srcValue, _MM_SHUFFLE(3, 3, 3, 3)); \
+        __m256 sw0 = _mm256_mul_ps(s0, w0);                                 \
+        __m256 sw1 = _mm256_mul_ps(s1, w1);                                 \
+        __m256 sw2 = _mm256_mul_ps(s2, w2);                                 \
+        __m256 sw3 = _mm256_mul_ps(s3, w3);                                 \
+        dst##v = _mm256_add_ps(dst##v, sw0);                                \
+        dst##v = _mm256_add_ps(dst##v, sw1);                                \
+        dst##v = _mm256_add_ps(dst##v, sw2);                                \
+        dst##v = _mm256_add_ps(dst##v, sw3);                                \
     }
 
                 COMPUTE(0);
@@ -1597,15 +1606,16 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
                 COMPUTE(3);
             }
 
-            _mm_store_ps(dst_x + 4 * 0, dst0);
-            _mm_store_ps(dst_x + 4 * 1, dst1);
-            _mm_store_ps(dst_x + 4 * 2, dst2);
-            _mm_store_ps(dst_x + 4 * 3, dst3);
+            _mm256_storeu_ps(dst_x + 8 * 0, dst0);
+            _mm256_storeu_ps(dst_x + 8 * 1, dst1);
+            _mm256_storeu_ps(dst_x + 8 * 2, dst2);
+            _mm256_storeu_ps(dst_x + 8 * 3, dst3);
         }
+        _mm256_zeroall();
 
-        for (int dx = w4End; dx < width; ++dx) {
+        for (int dx = w8End; dx < width; ++dx) {
             float *dst_x = dst_z + dx * 4;
-            __m128 dstValue = _mm_set1_ps(0.0f);
+            __m128 dst_v4 = _mm_set1_ps(0.0f);
 
             const float *src_dx = src + 4 * dx;
             for (int sz = 0; sz < src_depth_quad; ++sz) {
@@ -1616,22 +1626,21 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
                 __m128 w2 = _mm_loadu_ps(weight_z + 4 * 2);
                 __m128 w3 = _mm_loadu_ps(weight_z + 4 * 3);
 
-                __m128 srcValue = _mm_loadu_ps(src_z);
-                __m128 s0 = _mm_set1_ps(srcValue[0]);
-                __m128 s1 = _mm_set1_ps(srcValue[1]);
-                __m128 s2 = _mm_set1_ps(srcValue[2]);
-                __m128 s3 = _mm_set1_ps(srcValue[3]);
+                __m128 s0 = _mm_set1_ps(src_z[0]);
+                __m128 s1 = _mm_set1_ps(src_z[1]);
+                __m128 s2 = _mm_set1_ps(src_z[2]);
+                __m128 s3 = _mm_set1_ps(src_z[3]);
 
                 __m128 sw0 = _mm_mul_ps(s0, w0);
                 __m128 sw1 = _mm_mul_ps(s1, w1);
                 __m128 sw2 = _mm_mul_ps(s2, w2);
                 __m128 sw3 = _mm_mul_ps(s3, w3);
-                dstValue = _mm_add_ps(dstValue, sw0);
-                dstValue = _mm_add_ps(dstValue, sw1);
-                dstValue = _mm_add_ps(dstValue, sw2);
-                dstValue = _mm_add_ps(dstValue, sw3);
+                dst_v4 = _mm_add_ps(dst_v4, sw0);
+                dst_v4 = _mm_add_ps(dst_v4, sw1);
+                dst_v4 = _mm_add_ps(dst_v4, sw2);
+                dst_v4 = _mm_add_ps(dst_v4, sw3);
             }
-            _mm_store_ps(dst_x, dstValue);
+            _mm_store_ps(dst_x, dst_v4);
         }
     }
 #elif defined(BCNN_USE_NEON)
@@ -1922,7 +1931,7 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
 
         for (int dx = w4End; dx < width; ++dx) {
             float *dst_x = dst_z + dx * 4;
-            float32x4_t dstValue = vdupq_n_f32(0.0f);
+            float32x4_t dst_v4 = vdupq_n_f32(0.0f);
 
             const float *src_dx = src + 4 * dx;
             for (int sz = 0; sz < src_depth_quad; ++sz) {
@@ -1943,12 +1952,12 @@ static void bcnn_gemm_kernel4x4(float *dst, const float *src,
                 float32x4_t sw1 = vmulq_f32(s1, w1);
                 float32x4_t sw2 = vmulq_f32(s2, w2);
                 float32x4_t sw3 = vmulq_f32(s3, w3);
-                dstValue = vaddq_f32(dstValue, sw0);
-                dstValue = vaddq_f32(dstValue, sw1);
-                dstValue = vaddq_f32(dstValue, sw2);
-                dstValue = vaddq_f32(dstValue, sw3);
+                dst_v4 = vaddq_f32(dst_v4, sw0);
+                dst_v4 = vaddq_f32(dst_v4, sw1);
+                dst_v4 = vaddq_f32(dst_v4, sw2);
+                dst_v4 = vaddq_f32(dst_v4, sw3);
             }
-            vst1q_f32(dst_x, dstValue);
+            vst1q_f32(dst_x, dst_v4);
         }
     }
 #endif  // __aarch64__
@@ -2001,8 +2010,7 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
     int dst_w2 = bh_div_up(dst_w, 2);
     int dst_h2 = bh_div_up(dst_h, 2);
     int workspace_thread_stride = workspace_sz / num_threads;
-    bcnn_post_conv_nc4hw4_func post_function =
-        bcnn_post_conv_nc4hw4_lut[post_func];
+    bcnn_fused_op_nc4hw4_func fused_op = bcnn_fused_op_nc4hw4_lut[post_func];
 
     for (int b = 0; b < batch_size; ++b) {
         float *src_batch = src + src_w * src_h * src_c4 * 4 * b;
@@ -2111,8 +2119,8 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
                         float *bias_z = bias + 4 * z;
                         float *scales_z = scales + 4 * z;
                         float *slopes_z = slopes + 4 * z;
-                        post_function(dst_block, dst_block, bias_z, scales_z,
-                                      slopes_z, 4, 1);
+                        fused_op(dst_block, dst_block, bias_z, scales_z,
+                                 slopes_z, 4, 1);
                         bv_float4_store(bv_float4_load(dst_block), dst_z);
                         if (w_idx * 2 + 1 < dst_w) {
                             bv_float4_store(bv_float4_load(dst_block + 4),
@@ -2135,6 +2143,748 @@ void bcnn_conv3x3s1_kernel(float *src, int src_w, int src_h, int src_c,
     }
 
     return;
+}
+
+static void bcnn_conv_border(float *dst, const float *src, const float *weight,
+                             size_t src_depth_quad, size_t src_depth_step,
+                             size_t fw, size_t fh, size_t weight_y_step,
+                             size_t weight_z_step, size_t dilateX_step,
+                             size_t dilateY_step, float *alpha) {
+#if defined(BCNN_USE_AVX)
+    int sz, fx, fy;
+    __m128 dst_v4 = _mm_set1_ps(0.0f);
+    for (sz = 0; sz < src_depth_quad; ++sz) {
+        const float *src_z = src + sz * src_depth_step;
+        const float *weight_z = weight + sz * weight_z_step;
+        for (fy = 0; fy < fh; ++fy) {
+            const float *src_y = src_z + fy * dilateY_step;
+            const float *weight_y = weight_z + fy * weight_y_step;
+            for (fx = 0; fx < fw; ++fx) {
+                const float *weight_x = weight_y + 16 * fx;
+                const float *src_x = src_y + fx * dilateX_step;
+                __m128 w0 = _mm_loadu_ps(weight_x + 4 * 0);
+                __m128 w1 = _mm_loadu_ps(weight_x + 4 * 1);
+                __m128 w2 = _mm_loadu_ps(weight_x + 4 * 2);
+                __m128 w3 = _mm_loadu_ps(weight_x + 4 * 3);
+
+                __m128 s0 = _mm_set1_ps(src_x[0]);
+                __m128 s1 = _mm_set1_ps(src_x[1]);
+                __m128 s2 = _mm_set1_ps(src_x[2]);
+                __m128 s3 = _mm_set1_ps(src_x[3]);
+
+                __m128 sw0 = _mm_mul_ps(s0, w0);
+                dst_v4 = _mm_add_ps(dst_v4, sw0);
+                __m128 sw1 = _mm_mul_ps(s1, w1);
+                dst_v4 = _mm_add_ps(dst_v4, sw1);
+                __m128 sw2 = _mm_mul_ps(s2, w2);
+                dst_v4 = _mm_add_ps(dst_v4, sw2);
+                __m128 sw3 = _mm_mul_ps(s3, w3);
+                dst_v4 = _mm_add_ps(dst_v4, sw3);
+            }
+        }
+    }
+    _mm_store_ps(dst, dst_v4);
+#else
+    int sz, fx, fy;
+    for (int i = 0; i < 4; ++i) {
+        dst[i] = 0.0f;
+    }
+    // fprintf(stderr, "a\n");
+    for (sz = 0; sz < src_depth_quad; ++sz) {
+        const float *src_z = src + sz * src_depth_step;
+        const float *weight_z = weight + sz * weight_z_step;
+        for (fy = 0; fy < fh; ++fy) {
+            const float *src_y = src_z + fy * dilateY_step;
+            const float *weight_y = weight_z + fy * weight_y_step;
+            for (fx = 0; fx < fw; ++fx) {
+                const float *weight_x = weight_y + 16 * fx;
+                const float *src_x = src_y + fx * dilateX_step;
+                for (int i = 0; i < 4; ++i) {
+                    for (int j = 0; j < 4; ++j) {
+                        dst[j] += src_x[i] * weight_x[4 * i + j];
+                    }
+                }
+            }
+        }
+    }
+#endif
+}
+
+static inline void bcnn_conv_slide_border(
+    float *dst_z, const float *src_z, const float *weight_dz, int src_w,
+    int src_h, int dst_w, int stride, int src_c4, int pad, int kernel_width,
+    int kernel_height, int src_z_step, int weight_sy_step, int weight_sz_step,
+    int left, int top, int right, int bottom) {
+    for (int dy = top; dy < bottom; ++dy) {
+        int src_y_start = dy * stride - pad;
+        float *dst_y = dst_z + dst_w * 4 * dy;
+        const float *src_dy = src_z + src_y_start * src_w * 4;
+        int sfy = bh_max(0, -src_y_start);
+        int efy = bh_min(kernel_height, src_h - src_y_start);
+        for (int dx = left; dx < right; ++dx) {
+            int src_x_start = dx * stride - pad;
+            const float *src_dx = src_dy + 4 * src_x_start;
+            float *dst_x = dst_y + 4 * dx;
+            int sfx = bh_max(0, -src_x_start);
+            int efx = bh_min(kernel_width, src_w - src_x_start);
+            const float *src_unit = src_dx + (sfx * 4 + sfy * src_w * 4);
+            const float *weight_start =
+                weight_dz + (16 * sfx + weight_sy_step * sfy);
+            /*fprintf(stderr, "dx %d dy %d left %d right %d top %d bottom %d\n",
+                    dx, dy, left, right, top, bottom);*/
+            bcnn_conv_border(dst_x, src_unit, weight_start, src_c4, src_z_step,
+                             efx - sfx, efy - sfy, weight_sy_step,
+                             weight_sz_step, 4, src_w * 4, NULL);
+        }
+    }
+}
+
+static void bcnn_conv_slide_middle(float *dst, const float *src,
+                                   const float *weight, size_t width,
+                                   size_t src_w_setup, size_t src_depth_quad,
+                                   size_t src_depth_step, size_t fw, size_t fh,
+                                   size_t step_x, size_t step_y) {
+#if defined(BCNN_USE_AVX)
+    if (width % 2 == 0) {
+        int dx, sz, fx, fy;
+        for (dx = 0; dx < width; dx += 2) {
+            float *dst_x = dst + dx * 4;
+            __m256 dst_v4 = _mm256_set1_ps(0.0f);
+
+            const float *src_dx = src + src_w_setup * dx;
+            for (sz = 0; sz < src_depth_quad; ++sz) {
+                const float *src_z = src_dx + sz * src_depth_step;
+                const float *weight_z = weight + sz * fh * fw * 16;
+                for (fy = 0; fy < fh; ++fy) {
+                    const float *src_y = src_z + fy * step_y;
+                    const float *weight_y = weight_z + fy * fw * 16;
+                    for (fx = 0; fx < fw; ++fx) {
+                        const float *weight_x = weight_y + 16 * fx;
+                        const float *src_x = src_y + fx * step_x;
+                        __m256 w0 = _mm256_broadcast_ps(
+                            (const __m128 *)(weight_x + 4 * 0));
+                        __m256 w1 = _mm256_broadcast_ps(
+                            (const __m128 *)(weight_x + 4 * 1));
+                        __m256 w2 = _mm256_broadcast_ps(
+                            (const __m128 *)(weight_x + 4 * 2));
+                        __m256 w3 = _mm256_broadcast_ps(
+                            (const __m128 *)(weight_x + 4 * 3));
+                        __m256 srcValue = _mm256_insertf128_ps(
+                            _mm256_castps128_ps256(_mm_loadu_ps(src_x)),
+                            _mm_loadu_ps(src_x + src_w_setup), 1);
+                        __m256 s0 = _mm256_shuffle_ps(srcValue, srcValue,
+                                                      _MM_SHUFFLE(0, 0, 0, 0));
+                        __m256 s1 = _mm256_shuffle_ps(srcValue, srcValue,
+                                                      _MM_SHUFFLE(1, 1, 1, 1));
+                        __m256 s2 = _mm256_shuffle_ps(srcValue, srcValue,
+                                                      _MM_SHUFFLE(2, 2, 2, 2));
+                        __m256 s3 = _mm256_shuffle_ps(srcValue, srcValue,
+                                                      _MM_SHUFFLE(3, 3, 3, 3));
+
+                        __m256 sw0 = _mm256_mul_ps(s0, w0);
+                        __m256 sw1 = _mm256_mul_ps(s1, w1);
+                        __m256 sw2 = _mm256_mul_ps(s2, w2);
+                        __m256 sw3 = _mm256_mul_ps(s3, w3);
+                        dst_v4 = _mm256_add_ps(dst_v4, sw0);
+                        dst_v4 = _mm256_add_ps(dst_v4, sw1);
+                        dst_v4 = _mm256_add_ps(dst_v4, sw2);
+                        dst_v4 = _mm256_add_ps(dst_v4, sw3);
+                    }
+                }
+            }
+            _mm256_storeu_ps(dst_x, dst_v4);
+        }
+        _mm256_zeroall();
+    } else {
+        int dx, sz, fx, fy;
+        for (dx = 0; dx < width; ++dx) {
+            float *dst_x = dst + dx * 4;
+            __m128 dst_v4 = _mm_set1_ps(0.0f);
+            const float *src_dx = src + src_w_setup * dx;
+            for (sz = 0; sz < src_depth_quad; ++sz) {
+                const float *src_z = src_dx + sz * src_depth_step;
+                const float *weight_z = weight + sz * fh * fw * 16;
+                for (fy = 0; fy < fh; ++fy) {
+                    const float *src_y = src_z + fy * step_y;
+                    const float *weight_y = weight_z + fy * fw * 16;
+                    for (fx = 0; fx < fw; ++fx) {
+                        const float *weight_x = weight_y + 16 * fx;
+                        const float *src_x = src_y + fx * step_x;
+                        __m128 w0 = _mm_loadu_ps(weight_x + 4 * 0);
+                        __m128 w1 = _mm_loadu_ps(weight_x + 4 * 1);
+                        __m128 w2 = _mm_loadu_ps(weight_x + 4 * 2);
+                        __m128 w3 = _mm_loadu_ps(weight_x + 4 * 3);
+                        __m128 s0 = _mm_set1_ps(src_x[0]);
+                        __m128 s1 = _mm_set1_ps(src_x[1]);
+                        __m128 s2 = _mm_set1_ps(src_x[2]);
+                        __m128 s3 = _mm_set1_ps(src_x[3]);
+                        __m128 sw0 = _mm_mul_ps(s0, w0);
+                        dst_v4 = _mm_add_ps(dst_v4, sw0);
+                        __m128 sw1 = _mm_mul_ps(s1, w1);
+                        dst_v4 = _mm_add_ps(dst_v4, sw1);
+                        __m128 sw2 = _mm_mul_ps(s2, w2);
+                        dst_v4 = _mm_add_ps(dst_v4, sw2);
+                        __m128 sw3 = _mm_mul_ps(s3, w3);
+                        dst_v4 = _mm_add_ps(dst_v4, sw3);
+                    }
+                }
+            }
+            _mm_store_ps(dst_x, dst_v4);
+        }
+    }
+#else
+    int dx, sz, fx, fy;
+    for (dx = 0; dx < width; ++dx) {
+        float *dst_x = dst + dx * 4;
+        dst_x[0] = 0.0f;
+        dst_x[1] = 0.0f;
+        dst_x[2] = 0.0f;
+        dst_x[3] = 0.0f;
+        const float *src_dx = src + src_w_setup * dx;
+        for (sz = 0; sz < src_depth_quad; ++sz) {
+            const float *src_z = src_dx + sz * src_depth_step;
+            const float *weight_z = weight + sz * fh * fw * 16;
+            for (fy = 0; fy < fh; ++fy) {
+                const float *src_y = src_z + fy * step_y;
+                const float *weight_y = weight_z + fy * fw * 16;
+                for (fx = 0; fx < fw; ++fx) {
+                    const float *weight_x = weight_y + 16 * fx;
+                    const float *src_x = src_y + fx * step_x;
+                    for (int i = 0; i < 4; ++i) {
+                        for (int j = 0; j < 4; ++j) {
+                            dst_x[j] += src_x[i] * weight_x[4 * i + j];
+                        }
+                    }
+                }
+            }
+        }
+    }
+#endif
+}
+
+void bcnn_conv_default_kernel(float *src, int src_w, int src_h, int src_c,
+                              float *dst, int dst_w, int dst_h, int dst_c,
+                              int batch_size, int kernel_width,
+                              int kernel_height, int stride, int pad,
+                              float *weights, float *scales, float *biases,
+                              float *slopes, float *workspace, int workspace_sz,
+                              int post_func, int num_threads) {
+    int src_c4 = bh_div_up(src_c, 4);
+    int dst_c4 = bh_div_up(dst_c, 4);
+    int left = 0, top = 0, right = dst_w, bottom = dst_h;
+    int weight_z_step = kernel_height * kernel_width * src_c4 * 16;
+    int weight_sy_step = kernel_width * 16;
+    int weight_sz_step = kernel_width * kernel_height * 16;
+    int src_z_step = src_w * src_h * 4;
+    bcnn_fused_op_nc4hw4_func fused_op = bcnn_fused_op_nc4hw4_lut[post_func];
+    float *slopes_z = NULL;
+    float *scales_z = NULL;
+
+    while (left * stride - pad < 0 && left < dst_w - 1) {
+        left++;
+    }
+    while (top * stride - pad < 0 && top < dst_h - 1) {
+        top++;
+    }
+    while ((right - 1) * stride - pad + kernel_width > src_w && right > left) {
+        right--;
+    }
+    while ((bottom - 1) * stride - pad + kernel_height > src_h &&
+           bottom > top) {
+        bottom--;
+    }
+
+    if (dst_w * dst_h <= CONV_TILED * 4 || dst_c4 < 4 || src_c4 < 4) {
+        int num_threads_local = bh_min(dst_c4, num_threads);
+#pragma omp parallel for num_threads(num_threads_local)
+        for (int thread_id = 0; thread_id < num_threads_local; thread_id++) {
+            for (int batch = 0; batch < batch_size; ++batch) {
+                float *src_batch = src + src_w * src_h * src_c4 * 4 * batch;
+                float *dst_batch = dst + dst_w * dst_h * dst_c4 * 4 * batch;
+                for (int dz = thread_id; dz < dst_c4; dz += num_threads_local) {
+                    float *dst_z = dst_batch + dz * dst_w * dst_h * 4;
+                    float *bias_z = biases + 4 * dz;
+                    float *weight_dz = weights + dz * weight_z_step;
+                    bcnn_conv_slide_border(dst_z, src_batch, weight_dz, src_w,
+                                           src_h, dst_w, stride, src_c4, pad,
+                                           kernel_width, kernel_height,
+                                           src_z_step, weight_sy_step,
+                                           weight_sz_step, 0, 0, dst_w, top);
+                    bcnn_conv_slide_border(
+                        dst_z, src_batch, weight_dz, src_w, src_h, dst_w,
+                        stride, src_c4, pad, kernel_width, kernel_height,
+                        src_z_step, weight_sy_step, weight_sz_step, 0, bottom,
+                        dst_w, dst_h);
+                    bcnn_conv_slide_border(
+                        dst_z, src_batch, weight_dz, src_w, src_h, dst_w,
+                        stride, src_c4, pad, kernel_width, kernel_height,
+                        src_z_step, weight_sy_step, weight_sz_step, 0, top,
+                        left, bottom);
+                    bcnn_conv_slide_border(
+                        dst_z, src_batch, weight_dz, src_w, src_h, dst_w,
+                        stride, src_c4, pad, kernel_width, kernel_height,
+                        src_z_step, weight_sy_step, weight_sz_step, right, top,
+                        dst_w, bottom);
+                    if (right > left && bottom > top) {
+                        for (int dy = top; dy < bottom; ++dy) {
+                            int src_y_start = dy * stride - pad;
+                            float *dst_y = dst_z + dst_w * 4 * dy;
+                            float *src_dy = src_batch + src_y_start * src_w * 4;
+                            bcnn_conv_slide_middle(
+                                dst_y + left * 4,
+                                src_dy + (left * stride - pad) * 4, weight_dz,
+                                right - left, stride * 4, src_c4, src_z_step,
+                                kernel_width, kernel_height, 4, src_w * 4);
+                        }
+                    }
+                    if (scales != NULL) {
+                        scales_z = scales + 4 * dz;
+                    }
+                    if (slopes != NULL) {
+                        slopes_z = slopes + 4 * dz;
+                    }
+                    fused_op(dst_z, dst_z, bias_z, scales_z, slopes_z,
+                             dst_w * dst_h, 1);
+                }
+            }
+        }
+        return;
+    }
+
+    int count = bh_div_up(dst_w * dst_h, CONV_TILED);
+    int plane = dst_w * dst_h;
+    int num_threads_local = bh_min(num_threads, count);
+#pragma omp parallel for num_threads(num_threads_local)
+    for (int thread_id = 0; thread_id < num_threads_local; thread_id++) {
+        int workspace_stride =
+            CONV_TILED * src_c4 * kernel_width * kernel_height * 4;
+        float *col_buffer = workspace + workspace_stride * thread_id;
+        for (int batch = 0; batch < batch_size; ++batch) {
+            float *src_batch = src + src_w * src_h * src_c4 * 4 * batch;
+            float *dst_batch = dst + dst_w * dst_h * dst_c4 * 4 * batch;
+            for (int x = (int)thread_id; x < count; x += num_threads_local) {
+                int start = (int)x * CONV_TILED;
+                int remain = plane - start;
+                int xC = remain > CONV_TILED ? CONV_TILED : remain;
+                // im2col
+                memset(col_buffer, 0, workspace_stride * sizeof(float));
+                for (int i = 0; i < xC; ++i) {
+                    int index = start + i;
+                    int ox = index % dst_w;
+                    int oy = index / dst_w;
+                    int sx_start = ox * stride - pad;
+                    int sy_start = oy * stride - pad;
+                    for (int ky = 0; ky < kernel_height; ++ky) {
+                        int sy = sy_start + ky;
+                        if (sy < 0 || sy >= src_h) {
+                            continue;
+                        }
+                        for (int kx = 0; kx < kernel_width; ++kx) {
+                            int sx = sx_start + kx;
+                            if (sx < 0 || sx >= src_w) {
+                                continue;
+                            }
+                            float *src = src_batch + sx * 4 + sy * 4 * src_w;
+                            float *dst = col_buffer + i * 4 +
+                                         4 * xC * (kx + ky * kernel_width);
+                            for (int sz = 0; sz < src_c4; ++sz) {
+                                bv_float4_store(
+                                    bv_float4_load(src + src_z_step * sz),
+                                    dst +
+                                        4 * xC * kernel_height * kernel_width *
+                                            sz);
+                            }
+                        }
+                    }
+                }
+                // GEMM
+                if (xC == CONV_TILED) {
+                    bcnn_gemm_kernel4x4_tiled(
+                        dst_batch + start * 4, col_buffer, weights,
+                        src_c4 * kernel_width * kernel_height,
+                        dst_w * dst_h * 4, dst_c4, 0);
+                } else {
+                    bcnn_gemm_kernel4x4(dst_batch + start * 4, col_buffer,
+                                        weights,
+                                        src_c4 * kernel_width * kernel_height,
+                                        dst_w * dst_h * 4, dst_c4, xC, 0);
+                }
+            }
+        }
+    }
+    num_threads_local = bh_min(num_threads, dst_c4);
+#pragma omp parallel for num_threads(num_threads_local)
+    for (int thread_id = 0; thread_id < num_threads_local; thread_id++) {
+        for (int batch = 0; batch < batch_size; ++batch) {
+            float *dst_batch = dst + dst_w * dst_h * dst_c4 * 4 * batch;
+            for (int dz = thread_id; dz < dst_c4; dz += num_threads_local) {
+                float *dst_z = dst_batch + dz * dst_w * dst_h * 4;
+                float *bias_z = biases + 4 * dz;
+                if (scales != NULL) {
+                    scales_z = scales + 4 * dz;
+                }
+                if (slopes != NULL) {
+                    slopes_z = slopes + 4 * dz;
+                }
+                fused_op(dst_z, dst_z, bias_z, scales_z, slopes_z,
+                         dst_w * dst_h, 1);
+            }
+        }
+    }
+}
+
+static void bcnn_dwconv3x3_convert_src(const float *source, float *dest,
+                                       int unit, int src_w, int pad, int su,
+                                       int eu) {
+    // Head
+    for (int x = 0; x < su; ++x) {
+        float *dstX = dest + 4 * 4 * x;
+        int sx = x * 2 - pad;
+        int ex = sx + 4;
+        bv_float4 v[4] = {0.0f};
+        for (int i = bh_max(sx, 0); i < bh_min(ex, src_w); ++i) {
+            v[i - sx] = bv_float4_load(source + 4 * i);
+        }
+        bv_float4 m0 = bv_float4_sub(v[0], v[2]);
+        bv_float4 m1 = bv_float4_add(v[1], v[2]);
+        bv_float4 m2 = bv_float4_sub(v[2], v[1]);
+        bv_float4 m3 = bv_float4_sub(v[3], v[1]);
+        bv_float4_store(m0, dstX + 4 * 0);
+        bv_float4_store(m1, dstX + 4 * 1);
+        bv_float4_store(m2, dstX + 4 * 2);
+        bv_float4_store(m3, dstX + 4 * 3);
+    }
+    // Middle
+    const float *p_source = source + 4 * (su * 2 - pad);
+    float *p_dest = dest + 4 * 4 * su;
+    size_t length = eu - su;
+    for (int x = 0; x < length; ++x) {
+        float *dstX = p_dest + 4 * 4 * x;
+        int sx = x * 2;
+        bv_float4 v[4] = {0.0f};
+        for (int i = 0; i < 4; ++i) {
+            v[i] = bv_float4_load(p_source + 4 * sx + 4 * i);
+        }
+        bv_float4 m0 = bv_float4_sub(v[0], v[2]);
+        bv_float4 m1 = bv_float4_add(v[1], v[2]);
+        bv_float4 m2 = bv_float4_sub(v[2], v[1]);
+        bv_float4 m3 = bv_float4_sub(v[3], v[1]);
+        bv_float4_store(m0, dstX + 4 * 0);
+        bv_float4_store(m1, dstX + 4 * 1);
+        bv_float4_store(m2, dstX + 4 * 2);
+        bv_float4_store(m3, dstX + 4 * 3);
+    }
+    // Tail
+    for (int x = eu; x < unit; ++x) {
+        float *dstX = dest + 4 * 4 * x;
+        int sx = x * 2 - pad;
+        int ex = sx + 4;
+        bv_float4 v[4] = {0.0f};
+        for (int i = bh_max(sx, 0); i < bh_min(ex, src_w); ++i) {
+            v[i - sx] = bv_float4_load(source + 4 * i);
+        }
+        bv_float4 m0 = bv_float4_sub(v[0], v[2]);
+        bv_float4 m1 = bv_float4_add(v[1], v[2]);
+        bv_float4 m2 = bv_float4_sub(v[2], v[1]);
+        bv_float4 m3 = bv_float4_sub(v[3], v[1]);
+        bv_float4_store(m0, dstX + 4 * 0);
+        bv_float4_store(m1, dstX + 4 * 1);
+        bv_float4_store(m2, dstX + 4 * 2);
+        bv_float4_store(m3, dstX + 4 * 3);
+    }
+}
+
+static void bcnn_dwconv3_mul_weights_and_convert_dst(float **workspace_z,
+                                                     const float *weigth,
+                                                     float *dest,
+                                                     int cacheline_sz,
+                                                     int dst_w) {
+    int unit = dst_w / 2;
+    for (int x = 0; x < unit; ++x) {
+        int offset = 4 * 4 * x;
+        bv_float4 m0 = bv_float4_set(0.0f);
+        bv_float4 m1 = bv_float4_set(0.0f);
+        bv_float4 m2 = bv_float4_set(0.0f);
+        bv_float4 m3 = bv_float4_set(0.0f);
+        for (int i = 0; i < cacheline_sz; ++i) {
+            m0 = bv_float4_add(
+                m0,
+                bv_float4_mul(bv_float4_load(weigth + i * 16 + 4 * 0),
+                              bv_float4_load(workspace_z[i] + offset + 4 * 0)));
+            m1 = bv_float4_add(
+                m1,
+                bv_float4_mul(bv_float4_load(weigth + i * 16 + 4 * 1),
+                              bv_float4_load(workspace_z[i] + offset + 4 * 1)));
+            m2 = bv_float4_add(
+                m2,
+                bv_float4_mul(bv_float4_load(weigth + i * 16 + 4 * 2),
+                              bv_float4_load(workspace_z[i] + offset + 4 * 2)));
+            m3 = bv_float4_add(
+                m3,
+                bv_float4_mul(bv_float4_load(weigth + i * 16 + 4 * 3),
+                              bv_float4_load(workspace_z[i] + offset + 4 * 3)));
+        }
+        bv_float4 o0 = bv_float4_add(m0, bv_float4_add(m1, m2));
+        bv_float4 o1 = bv_float4_add(bv_float4_sub(m1, m2), m3);
+        bv_float4_store(o0, dest + 8 * x + 0 * 4);
+        bv_float4_store(o1, dest + 8 * x + 1 * 4);
+    }
+    if (unit * 2 < dst_w) {
+        int offset = 4 * 4 * unit;
+        bv_float4 m0 = bv_float4_set(0.0f);
+        bv_float4 m1 = bv_float4_set(0.0f);
+        bv_float4 m2 = bv_float4_set(0.0f);
+        for (int i = 0; i < cacheline_sz; ++i) {
+            m0 = bv_float4_add(
+                m0,
+                bv_float4_mul(bv_float4_load(weigth + i * 16 + 4 * 0),
+                              bv_float4_load(workspace_z[i] + offset + 4 * 0)));
+            m1 = bv_float4_add(
+                m1,
+                bv_float4_mul(bv_float4_load(weigth + i * 16 + 4 * 1),
+                              bv_float4_load(workspace_z[i] + offset + 4 * 1)));
+            m2 = bv_float4_add(
+                m2,
+                bv_float4_mul(bv_float4_load(weigth + i * 16 + 4 * 2),
+                              bv_float4_load(workspace_z[i] + offset + 4 * 2)));
+        }
+
+        bv_float4 o0 = bv_float4_add(m0, bv_float4_add(m1, m2));
+        bv_float4_store(o0, dest + 8 * unit + 0 * 4);
+    }
+}
+
+void bcnn_dwconv3x3s1_kernel(float *src, int src_w, int src_h, float *dst,
+                             int dst_w, int dst_h, int num_channels,
+                             int batch_size, int pad, float *weights,
+                             float *scales, float *biases, float *slopes,
+                             float *workspace, int workspace_sz, int post_func,
+                             int num_threads) {
+    int num_channels_c4 = bh_div_up(num_channels, 4);
+    int weights_stride = 3 * 4 * 4;
+    int init_sz = bh_min(src_h, 2);
+    int middle_y_start = pad;
+    int middle_y_end = bh_max(src_h - 2 + pad, middle_y_start);
+    int src_start_x = bh_div_up(pad, 2);
+    int src_end_x = bh_max((src_w + pad - 4) / 2, src_start_x);
+    int max_kernel_h = bh_min(pad + src_h, 3);
+    int workspace_thread_stride = workspace_sz / num_threads;
+    int dst_w_unit = bh_div_up(dst_w, 2);
+    bcnn_fused_op_nc4hw4_func fused_op = bcnn_fused_op_nc4hw4_lut[post_func];
+
+    for (int b = 0; b < batch_size; ++b) {
+        float *src_batch = src + src_w * src_h * num_channels_c4 * 4 * b;
+        float *dst_batch = dst + dst_w * dst_h * num_channels_c4 * 4 * b;
+#pragma omp parallel for num_threads(num_threads)
+        for (int thread_id = 0; thread_id < num_threads; thread_id++) {
+            float *workspace_start =
+                workspace + thread_id * workspace_thread_stride;
+            for (int z = (int)thread_id; z < num_channels_c4;
+                 z += num_threads) {
+                float *p_src_z = src_batch + 4 * z * src_w * src_h;
+                float *p_dst_z = dst_batch + 4 * z * dst_w * dst_h;
+                float *weights_z = weights + z * weights_stride;
+                float *workspace_z[3] = {workspace_start + 16 * dst_w_unit * 0,
+                                         workspace_start + 16 * dst_w_unit * 1,
+                                         workspace_start + 16 * dst_w_unit * 2};
+                // Init
+                for (int i = 0; i < init_sz; ++i) {
+                    bcnn_dwconv3x3_convert_src(
+                        p_src_z + i * src_w * 4, workspace_z[i], dst_w_unit,
+                        src_w, pad, src_start_x, src_end_x);
+                }
+                // Top
+                for (int y = 0; y < middle_y_start; ++y) {
+                    float *p_dst_y = p_dst_z + y * 4 * dst_w;
+                    int cacheline_sz = y - pad + max_kernel_h;
+                    if (cacheline_sz <= 0) {
+                        memset(p_dst_y, 0, 4 * dst_w * sizeof(float));
+                        continue;
+                    }
+                    float *p_weights =
+                        weights_z + (max_kernel_h - cacheline_sz) * 16;
+                    bcnn_dwconv3_mul_weights_and_convert_dst(
+                        workspace_z, p_weights, p_dst_y, cacheline_sz, dst_w);
+                }
+                // Middle
+                for (int y = middle_y_start; y < middle_y_end; ++y) {
+                    float *p_dst_y = p_dst_z + y * 4 * dst_w;
+                    int iy = y - pad + 2;
+                    bcnn_dwconv3x3_convert_src(
+                        p_src_z + 4 * iy * src_w, workspace_z[2], dst_w_unit,
+                        src_w, pad, src_start_x, src_end_x);
+                    bcnn_dwconv3_mul_weights_and_convert_dst(
+                        workspace_z, weights_z, p_dst_y, 3, dst_w);
+
+                    float *temp = workspace_z[0];
+                    workspace_z[0] = workspace_z[1];
+                    workspace_z[1] = workspace_z[2];
+                    workspace_z[2] = temp;
+                }
+                // Bottom
+                for (int y = middle_y_end; y < dst_h; ++y) {
+                    float *p_dst_y = p_dst_z + y * 4 * dst_w;
+                    int cacheline_sz = (src_h - y + pad);
+                    if (cacheline_sz <= 0) {
+                        memset(p_dst_y, 0, 4 * dst_w * sizeof(float));
+                        continue;
+                    }
+                    bcnn_dwconv3_mul_weights_and_convert_dst(
+                        workspace_z, weights_z, p_dst_y, cacheline_sz, dst_w);
+                    workspace_z[0] = workspace_z[1];
+                    workspace_z[1] = workspace_z[2];
+                }
+                fused_op(p_dst_z, p_dst_z, biases + 4 * z, scales + 4 * z,
+                         slopes + 4 * z, dst_w * dst_h, 1);
+            }
+        }
+    }
+}
+
+static void bcnn_dwconv_micro(float *dst, const float *src, const float *weight,
+                              size_t fw, size_t fh, size_t weight_y_step,
+                              size_t src_y_step) {
+    int fx, fy;
+    bv_float4 dst_v4 = bv_float4_set(0.0f);
+    const float *src_z = src;
+    const float *weight_z = weight;
+    for (fy = 0; fy < fh; ++fy) {
+        const float *src_y = src_z + fy * src_y_step;
+        const float *weight_y = weight_z + fy * weight_y_step;
+        for (fx = 0; fx < fw; ++fx) {
+            const float *weight_x = weight_y + 4 * fx;
+            const float *src_x = src_y + fx * 4;
+            dst_v4 = bv_float4_add(
+                dst_v4,
+                bv_float4_mul(bv_float4_load(src_x), bv_float4_load(weight_x)));
+        }
+    }
+    bv_float4_store(dst_v4, dst);
+}
+
+static void bcnn_dwconv_slide_middle(float *dst, const float *src,
+                                     const float *weight, size_t width,
+                                     size_t src_w_setup, size_t fw, size_t fh,
+                                     size_t step_y, size_t height,
+                                     size_t src_y_step, size_t dst_y_step) {
+    int dx, fx, fy;
+    for (int y = 0; y < height; ++y) {
+        const float *p_src_y = src + y * src_y_step;
+        float *dstY = dst + y * dst_y_step;
+        for (dx = 0; dx < width; ++dx) {
+            float *dst_x = dstY + dx * 4;
+            bv_float4 dst_v4 = bv_float4_set(0.0f);
+            const float *src_z = p_src_y + src_w_setup * dx;
+            const float *weight_z = weight;
+            for (fy = 0; fy < fh; ++fy) {
+                const float *src_y = src_z + fy * step_y;
+                const float *weight_y = weight_z + fy * fw * 4;
+                for (fx = 0; fx < fw; ++fx) {
+                    const float *weight_x = weight_y + 4 * fx;
+                    const float *src_x = src_y + fx * 4;
+                    dst_v4 = bv_float4_add(
+                        dst_v4, bv_float4_mul(bv_float4_load(src_x),
+                                              bv_float4_load(weight_x)));
+                }
+            }
+            bv_float4_store(dst_v4, dst_x);
+        }
+    }
+}
+
+static void bcnn_dwconv_slide_border(float *dst_z, const float *src_z,
+                                     const float *weight_dz, int src_w,
+                                     int src_h, int stride, int src_y_step,
+                                     int dst_y_step, int pad, int kernel_width,
+                                     int kernel_height, int left, int top,
+                                     int right, int bottom) {
+    for (int dy = top; dy < bottom; ++dy) {
+        float *dst_y = dst_z + dy * dst_y_step;
+        int src_y_start = dy * stride - pad;
+        const float *src_dy = src_z + src_y_start * src_y_step;
+        int sfy = bh_max(0, -src_y_start);
+        int efy = bh_min(kernel_height, src_h - src_y_start);
+        for (int dx = left; dx < right; ++dx) {
+            float *dst_x = dst_y + 4 * dx;
+            int src_x_start = dx * stride - pad;
+            const float *src_dx = src_dy + src_x_start * 4;
+            int sfx = bh_max(0, -src_x_start);
+            int efx = bh_min(kernel_width, src_w - src_x_start);
+            bcnn_dwconv_micro(dst_x, src_dx + (sfx + sfy * src_w) * 4,
+                              weight_dz + 4 * (kernel_width * sfy + sfx),
+                              efx - sfx, efy - sfy, 4 * kernel_width,
+                              src_w * 4);
+        }
+    }
+}
+
+void bcnn_dwconv_default_kernel(float *src, int src_w, int src_h, float *dst,
+                                int dst_w, int dst_h, int num_channels,
+                                int batch_size, int pad, int stride,
+                                int kernel_width, int kernel_height,
+                                float *weights, float *scales, float *biases,
+                                float *slopes, int post_func, int num_threads) {
+    int num_channels_c4 = bh_div_up(num_channels, 4);
+    int dst_z_step = dst_w * dst_h * 4;
+    int src_z_step = src_w * src_h * 4;
+    int dst_y_step = dst_w * 4;
+    int src_y_step = src_w * 4;
+    int weight_z_step = kernel_height * kernel_width * 4;
+    bcnn_fused_op_nc4hw4_func fused_op = bcnn_fused_op_nc4hw4_lut[post_func];
+    int left = 0, top = 0, right = dst_w, bottom = dst_h;
+    while (left * stride - pad < 0 && left < dst_w - 1) {
+        left++;
+    }
+    while (top * stride - pad < 0 && top < dst_h - 1) {
+        top++;
+    }
+    while ((right - 1) * stride - pad + kernel_width > src_w && right > left) {
+        right--;
+    }
+    while ((bottom - 1) * stride - pad + kernel_height > src_h &&
+           bottom > top) {
+        bottom--;
+    }
+
+    for (int b = 0; b < batch_size; ++b) {
+        float *src_batch = src + src_w * src_h * num_channels_c4 * 4 * b;
+        float *dst_batch = dst + dst_w * dst_h * num_channels_c4 * 4 * b;
+#pragma omp parallel for num_threads(num_threads)
+        for (int thread_id = 0; thread_id < num_threads; thread_id++) {
+            for (int dz = thread_id; dz < num_channels_c4; dz += num_threads) {
+                float *dst_z = dst_batch + dst_z_step * dz;
+                const float *src_z = src_batch + src_z_step * dz;
+                const float *weight_dz = weights + dz * weight_z_step;
+                bcnn_dwconv_slide_border(dst_z, src_z, weight_dz, src_w, src_h,
+                                         stride, src_y_step, dst_y_step, pad,
+                                         kernel_width, kernel_height, 0, 0,
+                                         dst_w, top);
+                bcnn_dwconv_slide_border(dst_z, src_z, weight_dz, src_w, src_h,
+                                         stride, src_y_step, dst_y_step, pad,
+                                         kernel_width, kernel_height, 0, b,
+                                         dst_w, dst_h);
+                bcnn_dwconv_slide_border(dst_z, src_z, weight_dz, src_w, src_h,
+                                         stride, src_y_step, dst_y_step, pad,
+                                         kernel_width, kernel_height, 0, top,
+                                         left, bottom);
+                bcnn_dwconv_slide_border(dst_z, src_z, weight_dz, src_w, src_h,
+                                         stride, src_y_step, dst_y_step, pad,
+                                         kernel_width, kernel_height, right,
+                                         top, dst_w, bottom);
+                if (right > left && bottom > top) {
+                    bcnn_dwconv_slide_middle(
+                        dst_z + top * dst_y_step + left * 4,
+                        src_z + (top * stride - pad) * src_y_step +
+                            (left * stride - pad) * 4,
+                        weight_dz, right - left, stride * 4, kernel_width,
+                        kernel_height, src_w * 4, bottom - top,
+                        src_y_step * stride, dst_y_step);
+                }
+                fused_op(dst_z, dst_z, biases + 4 * dz, scales + 4 * dz,
+                         slopes + 4 * dz, dst_w * dst_h, 1);
+            }
+        }
+    }
 }
 
 // General Matrix-Matrix multiplication

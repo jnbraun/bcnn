@@ -35,12 +35,24 @@ typedef struct bcnn_depthwise_conv_param {
     int size;
     int stride;
     int pad;
+    size_t workspace_size;
     bcnn_activation activation;
     float *adam_m;
     float *adam_v;
 #ifdef BCNN_USE_CUDA
     float *adam_m_gpu;
     float *adam_v_gpu;
+    float *conv_workspace_gpu;
+#ifdef BCNN_USE_CUDNN
+    cudnnTensorDescriptor_t src_tensor_desc;
+    cudnnTensorDescriptor_t dst_tensor_desc;
+    cudnnFilterDescriptor_t filter_desc;
+    cudnnTensorDescriptor_t bias_desc;
+    cudnnConvolutionDescriptor_t conv_desc;
+    cudnnConvolutionFwdAlgo_t fwd_algo;
+    cudnnConvolutionBwdDataAlgo_t bwd_data_algo;
+    cudnnConvolutionBwdFilterAlgo_t bwd_filter_algo;
+#endif
 #endif
 } bcnn_depthwise_conv_param;
 

@@ -196,19 +196,27 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         BCNN_CHECK_STATUS(
             bcnn_node_add_input(net, &node, net->num_tensors - 1));
     }
-    // Special case for conv 3x3/s1
-    if (param->size == 3 && param->stride == 1 && param->num_groups == 1 &&
-        net->mode == BCNN_MODE_PREDICT) {
-        bh_align_free(param->conv_workspace);
+    param->kernel = BCNN_CONV_KERNEL_IM2COL_GEMM;
+    // Set specific inference kernel tailored for specific conv config
+    if (net->mode == BCNN_MODE_PREDICT) {
+        if (param->size == 3 && param->stride == 1 && param->num_groups == 1) {
+            param->kernel = BCNN_CONV_KERNEL_3X3_S1;
+        } else if (param->size == 3 && param->stride == 1 &&
+                   (net->tensors[node.src[0]].c ==
+                        net->tensors[node.dst[0]].c &&
+                    net->tensors[node.src[0]].c == param->num_groups)) {
+            param->kernel = BCNN_CONV_KERNEL_DW_3X3_S1;
+        } else if ((net->tensors[node.src[0]].c ==
+                        net->tensors[node.dst[0]].c &&
+                    net->tensors[node.src[0]].c == param->num_groups)) {
+            param->kernel = BCNN_CONV_KERNEL_DW_DEFAULT;
+        } else if (param->num_groups == 1) {
+            param->kernel = BCNN_CONV_KERNEL_CONV_DEFAULT;
+        }
+    }
+    if (param->kernel != BCNN_CONV_KERNEL_IM2COL_GEMM) {
         int src_c_div4 = bh_div_up(net->tensors[node.src[0]].c, 4);
         int dst_c_div4 = bh_div_up(n, 4);
-        param->workspace_size = net->num_threads * CONV_TILED *
-                                (src_c_div4 + bh_div_up(n, 4) + 1) *
-                                CONV3x3_SRC_BLOCK;
-        param->conv_workspace = (float *)bh_align_calloc(
-            param->workspace_size * sizeof(float), align_offset_);
-        param->weights_workspace = (float *)bh_align_calloc(
-            src_c_div4 * dst_c_div4 * 256 * sizeof(float), align_offset_);
         param->biases_workspace = (float *)bh_align_calloc(
             bh_round_up(net->tensors[node.dst[0]].c, 4) * sizeof(float),
             align_offset_);
@@ -245,6 +253,40 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         }
         if (param->batch_norm == 1) {
             param->post_func += 4;
+        }
+        bh_align_free(param->conv_workspace);
+        param->workspace_size = 0;
+        param->conv_workspace = NULL;
+        if (param->kernel == BCNN_CONV_KERNEL_CONV_DEFAULT) {
+            param->weights_workspace = (float *)bh_align_calloc(
+                src_c_div4 * dst_c_div4 * 16 * param->size * param->size *
+                    sizeof(float),
+                align_offset_);
+            param->workspace_size = net->num_threads * CONV_TILED *
+                                    (src_c_div4 * param->size * param->size) *
+                                    4;
+            param->conv_workspace = (float *)bh_align_calloc(
+                param->workspace_size * sizeof(float), align_offset_);
+        } else if (param->kernel == BCNN_CONV_KERNEL_3X3_S1) {
+            param->workspace_size = net->num_threads * CONV_TILED *
+                                    (src_c_div4 + bh_div_up(n, 4) + 1) *
+                                    CONV3x3_SRC_BLOCK;
+            param->conv_workspace = (float *)bh_align_calloc(
+                param->workspace_size * sizeof(float), align_offset_);
+            param->weights_workspace = (float *)bh_align_calloc(
+                src_c_div4 * dst_c_div4 * 256 * sizeof(float), align_offset_);
+        } else if (param->kernel == BCNN_CONV_KERNEL_DW_3X3_S1) {
+            param->workspace_size = net->num_threads * 3 *
+                                    bh_div_up(net->tensors[node.dst[0]].w, 2) *
+                                    4 * 4;
+            param->conv_workspace = (float *)bh_align_calloc(
+                param->workspace_size * sizeof(float), align_offset_);
+            param->weights_workspace = (float *)bh_align_calloc(
+                dst_c_div4 * 3 * 4 * 4 * sizeof(float), align_offset_);
+        } else if (param->kernel == BCNN_CONV_KERNEL_DW_DEFAULT) {
+            param->weights_workspace = (float *)bh_align_calloc(
+                dst_c_div4 * 4 * param->size * param->size * sizeof(float),
+                align_offset_);
         }
     }
 #ifdef BCNN_USE_CUDA
@@ -312,7 +354,7 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
         bcnn_cudnn_handle(), param->src_tensor_desc, param->filter_desc,
         param->conv_desc, param->dst_tensor_desc, param->fwd_algo,
         &cudnn_wrk_sz));
-    param->workspace_size = bh_max(param->workspace_size, cudnn_wrk_sz);
+    param->workspace_size = bh_max(0, cudnn_wrk_sz);
     bcnn_cudnn_check(cudnnGetConvolutionBackwardFilterWorkspaceSize(
         bcnn_cudnn_handle(), param->src_tensor_desc, param->dst_tensor_desc,
         param->conv_desc, param->filter_desc, param->bwd_filter_algo,
@@ -365,6 +407,8 @@ bcnn_status bcnn_add_convolutional_layer(bcnn_net *net, int n, int size,
 }
 
 void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
+    bh_timer t = {0};
+    bh_timer_start(&t);
     bcnn_tensor *src_tensor = &net->tensors[node->src[0]];
     bcnn_tensor *dst_tensor = &net->tensors[node->dst[0]];
     bcnn_tensor *weights = &net->tensors[node->src[1]];
@@ -399,16 +443,13 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
     int wsz = bcnn_tensor_size(weights);
 
     // Special case for conv 3x3/s1
-    if (param->size == 3 && param->stride == 1 && param->num_groups == 1 &&
-        net->mode == BCNN_MODE_PREDICT) {
-        // bh_timer t = {0};
-        // bh_timer_start(&t);
+    if (param->kernel == BCNN_CONV_KERNEL_3X3_S1) {
+        bh_timer t0 = {0};
+        bh_timer_start(&t0);
         bcnn_nchw_to_nc4hw4(param->src_workspace, src_tensor->data,
                             src_tensor->h * src_tensor->w, src_tensor->c,
                             src_tensor->n);
-        // bh_timer_stop(&t);
-        // fprintf(stderr, "pack %f msecs\n", bh_timer_get_msec(&t));
-        // bh_timer_start(&t);
+        bh_timer_stop(&t0);
         bcnn_conv3x3s1_kernel(
             param->src_workspace, src_tensor->w, src_tensor->h, src_tensor->c,
             param->dst_workspace, dst_tensor->w, dst_tensor->h, dst_tensor->c,
@@ -416,15 +457,114 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
             param->scales_workspace, param->biases_workspace,
             param->slopes_workspace, param->conv_workspace,
             param->workspace_size, param->post_func, net->num_threads);
-        // bh_timer_stop(&t);
-        // fprintf(stderr, "conv3x3 %f msecs\n", bh_timer_get_msec(&t));
-        // bh_timer_start(&t);
+        bh_timer t1 = {0};
+        bh_timer_start(&t1);
         bcnn_nc4hw4_to_nchw(dst_tensor->data, param->dst_workspace,
                             dst_tensor->w * dst_tensor->h, dst_tensor->c,
                             dst_tensor->n);
+        bh_timer_stop(&t1);
+        // fprintf(stderr, "conv3x3s1_pre-post %f msecs ",
+        //        bh_timer_get_msec(&t0) + bh_timer_get_msec(&t1));
+        // In case of the activation function is not supported in nc4hw4,
+        // process it here
+        if ((param->post_func % 4) == 0 &&
+            (param->activation != BCNN_ACT_NONE)) {
+            bcnn_forward_activation_cpu(
+                dst_tensor->data, bcnn_tensor_size(dst_tensor), slopes_data,
+                dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                param->activation);
+        }
         // bh_timer_stop(&t);
-        // fprintf(stderr, "%s unpack %f msecs\n", dst_tensor->name,
-        //        bh_timer_get_msec(&t));
+        // fprintf(stderr, "conv3x3 %f msecs\n", bh_timer_get_msec(&t));
+    } else if (param->kernel == BCNN_CONV_KERNEL_DW_3X3_S1) {
+        bh_timer t0 = {0};
+        bh_timer_start(&t0);
+        bcnn_nchw_to_nc4hw4(param->src_workspace, src_tensor->data,
+                            src_tensor->h * src_tensor->w, src_tensor->c,
+                            src_tensor->n);
+        bh_timer_stop(&t0);
+        bcnn_dwconv3x3s1_kernel(
+            param->src_workspace, src_tensor->w, src_tensor->h,
+            param->dst_workspace, dst_tensor->w, dst_tensor->h, dst_tensor->c,
+            batch_size, param->pad, param->weights_workspace,
+            param->scales_workspace, param->biases_workspace,
+            param->slopes_workspace, param->conv_workspace,
+            param->workspace_size, param->post_func, net->num_threads);
+        bh_timer t1 = {0};
+        bh_timer_start(&t1);
+        bcnn_nc4hw4_to_nchw(dst_tensor->data, param->dst_workspace,
+                            dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                            dst_tensor->n);
+        bh_timer_stop(&t1);
+        // fprintf(stderr, "dw3x3s1_pre-post %f msecs ",
+        //        bh_timer_get_msec(&t0) + bh_timer_get_msec(&t1));
+        // In case of the activation function is not supported in nc4hw4,
+        // process it here
+        if ((param->post_func % 4) == 0 &&
+            (param->activation != BCNN_ACT_NONE)) {
+            bcnn_forward_activation_cpu(
+                dst_tensor->data, bcnn_tensor_size(dst_tensor), slopes_data,
+                dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                param->activation);
+        }
+    } else if (param->kernel == BCNN_CONV_KERNEL_DW_DEFAULT) {
+        bh_timer t0 = {0};
+        bh_timer_start(&t0);
+        bcnn_nchw_to_nc4hw4(param->src_workspace, src_tensor->data,
+                            src_tensor->h * src_tensor->w, src_tensor->c,
+                            src_tensor->n);
+        bh_timer_stop(&t0);
+        bcnn_dwconv_default_kernel(
+            param->src_workspace, src_tensor->w, src_tensor->h,
+            param->dst_workspace, dst_tensor->w, dst_tensor->h, dst_tensor->c,
+            batch_size, param->pad, param->stride, param->size, param->size,
+            param->weights_workspace, param->scales_workspace,
+            param->biases_workspace, param->slopes_workspace, param->post_func,
+            net->num_threads);
+        bh_timer t1 = {0};
+        bh_timer_start(&t1);
+        bcnn_nc4hw4_to_nchw(dst_tensor->data, param->dst_workspace,
+                            dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                            dst_tensor->n);
+        bh_timer_stop(&t1);
+        // fprintf(stderr, "convdw_pre-post %f msecs ",
+        //        bh_timer_get_msec(&t0) + bh_timer_get_msec(&t1));
+        // In case of the activation function is not supported in nc4hw4,
+        // process it here
+        if ((param->post_func % 4) == 0 &&
+            (param->activation != BCNN_ACT_NONE)) {
+            bcnn_forward_activation_cpu(
+                dst_tensor->data, bcnn_tensor_size(dst_tensor), slopes_data,
+                dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                param->activation);
+        }
+    } else if (param->kernel == BCNN_CONV_KERNEL_CONV_DEFAULT) {
+        bh_timer t0 = {0};
+        bh_timer_start(&t0);
+        bcnn_nchw_to_nc4hw4(param->src_workspace, src_tensor->data,
+                            src_tensor->h * src_tensor->w, src_tensor->c,
+                            src_tensor->n);
+        bh_timer_stop(&t0);
+        bh_timer tm = {0};
+        bh_timer_start(&tm);
+        bcnn_conv_default_kernel(
+            param->src_workspace, src_tensor->w, src_tensor->h, src_tensor->c,
+            param->dst_workspace, dst_tensor->w, dst_tensor->h, dst_tensor->c,
+            batch_size, param->size, param->size, param->stride, param->pad,
+            param->weights_workspace, param->scales_workspace,
+            param->biases_workspace, param->slopes_workspace,
+            param->conv_workspace, param->workspace_size, param->post_func,
+            net->num_threads);
+        bh_timer_stop(&tm);
+        bh_timer t1 = {0};
+        bh_timer_start(&t1);
+        bcnn_nc4hw4_to_nchw(dst_tensor->data, param->dst_workspace,
+                            dst_tensor->w * dst_tensor->h, dst_tensor->c,
+                            dst_tensor->n);
+        bh_timer_stop(&t1);
+        // fprintf(stderr, "convdefault_pre-post %f msecs main %f msecs ",
+        //        bh_timer_get_msec(&t0) + bh_timer_get_msec(&t1),
+        //        bh_timer_get_msec(&tm));
         // In case of the activation function is not supported in nc4hw4,
         // process it here
         if ((param->post_func % 4) == 0 &&
@@ -480,7 +620,9 @@ void bcnn_forward_conv_layer_cpu(bcnn_net *net, bcnn_node *node) {
                                     dst_tensor->w * dst_tensor->h,
                                     dst_tensor->c, param->activation);
     }
-
+    bh_timer_stop(&t);
+    // fprintf(stderr, "kernel %d out %s %f msecs\n", param->kernel,
+    //        dst_tensor->name, bh_timer_get_msec(&t));
     return;
 }
 

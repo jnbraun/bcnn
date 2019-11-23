@@ -31,6 +31,14 @@
 extern "C" {
 #endif
 
+typedef enum {
+    BCNN_CONV_KERNEL_IM2COL_GEMM,
+    BCNN_CONV_KERNEL_CONV_DEFAULT,
+    BCNN_CONV_KERNEL_3X3_S1,
+    BCNN_CONV_KERNEL_DW_3X3_S1,
+    BCNN_CONV_KERNEL_DW_DEFAULT
+} bcnn_conv_kernel;
+
 typedef struct bcnn_conv_param {
     int num;
     int size;
@@ -40,6 +48,7 @@ typedef struct bcnn_conv_param {
     int batch_norm;
     int post_func;
     size_t workspace_size;
+    bcnn_conv_kernel kernel;
     bcnn_activation activation;
     bcnn_tensor saved_mean;
     bcnn_tensor saved_variance;

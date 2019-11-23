@@ -192,7 +192,7 @@ static int bcnn_set_thread_cpu_affinity(const int *cpu_ids, int num_cpus) {
 #define CPU_SET(cpu, cpusetp) \
     ((cpusetp)->__bits[(cpu) / __NCPUBITS] |= (1UL << ((cpu) % __NCPUBITS)))
 
-    //#define CPU_ZERO(cpusetp) memset((cpusetp), 0, sizeof(cpu_set_t))
+//#define CPU_ZERO(cpusetp) memset((cpusetp), 0, sizeof(cpu_set_t))
 
 #ifdef __GLIBC__
     pid_t pid = syscall(SYS_gettid);
@@ -259,13 +259,13 @@ bcnn_status bcnn_net_add_tensor(bcnn_net *net, bcnn_tensor tensor) {
 
 bcnn_status bcnn_add_input(bcnn_net *net, int w, int h, int c,
                            const char *name) {
-    // Create input node
+    // Create input tensor
     bcnn_tensor input = {0};
     bcnn_tensor_set_shape(&input, net->batch_size, c, h, w, 0);  // no gradient
     bcnn_tensor_allocate(&input, net->mode);
     bh_strfill(&input.name, name);
     // Add tensor to net
-    bcnn_net_add_tensor(net, input);
+    BCNN_CHECK_STATUS(bcnn_net_add_tensor(net, input));
     // Add tensor index to inputs index array
     net->num_inputs++;
     int *p_idx = (int *)realloc(net->inputs, net->num_inputs * sizeof(int));
@@ -332,6 +332,7 @@ bcnn_status bcnn_resize_net(bcnn_net *net, int w, int h, int c,
             }
         }
     }
+    return BCNN_SUCCESS;
 }
 
 static bcnn_status bcnn_init_workload(bcnn_net *net) {
@@ -344,10 +345,13 @@ static bcnn_status bcnn_init_workload(bcnn_net *net) {
         if (net->nodes[i].type == BCNN_LAYER_CONV2D) {
             bcnn_conv_param *param = (bcnn_conv_param *)(net->nodes[i].param);
             param->conv_workspace_gpu = cuda_ctx->workspace_gpu;
+        } else if (net->nodes[i].type == BCNN_LAYER_DEPTHWISE_CONV2D) {
+            bcnn_depthwise_conv_param *param =
+                (bcnn_depthwise_conv_param *)(net->nodes[i].param);
+            param->conv_workspace_gpu = cuda_ctx->workspace_gpu;
         }
     }
 #endif
-
     return BCNN_SUCCESS;
 }
 
@@ -576,7 +580,7 @@ void bcnn_net_set_param(bcnn_net *net, const char *name, const char *val) {
     } else if (net->data_aug && strcmp(name, "max_distortion") == 0) {
         net->data_aug->max_distortion = (float)atof(val);
     } else if (net->data_aug && strcmp(name, "max_spots") == 0) {
-        net->data_aug->max_random_spots = (float)atof(val);
+        net->data_aug->max_random_spots = (float)atoi(val);
     } else if (net->data_aug && strcmp(name, "flip_h") == 0) {
         net->data_aug->random_fliph = 1;
     } else if (net->data_aug && strcmp(name, "mean_r") == 0) {
@@ -1262,13 +1266,12 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 "Inconsistent batchnorm means size: expected %d but found "
                 "%lu\n",
                 m_sz, (unsigned long)nr);
-            BCNN_CHECK_AND_LOG(
-                net->log_ctx,
-                (nr = fread(v->data, sizeof(float), v_sz, fp)) == v_sz,
-                BCNN_INVALID_MODEL,
-                "Inconsistent batchnorm variances size: "
-                "expected %d but found %lu\n",
-                v_sz, (unsigned long)nr);
+            BCNN_CHECK_AND_LOG(net->log_ctx, (nr = fread(v->data, sizeof(float),
+                                                         v_sz, fp)) == v_sz,
+                               BCNN_INVALID_MODEL,
+                               "Inconsistent batchnorm variances size: "
+                               "expected %d but found %lu\n",
+                               v_sz, (unsigned long)nr);
             if (format == 0) {
                 BCNN_CHECK_AND_LOG(
                     net->log_ctx,
@@ -1283,9 +1286,9 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                 // Fuse mean / variance into scales and biases for optimal
                 // inference speed
                 for (int i = 0; i < s_sz; ++i) {
-                    b->data[i] =
-                        b->data[i] - (s->data[i] * m->data[i]) /
-                                         (sqrtf(v->data[i] + 0.000001f));
+                    b->data[i] = b->data[i] -
+                                 (s->data[i] * m->data[i]) /
+                                     (sqrtf(v->data[i] + 0.000001f));
                     s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
                 }
             }
@@ -1314,9 +1317,8 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
             int slopes_sz = bcnn_tensor_size(slopes);
             int nr = 0;
             BCNN_CHECK_AND_LOG(
-                net->log_ctx,
-                (nr = fread(slopes->data, sizeof(float), slopes_sz, fp)) ==
-                    slopes_sz,
+                net->log_ctx, (nr = fread(slopes->data, sizeof(float),
+                                          slopes_sz, fp)) == slopes_sz,
                 BCNN_INVALID_MODEL,
                 "Inconsistent prelu slopes size: expected %d but found %lu\n",
                 slopes_sz, (unsigned long)nr);
@@ -1324,10 +1326,96 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
     }
 
     // Re-ordering weights for layout NC4HW4
-    if (node->type == BCNN_LAYER_CONV2D) {
-        bcnn_conv_param *param = (bcnn_conv_param *)node->param;
-        if (param->size == 3 && param->stride == 1 && param->num_groups == 1 &&
-            net->mode == BCNN_MODE_PREDICT) {
+    bcnn_conv_param *param = (bcnn_conv_param *)node->param;
+    if (net->mode == BCNN_MODE_PREDICT) {
+        if (param->kernel == BCNN_CONV_KERNEL_CONV_DEFAULT) {
+            int src_c_div4 = bh_div_up(net->tensors[node->src[0]].c, 4);
+            int dst_c_div4 = bh_div_up(net->tensors[node->dst[0]].c, 4);
+            float *tmp =
+                (float *)bh_align_calloc(src_c_div4 * dst_c_div4 * param->size *
+                                             param->size * 16 * sizeof(float),
+                                         align_offset_);
+            int src_c_round4 = bh_round_up(net->tensors[node->src[0]].c, 4);
+            for (int i = 0; i < net->tensors[node->dst[0]].c; ++i) {
+                float *p_dst =
+                    tmp + i * src_c_round4 * param->size * param->size;
+                float *p_src = w->data +
+                               i * net->tensors[node->src[0]].c * param->size *
+                                   param->size;
+                bcnn_nchw_to_nc4hw4(p_dst, p_src, param->size * param->size,
+                                    net->tensors[node->src[0]].c, 1);
+            }
+            bcnn_nchw_to_nc4hw4(param->weights_workspace, tmp,
+                                src_c_round4 * param->size * param->size,
+                                net->tensors[node->dst[0]].c, 1);
+            bh_align_free(tmp);
+            memcpy(param->biases_workspace, b->data,
+                   bcnn_tensor_size(b) * sizeof(float));
+            if (param->batch_norm == 1) {
+                bcnn_tensor *s = &net->tensors[node->src[5]];
+                memcpy(param->scales_workspace, s->data,
+                       bcnn_tensor_size(s) * sizeof(float));
+            }
+            if (param->activation == BCNN_ACT_PRELU) {
+                int tid = 3 + 3 * (param->batch_norm);
+                bcnn_tensor *slopes = &net->tensors[node->src[tid]];
+                memcpy(param->slopes_workspace, slopes->data,
+                       bcnn_tensor_size(slopes) * sizeof(float));
+            }
+        } else if (param->kernel == BCNN_CONV_KERNEL_DW_3X3_S1) {
+            int num_channels = net->tensors[node->dst[0]].c;
+            // 1D-Winograd F(2,3)
+            for (int c = 0; c < num_channels; ++c) {
+                int c_div4 = c / 4;
+                int c_tail = c % 4;
+                float *p_dst_weights =
+                    param->weights_workspace + c_div4 * 4 * 4 * 3 + c_tail;
+                float *p_src_weights = w->data + c * 9;
+                for (int y = 0; y < 3; ++y) {
+                    float k0 = p_src_weights[3 * y + 0];
+                    float k1 = p_src_weights[3 * y + 1];
+                    float k2 = p_src_weights[3 * y + 2];
+                    float m0 = k0;
+                    float m1 = 0.5f * (k0 + k1 + k2);
+                    float m2 = 0.5f * (k0 - k1 + k2);
+                    float m3 = k2;
+                    p_dst_weights[y * 16 + 4 * 0] = m0;
+                    p_dst_weights[y * 16 + 4 * 1] = m1;
+                    p_dst_weights[y * 16 + 4 * 2] = m2;
+                    p_dst_weights[y * 16 + 4 * 3] = m3;
+                }
+            }
+            memcpy(param->biases_workspace, b->data,
+                   bcnn_tensor_size(b) * sizeof(float));
+            if (param->batch_norm == 1) {
+                bcnn_tensor *s = &net->tensors[node->src[5]];
+                memcpy(param->scales_workspace, s->data,
+                       bcnn_tensor_size(s) * sizeof(float));
+            }
+            if (param->activation == BCNN_ACT_PRELU) {
+                int tid = 3 + 3 * (param->batch_norm);
+                bcnn_tensor *slopes = &net->tensors[node->src[tid]];
+                memcpy(param->slopes_workspace, slopes->data,
+                       bcnn_tensor_size(slopes) * sizeof(float));
+            }
+        } else if (param->kernel == BCNN_CONV_KERNEL_DW_DEFAULT) {
+            bcnn_nchw_to_nc4hw4(param->weights_workspace, w->data,
+                                param->size * param->size,
+                                net->tensors[node->dst[0]].c, 1);
+            memcpy(param->biases_workspace, b->data,
+                   bcnn_tensor_size(b) * sizeof(float));
+            if (param->batch_norm == 1) {
+                bcnn_tensor *s = &net->tensors[node->src[5]];
+                memcpy(param->scales_workspace, s->data,
+                       bcnn_tensor_size(s) * sizeof(float));
+            }
+            if (param->activation == BCNN_ACT_PRELU) {
+                int tid = 3 + 3 * (param->batch_norm);
+                bcnn_tensor *slopes = &net->tensors[node->src[tid]];
+                memcpy(param->slopes_workspace, slopes->data,
+                       bcnn_tensor_size(slopes) * sizeof(float));
+            }
+        } else if (param->kernel == BCNN_CONV_KERNEL_3X3_S1) {
             bcnn_conv3x3_convert_weights(w->data, param->weights_workspace,
                                          net->tensors[node->src[0]].c,
                                          net->tensors[node->dst[0]].c);
@@ -1345,6 +1433,45 @@ static bcnn_status bcnn_load_conv_weights(bcnn_net *net, bcnn_node *node,
                        bcnn_tensor_size(slopes) * sizeof(float));
             }
         }
+    }
+#ifdef BCNN_USE_CUDA
+    bcnn_cuda_memcpy_host2dev(w->data_gpu, w->data, w_sz);
+    bcnn_cuda_memcpy_host2dev(b->data_gpu, b->data, b_sz);
+#endif
+    return BCNN_SUCCESS;
+}
+
+static bcnn_status bcnn_load_dwconv_weights(bcnn_net *net, bcnn_node *node,
+                                            FILE *fp, int format) {
+    bcnn_tensor *w = &net->tensors[node->src[1]];  // weights
+    bcnn_tensor *b = &net->tensors[node->src[2]];  // biases
+    int w_sz = bcnn_tensor_size(w);
+    int b_sz = bcnn_tensor_size(b);
+    int nr = 0;
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx, (nr = fread(b->data, sizeof(float), b_sz, fp)) == b_sz,
+        BCNN_INVALID_MODEL,
+        "Inconsistent biases size %s: expected %d but found %lu\n", b->name,
+        b_sz, (unsigned long)nr);
+    BCNN_CHECK_AND_LOG(
+        net->log_ctx, (nr = fread(w->data, sizeof(float), w_sz, fp)) == w_sz,
+        BCNN_INVALID_MODEL,
+        "Inconsistent weights size %s: expected %d but found %lu\n", w->name,
+        w_sz, (unsigned long)nr);
+
+    bcnn_depthwise_conv_param *param = (bcnn_depthwise_conv_param *)node->param;
+    if (param->activation == BCNN_ACT_PRELU) {
+        // prelu slopes: 3 if no batchnorm, 6 if batchnorm
+        int tid = 3;
+        bcnn_tensor *slopes = &net->tensors[node->src[tid]];
+        int slopes_sz = bcnn_tensor_size(slopes);
+        int nr = 0;
+        BCNN_CHECK_AND_LOG(
+            net->log_ctx, (nr = fread(slopes->data, sizeof(float), slopes_sz,
+                                      fp)) == slopes_sz,
+            BCNN_INVALID_MODEL,
+            "Inconsistent prelu slopes size: expected %d but found %lu\n",
+            slopes_sz, (unsigned long)nr);
     }
 
 #ifdef BCNN_USE_CUDA
@@ -1396,8 +1523,9 @@ static bcnn_status bcnn_load_batchnorm_weights(bcnn_net *net, bcnn_node *node,
         // Fuse mean / variance into scales and biases for optimal
         // inference speed
         for (int i = 0; i < sz; ++i) {
-            b->data[i] = b->data[i] - (s->data[i] * m->data[i]) /
-                                          (sqrtf(v->data[i] + 0.000001f));
+            b->data[i] =
+                b->data[i] -
+                (s->data[i] * m->data[i]) / (sqrtf(v->data[i] + 0.000001f));
             s->data[i] = s->data[i] / (sqrtf(v->data[i] + 0.000001f));
         }
     }
@@ -1458,6 +1586,36 @@ static bcnn_status bcnn_load_fullc_weights(bcnn_net *net, bcnn_node *node,
         bcnn_transpose(w->data, bcnn_tensor_size3d(&net->tensors[node->src[0]]),
                        bcnn_tensor_size3d(&net->tensors[node->dst[0]]));
     }
+    if (net->mode == BCNN_MODE_PREDICT) {
+        int src_c_div4 = bh_div_up(net->tensors[node->src[0]].c, 4);
+        int dst_c_div4 = bh_div_up(net->tensors[node->dst[0]].c, 4);
+        float *tmp = (float *)bh_align_calloc(
+            src_c_div4 * dst_c_div4 * net->tensors[node->src[0]].w *
+                net->tensors[node->src[0]].h * 16 * sizeof(float),
+            align_offset_);
+        int src_c_round4 = bh_round_up(net->tensors[node->src[0]].c, 4);
+        for (int i = 0; i < net->tensors[node->dst[0]].c; ++i) {
+            float *p_dst = tmp +
+                           i * src_c_round4 * net->tensors[node->src[0]].w *
+                               net->tensors[node->src[0]].h;
+            float *p_src = w->data +
+                           i * net->tensors[node->src[0]].c *
+                               net->tensors[node->src[0]].w *
+                               net->tensors[node->src[0]].h;
+            bcnn_nchw_to_nc4hw4(p_dst, p_src, net->tensors[node->src[0]].w *
+                                                  net->tensors[node->src[0]].h,
+                                net->tensors[node->src[0]].c, 1);
+        }
+        bcnn_fullc_param *param = (bcnn_fullc_param *)node->param;
+        bcnn_nchw_to_nc4hw4(param->weights_workspace, tmp,
+                            src_c_round4 * net->tensors[node->src[0]].w *
+                                net->tensors[node->src[0]].h,
+                            net->tensors[node->dst[0]].c, 1);
+        bh_align_free(tmp);
+        memcpy(param->biases_workspace, b->data,
+               bcnn_tensor_size(b) * sizeof(float));
+    }
+
 #ifdef BCNN_USE_CUDA
     bcnn_cuda_memcpy_host2dev(w->data_gpu, w->data, w_sz);
     bcnn_cuda_memcpy_host2dev(b->data_gpu, b->data, b_sz);
@@ -1534,9 +1692,10 @@ bcnn_status bcnn_load_weights(bcnn_net *net, const char *filename) {
     for (int i = 0; i < net->num_nodes; ++i) {
         bcnn_node *node = &net->nodes[i];
         if (node->type == BCNN_LAYER_CONV2D ||
-            node->type == BCNN_LAYER_TRANSPOSE_CONV2D ||
-            node->type == BCNN_LAYER_DEPTHWISE_CONV2D) {
+            node->type == BCNN_LAYER_TRANSPOSE_CONV2D) {
             bcnn_load_conv_weights(net, node, fp, format);
+        } else if (node->type == BCNN_LAYER_DEPTHWISE_CONV2D) {
+            bcnn_load_dwconv_weights(net, node, fp, format);
         } else if (node->type == BCNN_LAYER_ACTIVATION) {
             bcnn_activation_param *param = (bcnn_activation_param *)node->param;
             if (param->activation == BCNN_ACT_PRELU && format == 0) {

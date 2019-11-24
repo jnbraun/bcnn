@@ -160,7 +160,7 @@ bcnn_status bcnn_add_fullc_layer(bcnn_net *net, int output_size,
                                 (src_c_div4 * net->tensors[node.src[0]].w *
                                  net->tensors[node.src[0]].h) *
                                 4;
-        param->conv_workspace = (float *)bh_align_calloc(
+        param->workspace = (float *)bh_align_calloc(
             param->workspace_size * sizeof(float), align_offset_);
         param->biases_workspace = (float *)bh_align_calloc(
             bh_round_up(net->tensors[node.dst[0]].c, 4) * sizeof(float),
@@ -195,7 +195,7 @@ void bcnn_forward_fullc_layer_cpu(bcnn_net *net, bcnn_node *node) {
             param->dst_workspace, dst_tensor->w, dst_tensor->h, dst_tensor->c,
             batch_size, src_tensor->w, src_tensor->h, 1, 0,
             param->weights_workspace, NULL, param->biases_workspace, NULL,
-            param->conv_workspace, param->workspace_size, 0, net->num_threads);
+            param->workspace, param->workspace_size, 0, net->num_threads);
         bh_timer t1 = {0};
         bh_timer_start(&t1);
         bcnn_nc4hw4_to_nchw(dst_tensor->data, param->dst_workspace,
@@ -409,6 +409,11 @@ void bcnn_release_param_fullc_layer(bcnn_node *node) {
     bcnn_fullc_param *param = (bcnn_fullc_param *)node->param;
     bh_align_free(param->adam_m);
     bh_align_free(param->adam_v);
+    bh_align_free(param->weights_workspace);
+    bh_align_free(param->biases_workspace);
+    bh_align_free(param->workspace);
+    bh_align_free(param->src_workspace);
+    bh_align_free(param->dst_workspace);
 #ifdef BCNN_USE_CUDA
     if (param->adam_m_gpu) {
         bcnn_cuda_free(param->adam_m_gpu);

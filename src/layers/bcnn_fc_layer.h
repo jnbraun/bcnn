@@ -38,13 +38,9 @@ typedef struct bcnn_fullc_param {
     float *adam_m_gpu;
     float *adam_v_gpu;
 #endif
-
-    float *conv_workspace;
-    float *workspace;  // embedded batchnorm
+    float *workspace;
     float *weights_workspace;
     float *biases_workspace;
-    float *scales_workspace;
-    float *slopes_workspace;
     float *src_workspace;
     float *dst_workspace;
     int size;
